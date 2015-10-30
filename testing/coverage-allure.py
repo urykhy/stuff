@@ -11,7 +11,7 @@ import time as time
 # lcov --directory . --capture --output-file info.dirty;
 # lcov --remove info.dirty 'tests/*' '/usr/*' --output-file info.cleaned
 # cat info.cleaned | c++filt > info.cxx
-# ./scripts/coverage-allure.py
+# ./coverage-allure.py
 # mv coverage*.xml /tmp/allure/
 # allure generate -o /tmp/allure /tmp/allure;
 # firefox /tmp/allure/index.html
