@@ -18,6 +18,7 @@ limit_forum=""
 limit_count=10
 limit_size_min = 0
 limit_size_max = 0
+limit_wild = 0
 
 def bytes2human(a):
     if a > 10*1024*1024*1024:
@@ -40,27 +41,35 @@ def human2bytes(s):
 
 def search(arg):
     s = Search(using=es, index=ela_index)
-    if len(limit_cat):
-        print ("cat: "+limit_cat+'; ', end="")
-        s = s.filter("term", category=limit_cat.split(' '))
-    if len(limit_forum):
-        print ("forum: "+limit_forum+'; ', end="")
-        s = s.filter("term", forum=limit_forum.split(' '))
     if limit_size_min:
-        print ("min size: "+limit_size_min+'; ', end="")
+        print ("min size: ",limit_size_min,'; ', end="")
         s = s.filter("range", size = {'gte' : limit_size_min })
     if limit_size_max:
-        print ("max size: "+limit_size_max+'; ', end="")
+        print ("max size: ",limit_size_max,'; ', end="")
         s = s.filter("range", size = {'lte' : limit_size_max })
+
     arg = arg.split(' ')
-    q = Q("match", name=arg.pop(0))
-    for a in arg:
-        q = q & Q("match", name=a)
+    if limit_wild:
+        print ("wild matching;")
+        q = Q("wildcard", name="*"+arg.pop(0)+"*")
+        for a in arg:
+            q = q & Q("wildcard", name="*"+a+"*")
+    else:
+        q = Q("match", name=arg.pop(0))
+        for a in arg:
+            q = q & Q("match", name=a)
+
+    if len(limit_cat):
+        print ("cat: "+limit_cat+'; ', end="")
+        for a in limit_cat.split(' '):
+            q = q & Q("match", category=a)
+    if len(limit_forum):
+        print ("forum: "+limit_forum+'; ', end="")
+        for a in limit_forum.split(' '):
+            q = q & Q("match", forum=a)
+
     s = s.query(q)
-
-    body = s.to_dict()
-    print (body)
-
+    #print (s.to_dict())
     r = s.execute()
     print ('total hits:',r.hits.total)
     size = r.hits.total
@@ -112,28 +121,34 @@ if __name__ == '__main__':
             global limit_size_min
             global limit_size_max
             [limit_size_min, limit_size_max] = map(human2bytes ,arg.split(' '))
+        def do_wild(self, arg):
+            global limit_wild
+            limit_wild = not limit_wild
         def do_nolimit(self, arg):
             global limit_cat
             global limit_forum
             global limit_count
             global limit_size_min
             global limit_size_max
+            global limit_wild
             limit_cat = ""
             limit_forum = ""
             limit_count = 10
             limit_size_min = 0
             limit_size_max = 0
+            limit_wild = 0
         def do_help(self, arg):
             print('''
 Well, we have 2 main commands here: s(for search) and g(for get)
-s can take some arguments to perform full-text search over elasticSearch,
-and g <id> can be used to get detailed information (ie hash)
+s <term> <term> ... -- perform full-text search
+g <id> -- get detailed information (ie hash)
 
 few commands can be used to narrow search results:
 cat <name> -- search only in specified category
 forum <name> -- search only in specified forum
 count <num> -- change number of search results to show at most
-size <min> <max> -- set torrent size limits, human friendly, ie 10K and 20M works
+size <min> <max> -- set torrent size limits, human friendly, ie 10K and 20M works (use `size 0b 0b` to disable size limit)
+wild -- to flip wildcard search mode
 nolimit -- revert limits to default.
 
 use quit or q to exit.
