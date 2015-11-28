@@ -10,7 +10,7 @@ from elasticsearch import Elasticsearch
 from elasticsearch_dsl import Search, Q
 
 ela_host="localhost"
-ela_index="tracker-index"
+ela_index="tracker-multi-index*"
 es = Elasticsearch([ela_host])
 
 limit_cat=""
