@@ -21,8 +21,6 @@ ela_doc="torrent"
 threads=2
 timeout=600
 
-# yes, we need `raw` crap in index to be able to sort on this field
-
 es = Elasticsearch([ela_host])
 es.indices.delete(index=ela_index, ignore=[400, 404])
 es.indices.create(index=ela_index, ignore=400, body={
@@ -37,12 +35,7 @@ es.indices.create(index=ela_index, ignore=400, body={
             'forum': {'type': 'string'},
             'id':    {'type': 'long'},
             'hash':  {'type': 'string','index' : 'not_analyzed'},
-            'name':  {'type': 'multi_field',
-                "fields": {
-                    "name": {"type": "string", "index": "analyzed"},
-                    "raw":  {"type": "string","index": "not_analyzed"}
-                }
-            },
+            'name':  {'type': 'string'},
             'size': {'type': 'long',  'index' : 'not_analyzed'},
             'data': {'type': 'date',  'format': 'yyyy-MM-dd hh:mm:ss'}
         }
