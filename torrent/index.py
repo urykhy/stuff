@@ -15,7 +15,7 @@ from elasticsearch import helpers
 
 home="/root/rutracker-torrents" # absolute path required
 info="category_info.csv"
-ela_host="localhost"
+ela_host="test"
 ela_index="tracker-multi-index"
 ela_doc="torrent"
 threads=8

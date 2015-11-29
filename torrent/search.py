@@ -9,7 +9,7 @@
 from elasticsearch import Elasticsearch
 from elasticsearch_dsl import Search, Q
 
-ela_host="localhost"
+ela_host="test"
 ela_index="tracker-multi-index*"
 es = Elasticsearch([ela_host])
 
@@ -105,15 +105,15 @@ if __name__ == '__main__':
         intro = 'Welcome to the shell. Type help in doubt.\n'
         prompt = '$ '
         def do_s(self, arg):
-            search(arg)
+            search(arg.strip())
         def do_g(self, arg):
             get(arg)
         def do_cat(self, arg):
             global limit_cat
-            limit_cat = arg.lower()
+            limit_cat = arg.lower().strip()
         def do_forum(self, arg):
             global limit_forum
-            limit_forum = arg.lower()
+            limit_forum = arg.lower().strip()
         def do_count(self, arg):
             global limit_count
             limit_count = int(arg)
