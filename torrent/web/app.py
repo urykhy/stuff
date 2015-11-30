@@ -97,5 +97,6 @@ class App(object):
 if __name__ == '__main__':
     cherrypy.quickstart(App())
 else:
-    cherrypy.tree.mount(App(), '/')
+    cherrypy.config.update({'environment': 'embedded'})
+    application = cherrypy.Application(App(), script_name=None, config=None)
 
