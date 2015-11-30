@@ -8,6 +8,7 @@
     <script src="http://cdn.datatables.net/1.10.10/js/dataTables.bootstrap.min.js"></script>
     <script src="http://cdn.datatables.net/plug-ins/1.10.10/sorting/file-size.js"></script>
     <script src="http://cdn.filesizejs.com/filesize.min.js"></script>
+    <meta charset="UTF-8">
 </head>
 <body>
 
@@ -95,13 +96,13 @@
             arg = arg + dd[i] + "=" + $("#"+dd[i]).val() + "&"
         }
         arg = arg + "wild=" + ($('#wild').is(":checked") ? "1" : "0");
-        t.ajax.url('/search?' + arg).load();
+        t.ajax.url('search?' + arg).load();
     }
 
     var t;
     $(document).ready(function() {
         t = $('#table_id').DataTable( {
-            "ajax": '/search',
+            "ajax": 'search',
             "columnDefs": [
             {
                 "targets": [ 6 ],
