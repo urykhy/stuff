@@ -13,12 +13,12 @@ import re
 from elasticsearch import Elasticsearch
 from elasticsearch import helpers
 
-home="/root/rutracker-torrents" # absolute path required
+home="/u01/mirror/rutracker-torrents" # absolute path required
 info="category_info.csv"
 ela_host="test"
 ela_index="tracker-multi-index"
 ela_doc="torrent"
-threads=8
+threads=2
 timeout=600
 
 def easy_parallize(f, sequence):
