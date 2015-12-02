@@ -90,12 +90,11 @@
     <script type="text/javascript">
     function run_search() {
         var arg = ""
-        var dd = ["cat","forum","count","min","max","query"];
-        var ddl = dd.length;
-        for (var i = 0; i < ddl; i++) {
-            arg = arg + dd[i] + "=" + $("#"+dd[i]).val() + "&"
-        }
+        $('input[type=text]').each(function(){
+            arg = arg + $(this)[0].id + "=" + $(this)[0].value + "&";
+        });
         arg = arg + "wild=" + ($('#wild').is(":checked") ? "1" : "0");
+        console.log(arg);
         t.ajax.url('search?' + arg).load();
     }
 
@@ -128,6 +127,13 @@
             $('#modalHash').html("magnet:?xt=urn:btih:"+hash);
             $('#modalLink').attr('href', 'http://rutracker.org/forum/viewtopic.php?t='+id)
             $('#magnetModal').modal('show')
+        });
+        $('input[type=text]').each(function(){
+            $(this).keypress(function(e){
+                if (e.which == 13) {
+                    run_search();
+                }
+            });
         });
     });
     </script>

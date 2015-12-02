@@ -52,7 +52,9 @@ class App(object):
         limit_size_min = human2bytes(params.get('min', "0b"))
         limit_size_max = human2bytes(params.get('max', "0b"))
         limit_wild = int(params.get('wild', 0))
-        arg = params.get('query', 'hobbit').strip()
+        arg = params.get('query', '').strip()
+        if not arg:
+            arg = "hobbit"
 
         s = Search(using=es, index=ela_index)
         if limit_size_min:
