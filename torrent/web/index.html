@@ -94,7 +94,6 @@
             arg = arg + $(this)[0].id + "=" + $(this)[0].value + "&";
         });
         arg = arg + "wild=" + ($('#wild').is(":checked") ? "1" : "0");
-        console.log(arg);
         t.ajax.url('search?' + arg).load();
     }
 
