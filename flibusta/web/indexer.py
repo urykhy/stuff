@@ -17,8 +17,7 @@ ela_doc="fb2"
 timeout=600
 threads=3
 
-#mirror_path = "/u02/mirror/fb2.Flibusta.Net"
-mirror_path = "/home/ury/tmp"
+mirror_path = "/u02/mirror/fb2.Flibusta.Net"
 
 from multiprocessing.dummy import Pool
 pool = Pool(processes=threads)
