@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 #
 # Licensed under terms of JSON license
@@ -27,7 +27,6 @@ def index_name(f):
     return ela_index + m.group(1)
 
 def new_index(es, name):
-    #print "create index",name
     es.indices.delete(index=name, ignore=[400, 404])
     es.indices.create(index=name, ignore=400, body={
         'settings': {
@@ -66,10 +65,10 @@ def indexer(fname, books):
         actions.append(action)
     helpers.bulk(es, actions)
     es.indices.optimize(index=index_name_)
-    print "done:",fname
+    print ("done:",fname)
 
 def read_inp(z,fname):
-    print "read",fname
+    print ("read",fname)
     books = []
     with z.open(fname) as f:
         for l in f:
