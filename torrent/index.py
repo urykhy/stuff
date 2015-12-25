@@ -71,9 +71,9 @@ def f(a):
         }
         action = {
                 "_index": index_name,
-                "_type": ela_doc,
-                "_id": id,
-                "_body": doc,
+                "_type" : ela_doc,
+                "_id"   : id,
+                "_body" : doc,
                 "_timeout": timeout
         }
         actions.append(action)
