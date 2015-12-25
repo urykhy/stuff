@@ -6,6 +6,8 @@
     <script src="bootstrap.min.js"></script>
     <script src="jquery.dataTables.min.js"></script>
     <script src="dataTables.bootstrap.min.js"></script>
+    <script src="file-size.js"></script>
+    <script src="filesize.min.js"></script>
     <meta charset="UTF-8">
 </head>
 <body>
@@ -92,12 +94,16 @@
             },
             {
                 "searchable": false,
-                "targets": 3
+                "targets": 4
             },
             {
+                "render": function ( data, type, row ) {
+                    return filesize(data);
+                },
+                "type": "file-size",
                 "searchable": false,
-                "targets": 4
-            }
+                "targets": 3
+            },
             ],
             "order": [[ 4, "desc" ]]
         });
