@@ -101,7 +101,7 @@ class App(object):
         size = r.hits.total
         if size > limit_count:
             size = limit_count
-        s = s.sort('-id')
+        s = s.sort('-date')
         s = s.extra(size=size)
         r = s.execute()
         #cherrypy.log("result is "+str(r))
@@ -109,7 +109,7 @@ class App(object):
         data = []
         for hit in r:
             b = hit._body
-            a = [b.id, b.author, b.title]
+            a = [b.id, b.author, b.title, b.size, b.date]
             data.append(a)
 
         return {'data': data}

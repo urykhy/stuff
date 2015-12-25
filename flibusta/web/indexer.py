@@ -17,6 +17,9 @@ ela_doc="fb2"
 timeout=600
 threads=3
 
+files_to_process = 0
+files_read = 0
+
 mirror_path = "/u02/mirror/fb2.Flibusta.Net"
 
 from multiprocessing.dummy import Pool
@@ -38,7 +41,9 @@ def new_index(es, name):
             'properties': {
                 'author': {'type': 'string'},
                 'title': {'type': 'string'},
-                'id':    {'type': 'long'}
+                'id':    {'type': 'long'},
+                'size':  {'type': 'long', 'index' : 'not_analyzed'},
+                'date':  {'type': 'date', 'index' : 'not_analyzed', 'format': 'yyyy-MM-dd'}
             }
         }
     })
@@ -49,11 +54,13 @@ def indexer(fname, books):
     new_index(es, index_name_)
     actions = []
     for a in books:
-        [author, title, id] = a
+        [author, title, id, size, date] = a
         doc = {
                 'author' : author,
                 'title'  : title,
-                'id'     : int(id)
+                'id'     : int(id),
+                'size'   : int(size),
+                'date'   : date
         }
         action = {
                 "_index": index_name_,
@@ -65,22 +72,32 @@ def indexer(fname, books):
         actions.append(action)
     helpers.bulk(es, actions)
     es.indices.optimize(index=index_name_)
-    print ("done:",fname)
+    global files_read
+    files_read += 1
+    progress = files_read / float(files_to_process)
+    print ("\rIndexing: [{0:50s}] {1:.1f}%".format('#' * int(progress * 50), progress * 100), end="")
+    #print ("done:",fname)
 
 def read_inp(z,fname):
-    print ("read",fname)
+    #print ("read",fname)
     books = []
     with z.open(fname) as f:
         for l in f:
             l=l.strip().decode(sys.stdin.encoding)
-            (au, genre, name, seq, _None, id, _None) = l.split("\04",6)
+            # http://forum.home-lib.net/index.php?showtopic=16
+            # AUTHOR;GENRE;TITLE;SERIES;SERNO;LIBID;SIZE;FILE;DEL;EXT;DATE;LANG;LIBR ATE;KEYWORDS;
+            (au, genre, name, seq, _None, id, size, _None, _None, _None, date, _None) = l.split("\04",11)
+            au.rstrip(":,")
             if len(seq):
-                books.append((au, name + '/' + seq, id))
+                books.append((au, name + '/' + seq, id, size, date))
             else:
-                books.append((au, name, id))
+                books.append((au, name, id, size, date))
     pool.apply_async(indexer, [fname, books])
 
 with zipfile.ZipFile(mirror_path + "/flibusta_fb2_local.inpx") as zfile:
+    for info in zfile.infolist():
+        if info.filename.endswith('.inp'):
+            files_to_process+=1
     for info in zfile.infolist():
         if info.filename.endswith('.inp'):
             read_inp(zfile, info.filename)
