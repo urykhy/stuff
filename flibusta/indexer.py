@@ -87,7 +87,7 @@ def read_inp(z,fname):
             # http://forum.home-lib.net/index.php?showtopic=16
             # AUTHOR;GENRE;TITLE;SERIES;SERNO;LIBID;SIZE;FILE;DEL;EXT;DATE;LANG;LIBR ATE;KEYWORDS;
             (au, genre, name, seq, _None, id, size, _None, _None, _None, date, _None) = l.split("\04",11)
-            au.rstrip(":,")
+            au = au.rstrip(":,-")
             if len(seq):
                 books.append((au, name + '/' + seq, id, size, date))
             else:
