@@ -14,17 +14,9 @@
 
     <div class="container">
         <div class="row">
-            <div class="form-group col-lg-2">
-                <label for="cat">Category:</label>
-                <input type="text" class="form-control" id="cat">
-            </div>
-            <div class="form-group col-lg-2">
-                <label for="forum">Forum:</label>
-                <input type="text" class="form-control" id="forum">
-            </div>
             <div class="form-group col-lg-1">
                 <label for="count">Count:</label>
-                <input type="text" class="form-control" id="count" value="10">
+                <input type="text" class="form-control" id="count" value="100">
             </div>
             <div class="form-group col-lg-1">
                 <label for="min">Minimal:</label>
@@ -37,6 +29,14 @@
             <div class="form-group col-lg-1">
                 <label for="wild">Wildcard:</label>
                 <input type="checkbox" class="form-control" id="wild" value="0">
+            </div>
+            <div class="form-group col-lg-2">
+                <label for="cat">Category:</label>
+                <input type="text" class="form-control" id="cat">
+            </div>
+            <div class="form-group col-lg-2">
+                <label for="forum">Forum:</label>
+                <input type="text" class="form-control" id="forum">
             </div>
             <div class="form-group col-lg-3">
                 <label for="query">Query:</label>
@@ -65,26 +65,6 @@
                 </table>
             </div>
         </div>
-
-        <div id="magnetModal" class="modal fade" role="dialog">
-            <div class="modal-dialog">
-                <!-- Modal content-->
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <button type="button" class="close" data-dismiss="modal">&times;</button>
-                        <h4 class="modal-title">Magnet link</h4>
-                    </div>
-                    <div class="modal-body">
-                        <p id="modalHash">replace me</p>
-                        <p align="right"><a id="modalLink" href="">open torrent on rutracker &rarr;</a></p>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
-                    </div>
-                </div>
-
-            </div>
-        </div>
     </div>
 
     <script type="text/javascript">
@@ -95,6 +75,17 @@
         });
         arg = arg + "wild=" + ($('#wild').is(":checked") ? "1" : "0");
         t.ajax.url('search?' + arg).load();
+    }
+
+    function format ( d ) {
+        var hash = d[6]
+        var id = d[0]
+        return '<table class="table table-condensed">'+
+            '<tr>'+
+                '<td class="success col-lg-6"><p class="text-center"><a href="magnet:?xt=urn:btih:'+hash+'">Magnet</a></p></td>'+
+                '<td class="info col-lg-6"><p class="text-center"><a href="http://rutracker.org/forum/viewtopic.php?t='+id+'">Rutracker</a></p></td>'+
+            '</tr>'+
+        '</table>';
     }
 
     var t;
@@ -125,13 +116,17 @@
             ],
             "order": [[ 1, "desc" ]]
         });
-        $("#table_id tbody").on('click', 'tr', function () {
-            var id = t.cell(this, 0).data();
-            var hash = t.cell(this, 6).data();
-            $('#modalHash').html("magnet:?xt=urn:btih:"+hash);
-            $('#modalLink').attr('href', 'http://rutracker.org/forum/viewtopic.php?t='+id)
-            $('#magnetModal').modal('show')
-        });
+        $('#table_id tbody').on('click', 'tr', function () {
+            var tr = $(this).closest('tr');
+            var row = t.row( tr );
+            if ( row.child.isShown() ) {  // This row is already open - close it
+                row.child.hide();
+                tr.removeClass('shown');
+            } else {                      // Open this row
+                row.child( format(row.data()) ).show();
+                tr.addClass('shown');
+            }
+        } );
         t.on('order.dt search.dt', function () {
             t.column(0, {search:'applied', order:'applied'}).nodes().each( function (cell, i) {
                 cell.innerHTML = i+1;

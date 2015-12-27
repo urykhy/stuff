@@ -48,7 +48,7 @@ class App(object):
     def search(self, **params):
         limit_cat = params.get('cat', "").strip()
         limit_forum = params.get('forum', "").strip()
-        limit_count = int(params.get('count', 10))
+        limit_count = int(params.get('count', 100))
         limit_size_min = human2bytes(params.get('min', "0b"))
         limit_size_max = human2bytes(params.get('max', "0b"))
         limit_wild = int(params.get('wild', 0))
