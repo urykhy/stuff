@@ -109,6 +109,7 @@ class App(object):
         data = []
         for hit in r:
             b = hit._body
+            b.author = b.author.replace(',',", ")
             a = [b.id, b.author, b.title, b.size, b.date]
             data.append(a)
 
