@@ -86,12 +86,13 @@ def read_inp(z,fname):
             l=l.strip().decode(sys.stdin.encoding)
             # http://forum.home-lib.net/index.php?showtopic=16
             # AUTHOR;GENRE;TITLE;SERIES;SERNO;LIBID;SIZE;FILE;DEL;EXT;DATE;LANG;LIBR ATE;KEYWORDS;
-            (au, genre, name, seq, _None, id, size, _None, _None, _None, date, _None) = l.split("\04",11)
-            au = au.rstrip(":,-")
-            if len(seq):
-                books.append((au, name + '/' + seq, id, size, date))
-            else:
-                books.append((au, name, id, size, date))
+            (au, genre, name, seq, _None, id, size, _None, f_del, _None, date, _None) = l.split("\04",11)
+            if f_del == "0":
+                au = au.rstrip(":,-")
+                if len(seq):
+                    books.append((au, name + '/' + seq, id, size, date))
+                else:
+                    books.append((au, name, id, size, date))
     pool.apply_async(indexer, [fname, books])
 
 with zipfile.ZipFile(mirror_path + "/flibusta_fb2_local.inpx") as zfile:
