@@ -74,7 +74,6 @@ def f(a):
                 "_type" : ela_doc,
                 "_id"   : id,
                 "_body" : doc,
-                "_timeout": timeout
         }
         actions.append(action)
     es_ = Elasticsearch([ela_host])
@@ -100,7 +99,7 @@ for [cat_id,cat_name,fname] in reader:
     fname = os.path.join(d, fname)
     csv_list.append([cat_id,cat_name, fname, index])
 
-es = Elasticsearch([ela_host])
+es = Elasticsearch([ela_host], timeout=timeout)
 print("recreate indexes")
 for index in index_list:
     new_index(es, index)
