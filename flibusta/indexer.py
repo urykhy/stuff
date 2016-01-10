@@ -15,7 +15,7 @@ ela_host="test"
 ela_index="fb2-index"
 ela_doc="fb2"
 timeout=600
-threads=3
+threads=6
 
 files_to_process = 0
 files_read = 0
@@ -50,7 +50,7 @@ def new_index(es, name):
 
 def indexer(fname, books):
     index_name_ = index_name(fname)
-    es = Elasticsearch([ela_host])
+    es = Elasticsearch([ela_host], timeout=timeout)
     new_index(es, index_name_)
     actions = []
     for a in books:
@@ -63,14 +63,12 @@ def indexer(fname, books):
                 'date'   : date
         }
         action = {
-                "_index": index_name_,
                 "_type" : ela_doc,
                 "_id"   : id,
                 "_body" : doc,
-                "_timeout": timeout
         }
         actions.append(action)
-    helpers.bulk(es, actions)
+    helpers.bulk(es, actions, index=index_name_)
     es.indices.optimize(index=index_name_)
     global files_read
     files_read += 1
@@ -89,6 +87,7 @@ def read_inp(z,fname):
             (au, genre, name, seq, _None, id, size, _None, f_del, _None, date, _None) = l.split("\04",11)
             if f_del == "0":
                 au = au.rstrip(":,-")
+                au = au.replace(',',", ")
                 if len(seq):
                     books.append((au, name + '/' + seq, id, size, date))
                 else:
