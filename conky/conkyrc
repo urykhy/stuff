@@ -1,0 +1,76 @@
+# Conky sample configuration
+#
+background yes
+use_xft yes
+override_utf8_locale yes
+xftfont Monospace:size=10
+xftalpha 1
+
+update_interval 5.0
+#own_window no
+#own_window_transparent yes
+own_window yes
+own_window_colour brown
+own_window_transparent yes
+own_window_type desktop
+own_window_transparent yes
+own_window_hints undecorated,below,sticky,skip_taskbar,skip_pager
+
+double_buffer yes
+minimum_size 100 5
+draw_shades yes
+draw_outline no
+draw_borders no
+stippled_borders 0
+border_width 0
+default_color 679FD2
+default_shade_color black
+default_outline_color black
+color1 408DD2
+
+alignment bottom_left
+gap_x 0
+gap_y 0
+
+no_buffers yes
+uppercase no
+use_spacer none
+cpu_avg_samples 2
+net_avg_samples 2
+
+# luarocks install luautf8
+lua_load conky.lua
+
+TEXT
+${image conky-background.png -p 0,32}
+${offset 5}${voffset 18}${color1}Load${color}  ${loadavg 1} ${loadavg 2} ${loadavg 3}
+${offset 5}Uptime ${lua conky_uptime}
+${offset 5}Kernel ${lua conky_kernel_version}
+${offset 220}${voffset -57}${color1}CPU${color}
+${offset 220}${voffset 0}${cpubar 8,70}
+${offset 220}${voffset 0}${lua conky_freq} GHz
+${offset 220}${voffset 0}${lua conky_temp} °C
+${offset 310}${voffset -77}${color1}Memory${color}
+${offset 310}${voffset 0}${membar 8,70}
+${offset 310}${voffset 0}${color yellow}${swapbar 8,70}${color}
+${offset 400}${voffset -57}${color1}Disk Free${color}
+${offset 400}${voffset 0}root ${fs_free /}
+${offset 400}${voffset 0}home ${fs_free /home}
+${offset 400}${voffset 0}u01  ${fs_free /u01}
+${offset 540}${voffset -77}${color1}Network${color}
+${offset 540}${voffset 0}eth0 ${downspeed eth0}/${upspeed eth0}
+${offset 540}${voffset 0}wifi ${downspeed wifi}/${upspeed wifi}
+${offset 750}${voffset -57}${color1}Battery${color}
+${offset 750}${voffset 0}${if_match ${battery_percent} <= 80}${if_match ${battery_percent} <= 40}${color red}${else}${color yellow}${endif}${endif}${lua conky_battery_state}${color}
+${offset 750}${voffset 0}${battery_percent}%
+${offset 750}${voffset 0}${battery_time}
+${offset 870}${voffset -77}${color1}Local Mail${color}
+${offset 870}${voffset 0}Unseen: ${imap_unseen localhost *LOGIN* *PASS*}
+${offset 870}${voffset 0}Total:  ${imap_messages localhost *LOGIN* *PASS*}
+${offset 1000}${voffset -57}${color1}Audacious ${audacious_status}${color}
+${offset 1000}${voffset 0}${lua audacious_title_1}
+${offset 1000}${voffset 0}${lua audacious_title_2}
+${offset 1400}${voffset -57}${color1}Today${color}
+${offset 1400}${voffset 0}${time %A, %e %B}
+${offset 1400}${voffset 0}${alignr}${font style:bold}${time %H}${font}:${time %M }
+
