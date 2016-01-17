@@ -46,5 +46,10 @@ function conky_freq()
     end
     return round(sum / 1000 / 1000.0 / 4.0, 1)
 end
+function conky_date()
+    local utf8 = require 'lua-utf8'
+    local a = conky_parse('${time %A, %e %B}')
+    return utf8.sub(a, 0, 20)
+end
 
 
