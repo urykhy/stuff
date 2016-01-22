@@ -33,6 +33,53 @@ function conky_temp()
     end
     return "NX"
 end
+
+function conky_disk_dirty()
+    res = ""
+    for line in io.lines("/proc/meminfo") do
+        local key, value = string.match(line, "(.+):%s*(%d+)")
+        if key == "Dirty" then
+            res = string.format("Dirty %7iKb",value)
+            break
+        end
+    end
+    return res
+end
+function conky_disk_wb()
+    res = ""
+    for line in io.lines("/proc/meminfo") do
+        local key, value = string.match(line, "(.+):%s*(%d+)")
+        if key == "Writeback" then
+            res = string.format("W-back %6iKb",value)
+            break
+        end
+    end
+    return res
+end
+
+function get_disk_util()
+    for line in io.lines("/proc/diskstats") do
+        local value = string.match(line, ".+ sda %d+ %d+ %d+ %d+ %d+ %d+ %d+ %d+ %d+ (%d+)")
+        if value then
+            return value
+        end
+    end
+    return 0
+end
+
+-- expected call rate - once in 5 seconds
+function conky_disk_util()
+    if global_disk_util then
+        cdu = get_disk_util()
+        s = (cdu - global_disk_util) / 5 / 10
+        global_disk_util = cdu
+        return s
+    else
+        global_disk_util = get_disk_util()
+        return 0
+    end
+end
+
 function round(num, idp)
     local mult = 10^(idp or 0)
     return math.floor(num * mult + 0.5) / mult
@@ -51,5 +98,4 @@ function conky_date()
     local a = conky_parse('${time %A, %e %B}')
     return utf8.sub(a, 0, 20)
 end
-
 
