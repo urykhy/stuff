@@ -52,11 +52,12 @@ ${offset 5}${voffset 0}${lua audacious_title_2}
 ${offset 400}${voffset -57}${color1}CPU${color}
 ${offset 400}${voffset 0}${cpubar 8,70}
 ${offset 400}${voffset 0}${lua conky_freq} GHz
-${offset 400}${voffset 0}${lua conky_temp} °C
+${offset 400}${voffset 0}${lua conky_temp}°C
 ${offset 490}${voffset -77}${color1}Memory${color}
 ${offset 490}${voffset 0}${membar 8,70}
 ${offset 490}${voffset 0}${color yellow}${swapbar 8,70}${color}
-${offset 580}${voffset -57}${color1}Disk${color}
+${offset 490}${voffset 0}${lua conky_mb_temp}°C
+${offset 580}${voffset -77}${color1}Disk${color}
 ${offset 580}${voffset 0}${lua_bar 8,150 disk_util}
 ${offset 580}${voffset 0}${lua disk_dirty}
 ${offset 580}${voffset 0}${lua disk_wb}

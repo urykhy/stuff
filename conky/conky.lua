@@ -33,6 +33,15 @@ function conky_temp()
     end
     return "NX"
 end
+function conky_mb_temp()
+    local file = io.open("/sys/class/thermal/thermal_zone9/temp", "r")
+    if file then
+        res = file:read("*number")
+        file:close()
+        return res / 1000
+    end
+    return "NX"
+end
 
 function conky_disk_dirty()
     res = ""
