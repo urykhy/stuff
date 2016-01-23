@@ -18,7 +18,7 @@ info="category_info.csv"
 ela_host="test"
 ela_index="tracker-multi-index"
 ela_doc="torrent"
-threads=2
+threads=4
 timeout=600
 
 def easy_parallize(f, sequence):
@@ -33,23 +33,24 @@ def get_index_name(f):
     return ela_index + "-" + re.search('_(\d+)\.', f).group(1)
 
 def new_index(es, name):
-    print ("create index",name)
     es.indices.delete(index=name, ignore=[400, 404])
     es.indices.create(index=name, ignore=400, body={
         'settings': {
             'number_of_shards': 1,
         },
-        ela_doc : {
-            '_source': {'enabled': 'false'},
-            '_all':    {'enabled': 'false'},
-            'properties': {
-                'category': {'type': 'string'},
-                'forum': {'type': 'string'},
-                'id':    {'type': 'long'},
-                'hash':  {'type': 'string','index' : 'not_analyzed'},
-                'name':  {'type': 'string'},
-                'size': {'type': 'long',  'index' : 'not_analyzed'},
-                'data': {'type': 'date',  'format': 'yyyy-MM-dd hh:mm:ss', 'index' : 'not_analyzed'}
+        "mappings": {
+            ela_doc : {
+                '_source': {'enabled': 'true'},
+                '_all':    {'enabled': 'false'},
+                'properties': {
+                    'category': {'type': 'string'},
+                    'forum': {'type': 'string'},
+                    'id':    {'type': 'long', 'index' : 'not_analyzed'},
+                    'hash':  {'type': 'string', 'index' : 'not_analyzed'},
+                    'name':  {'type': 'string'},
+                    'size': {'type': 'long', 'index' : 'not_analyzed'},
+                    'date': {'type': 'date', 'format': 'yyyy-MM-dd HH:mm:ss', 'index' : 'not_analyzed'}
+                }
             }
         }
     })
@@ -61,6 +62,7 @@ def f(a):
     for a in t:
         [forum_id, forum_name, id, hash, name, size, *date] = a
         doc = {
+                '_id'  : int(id),
                 'category' : cat_name,
                 'forum'    : forum_name,
                 'id'   : int(id),
@@ -69,15 +71,11 @@ def f(a):
                 'size' : int(size),
                 'date' : date
         }
-        action = {
-                "_index": index_name,
-                "_type" : ela_doc,
-                "_id"   : id,
-                "_body" : doc,
-        }
-        actions.append(action)
-    es_ = Elasticsearch([ela_host])
-    helpers.bulk(es_, actions)
+        actions.append(doc)
+    es = Elasticsearch([ela_host], timeout=timeout)
+    new_index(es, index_name)
+    helpers.bulk(es, actions, index=index_name, doc_type=ela_doc)
+    es.indices.optimize(index=index_name)
     print("done:",fname)
 
 #
@@ -99,16 +97,7 @@ for [cat_id,cat_name,fname] in reader:
     fname = os.path.join(d, fname)
     csv_list.append([cat_id,cat_name, fname, index])
 
-es = Elasticsearch([ela_host], timeout=timeout)
-print("recreate indexes")
-for index in index_list:
-    new_index(es, index)
-
 print("about to process",len(csv_list),"files")
 easy_parallize(f, csv_list)
-
-print("optimize indexes")
-for index in index_list:
-    es.indices.optimize(index=index)
 print("done!")
 

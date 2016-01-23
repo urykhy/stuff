@@ -107,8 +107,7 @@ class App(object):
         #cherrypy.log("result is "+str(r))
 
         data = []
-        for hit in r:
-            b = hit._body
+        for b in r:
             a = [b.id, b.author, b.title, b.size, b.date]
             data.append(a)
 

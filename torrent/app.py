@@ -80,8 +80,10 @@ class App(object):
                 q = q & Q("match", forum=a)
 
         s = s.query(q)
+        #cherrypy.log("query is "+str(s.to_dict()))
         r = s.execute()
         size = r.hits.total
+        #cherrypy.log("query have "+str(size)+" elements")
         if size > limit_count:
             size = limit_count
         s = s.sort('-size')
@@ -89,8 +91,7 @@ class App(object):
         r = s.execute()
 
         data = []
-        for hit in r:
-            b = hit._body
+        for b in r:
             a = [b.id, b.size, b.name, b.category, b.forum, b.date[0] if b.date else '', b.hash]
             data.append(a)
 
