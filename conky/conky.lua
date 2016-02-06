@@ -115,7 +115,7 @@ function conky_weather1()
         temp1 = file:read()
         skip1 = file:read()
         file:close()
-        return string.format("%s, %s°C",txt1,round(temp1))
+        return string.format("%-.13s, %s°C",txt1,round(temp1))
     end
     return ""
 end
