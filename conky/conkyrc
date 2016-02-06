@@ -42,11 +42,11 @@ net_avg_samples 2
 lua_load ~/.conky.lua
 
 TEXT
-${image ~/devel/conky-background.png -p 0,32}
+${image ~/devel/conky-background.png -p 0,10}
 #${offset 5}${voffset 18}${color1}Load${color}  ${loadavg 1} ${loadavg 2} ${loadavg 3}
 #${offset 5}Uptime ${lua conky_uptime}
 #${offset 5}Kernel ${lua conky_kernel_version}
-${offset 5}${voffset 18}${color1}Audacious ${audacious_status}${color}
+${offset 5}${voffset 0}${color1}Audacious ${audacious_status}${color}
 ${offset 5}${voffset 0}${lua audacious_title_1}
 ${offset 5}${voffset 0}${lua audacious_title_2}
 ${offset 400}${voffset -57}${color1}CPU${color}
@@ -75,7 +75,9 @@ ${offset 1000}${voffset 0}Total:  ${imap_messages localhost A B}
 ${offset 1140}${voffset -57}${color1}Network${color}
 ${offset 1140}${voffset 0}eth0 ${downspeedf eth0}/${upspeedf eth0} Kb/s
 ${offset 1140}${voffset 0}wifi ${downspeedf wifi}/${upspeedf wifi} Kb/s
-${offset 1400}${voffset -57}${color1}Today${color}
-${offset 1400}${voffset 0}${lua date}
-${offset 1400}${voffset 0}${alignr}${font style:bold}${time %H}${font}:${time %M }
-
+${offset 1400}${voffset -57}${color1}Weather${color}
+#${offset 1400}${voffset 0}${lua date}
+#${offset 1400}${voffset 0}${alignr}${font style:bold}${time %H}${font}:${time %M }
+${offset 1400}${voffset 0}${lua weather1}
+${offset 1400}${voffset 0}${lua weather2}
+${offset 1400}${voffset 0}${lua weather_tom}

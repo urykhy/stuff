@@ -108,3 +108,44 @@ function conky_date()
     return utf8.sub(a, 0, 20)
 end
 
+function conky_weather1()
+    local file = io.open("/tmp/.forecast.txt")
+    if file then
+        txt1 = file:read()
+        temp1 = file:read()
+        skip1 = file:read()
+        file:close()
+        return string.format("%s, %s°C",txt1,round(temp1))
+    end
+    return ""
+end
+function conky_weather2()
+    local file = io.open("/tmp/.forecast.txt")
+    if file then
+        file:read()
+        file:read()
+        file:read()
+        tmin = file:read("*number")
+        tmax = file:read("*number")
+        file:close()
+        return string.format("Forecast: %d..%d°C",round(tmax),round(tmin))
+    end
+    return ""
+end
+function conky_weather_tom()
+    local file = io.open("/tmp/.forecast.txt")
+    if file then
+        for var=0,7,1 do
+          file:read()
+        end
+        desc = file:read()
+        tmin = file:read("*number")
+        tmax = file:read("*number")
+        file:close()
+        return string.format("Tomorrow: %d..%d°C",round(tmax),round(tmin))
+    end
+    return ""
+end
+
+
+
