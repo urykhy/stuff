@@ -44,31 +44,29 @@ function conky_mb_temp()
 end
 
 function conky_disk_dirty()
-    res = ""
+    local res = ""
+    local resn = 0
     for line in io.lines("/proc/meminfo") do
         local key, value = string.match(line, "(.+):%s*(%d+)")
         if key == "Dirty" then
-            res = string.format("Dirty %7iKb",value)
-            break
+            resn = resn + value
+        end
+        if key == "Writeback" then
+            resn = resn + value
         end
     end
-    return res
-end
-function conky_disk_wb()
-    res = ""
-    for line in io.lines("/proc/meminfo") do
-        local key, value = string.match(line, "(.+):%s*(%d+)")
-        if key == "Writeback" then
-            res = string.format("W-back %6iKb",value)
-            break
-        end
+    if resn < 99999 then
+        res = string.format("%iKb", resn)
+    else
+        res = string.format("%iMb", round(resn/1024))
     end
     return res
 end
 
-function get_disk_util()
+global_disk_util = {}
+function get_disk_util(name)
     for line in io.lines("/proc/diskstats") do
-        local value = string.match(line, ".+ sda %d+ %d+ %d+ %d+ %d+ %d+ %d+ %d+ %d+ (%d+)")
+        local value = string.match(line, ".+ "..name.." %d+ %d+ %d+ %d+ %d+ %d+ %d+ %d+ %d+ (%d+)")
         if value then
             return value
         end
@@ -77,14 +75,14 @@ function get_disk_util()
 end
 
 -- expected call rate - once in 5 seconds
-function conky_disk_util()
-    if global_disk_util then
-        cdu = get_disk_util()
-        s = (cdu - global_disk_util) / 5 / 10
-        global_disk_util = cdu
+function conky_disk_util(name)
+    if global_disk_util[name] then
+        cdu = get_disk_util(name)
+        s = (cdu - global_disk_util[name]) / 5 / 10
+        global_disk_util[name] = cdu
         return s
     else
-        global_disk_util = get_disk_util()
+        global_disk_util[name] = get_disk_util(name)
         return 0
     end
 end
@@ -130,12 +128,12 @@ function conky_weather2()
         file:close()
         return string.format("Forecast: %d..%d°C",round(tmax),round(tmin))
     end
-    return ""
+    return "                        "
 end
 function conky_weather_tom()
     local file = io.open("/tmp/.forecast.txt")
     if file then
-        for var=0,7,1 do
+        for var=0,6,1 do
           file:read()
         end
         desc = file:read()

@@ -16,6 +16,7 @@ own_window_type desktop
 own_window_transparent yes
 own_window_hints undecorated,below,sticky,skip_taskbar,skip_pager
 
+minimum_size 1600
 double_buffer yes
 minimum_size 100 5
 draw_shades yes
@@ -41,12 +42,15 @@ net_avg_samples 2
 # luarocks install luautf8
 lua_load ~/.conky.lua
 
-TEXT
-${image ~/devel/conky-background.png -p 0,10}
 #${offset 5}${voffset 18}${color1}Load${color}  ${loadavg 1} ${loadavg 2} ${loadavg 3}
 #${offset 5}Uptime ${lua conky_uptime}
 #${offset 5}Kernel ${lua conky_kernel_version}
-${offset 5}${voffset 0}${color1}Audacious ${audacious_status}${color}
+#${offset 1400}${voffset 0}${lua date}
+#${offset 1400}${voffset 0}${alignr}${font style:bold}${time %H}${font}:${time %M }
+
+TEXT
+${image ~/devel/conky-background.png -p 0,10}
+${offset 5}${voffset -3}${color1}Audacious ${audacious_status}${color}
 ${offset 5}${voffset 0}${lua audacious_title_1}
 ${offset 5}${voffset 0}${lua audacious_title_2}
 ${offset 400}${voffset -57}${color1}CPU${color}
@@ -58,9 +62,9 @@ ${offset 490}${voffset 0}${membar 8,70}
 ${offset 490}${voffset 0}${color yellow}${swapbar 8,70}${color}
 ${offset 490}${voffset 0}${lua conky_mb_temp}°C
 ${offset 580}${voffset -77}${color1}Disk${color}
-${offset 580}${voffset 0}${lua_bar 8,150 disk_util}
-${offset 580}${voffset 0}${lua disk_dirty}
-${offset 580}${voffset 0}${lua disk_wb}
+${offset 580}${voffset 0}sda: ${lua_bar 8,100 disk_util sda}
+${offset 580}${voffset 0}sdb: ${lua_bar 8,100 disk_util sdb}
+${offset 580}${voffset 0}Dirty: ${lua disk_dirty}
 ${offset 750}${voffset -77}${color1}Free space${color}
 ${offset 750}${voffset 0}/     ${fs_free /}
 ${offset 750}${voffset 0}/home ${fs_free /home}
@@ -76,8 +80,6 @@ ${offset 1140}${voffset -57}${color1}Network${color}
 ${offset 1140}${voffset 0}eth0 ${downspeedf eth0}/${upspeedf eth0} Kb/s
 ${offset 1140}${voffset 0}wifi ${downspeedf wifi}/${upspeedf wifi} Kb/s
 ${offset 1400}${voffset -57}${color1}Weather${color}
-#${offset 1400}${voffset 0}${lua date}
-#${offset 1400}${voffset 0}${alignr}${font style:bold}${time %H}${font}:${time %M }
 ${offset 1400}${voffset 0}${lua weather1}
 ${offset 1400}${voffset 0}${lua weather2}
 ${offset 1400}${voffset 0}${lua weather_tom}

@@ -12,7 +12,7 @@ def print_forecast(dfile, tom):
     print >> dfile, tom.temperatureMin
     print >> dfile, tom.temperatureMax
     print >> dfile, tom.windSpeed
-    print >> dfile, tom.precipAccumulation
+    #print >> dfile, tom.precipAccumulation
     print >> dfile, tom.icon
 
 
