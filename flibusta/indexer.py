@@ -20,8 +20,7 @@ threads=6
 files_to_process = 0
 files_read = 0
 
-mirror_path = "/u01/downloads/fb2.Flibusta.Net"
-#mirror_path = "/u02/mirror/fb2.Flibusta.Net"
+mirror_path = "/u03/mirror/fb2.Flibusta.Net"
 
 from multiprocessing.dummy import Pool
 pool = Pool(processes=threads)
