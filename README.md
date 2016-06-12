@@ -7,3 +7,5 @@ some information about scripts here:
 - torrent/ - interface to use rutracker database
 - flibusta/ - interface to search books over local flibusta library.
 - scripts/ - small scripts to simplify life
+- ml/ - little games with Machine learning, FTRL, LR.
+

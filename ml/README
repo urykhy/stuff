@@ -1,0 +1,18 @@
+
+quick and dirty (must be errors, i promise) ML games in C++
+    FTRL
+    Logistic regression
+
+BUILD DEPENDS:
+    libgsl0-dev (Lr, can be avoided)
+    boost
+
+DATA:
+    get wine.csv at https://drive.google.com/file/d/0B-7SehP6iq_ydVNDc0pnNlhiLVU/view
+
+RUN:
+    make run
+
+LICENSE:
+    feel free to use,reuse and abuse code in this project.
+
