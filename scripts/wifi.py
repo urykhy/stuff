@@ -4,6 +4,12 @@
 # WiFi client
 # set dev,config,wpa_config parameters in script and go as root.
 #
+#
+# setup /etc/network/interfaces:
+#
+# iface wifi inet dhcp
+#    wpa-conf /etc/wpa_supplicant/client.conf
+
 
 import re
 import argparse
