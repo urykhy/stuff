@@ -8,4 +8,5 @@ some information about scripts here:
 - flibusta/ - interface to search books over local flibusta library.
 - scripts/ - small scripts to simplify life
 - ml/ - little games with Machine learning, FTRL, LR.
+- logger - simple and dirty implementation of logger which can be enabled/disabled per function/log-level.
 
