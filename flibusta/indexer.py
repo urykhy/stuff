@@ -85,7 +85,7 @@ def read_inp(z,fname):
                 au = au.rstrip(":,-")
                 au = au.replace(',',", ")
                 if len(seq):
-                    books.append((au, name + '/' + seq, id, size, date))
+                    books.append((au, seq + '/' + name, id, size, date))
                 else:
                     books.append((au, name, id, size, date))
     pool.apply_async(indexer, [fname, books])
