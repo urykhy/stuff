@@ -1,4 +1,8 @@
 
+# disable built-in rules
+.SUFFIXES:
+MAKEFLAGS += -r
+
 CXX := g++
 CXXFLAGS := -std=c++11 -O3 -ggdb -I. -Wall -W -pedantic -mtune=native
 
