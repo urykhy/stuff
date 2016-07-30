@@ -1,4 +1,8 @@
 
+# disable built-in rules
+.SUFFIXES:
+MAKEFLAGS += -r
+
 CXX := g++
 CXXFLAGS := -std=c++14 -ggdb -Og -Wall -pedantic -I. -fPIC
 LDFLAGS := -ldl -L. -l_user -l_logger
