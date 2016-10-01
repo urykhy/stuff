@@ -1,0 +1,161 @@
+#!/bin/sh
+# Begin /etc/init.d/
+
+#
+# Include the functions declared in the /etc/init.d/functions file
+#
+msg="firewall"
+ipt="/sbin/iptables"
+ip6="/sbin/ip6tables"
+
+case "$1" in
+        start)
+            echo "Starting $msg"
+
+            # create ipset rules for tor
+            ipset create TOR hash:net
+            ipset add TOR 195.82.146.0/23
+            ipset add TOR 5.79.86.208    # coollib
+            ipset add TOR 81.17.19.227   # flibusta
+            ipset add TOR 104.24.106.53  # kinozal
+            ipset add TOR 104.24.107.53
+            ipset add TOR 193.189.117.92 # rutor
+            ipset add TOR 185.61.149.0   # tfile
+            ipset add TOR 62.133.161.112 # booktracker
+            ipset add TOR 188.42.196.32  # lurkmore.to
+
+            NFLOG="NFLOG --nflog-group 1"
+
+            # IPv6 really simple
+            $ip6 -A INPUT -m conntrack --ctstate established,related -j ACCEPT
+            $ip6 -A INPUT -i lo -j ACCEPT
+            $ip6 -A INPUT -i tun* -m conntrack --ctstate new -j DROP
+            $ip6 -A INPUT -p icmpv6 -j ACCEPT
+            $ip6 -A INPUT -p udp -m multiport --dports 6771,6881 -j ACCEPT # torrent
+            $ip6 -A INPUT -p udp -m multiport --dports 49052,21027 -j ACCEPT # syncthing
+            $ip6 -A INPUT -p tcp --dport 22000 -j ACCEPT # syncthing
+            $ip6 -A INPUT -j $NFLOG --nflog-prefix "ip6"
+            $ip6 -P INPUT DROP
+            $ip6 -P FORWARD DROP
+
+            # IPv4
+            # forward
+            $ipt -A FORWARD -m conntrack --ctstate established,related -j ACCEPT
+            $ipt -A FORWARD -i tun* -m conntrack --ctstate new -j DROP
+            $ipt -A FORWARD -s 10.103.0.0/16 -j ACCEPT
+            # docker networks
+            $ipt -A FORWARD -s 172.16.0.0/12 -j ACCEPT
+            #
+            $ipt -A FORWARD -j $NFLOG --nflog-prefix "fwd"
+            $ipt -P FORWARD DROP
+
+            # setup conntrack helpers (or only wifi/eth0?)
+            $ipt -A OUTPUT -t raw -p tcp --dport 21 -j CT --helper ftp
+            $ipt -A PREROUTING -t raw -p tcp --dport 21 -j CT --helper ftp
+
+            # lower prio for long-live http transfers
+            $ipt -t mangle -A INPUT -i eth0 -p tcp --sport 80 -m connmark --mark 0 -m connbytes --connbytes 10240000: --connbytes-dir both --connbytes-mode bytes -j CONNMARK --set-mark 0xa
+            $ipt -t mangle -A INPUT -i eth0 -p tcp --sport 443 -m connmark --mark 0 -m connbytes --connbytes 10240000: --connbytes-dir both --connbytes-mode bytes -j CONNMARK --set-mark 0xa
+
+            # input
+            $ipt -A INPUT -m conntrack --ctstate established,related -j ACCEPT
+            $ipt -A INPUT -i tun* -m conntrack --ctstate new -j DROP
+            $ipt -A INPUT -i lo -j ACCEPT
+            $ipt -A INPUT -i br0 -j ACCEPT
+            $ipt -A INPUT -p icmp -j ACCEPT
+            $ipt -A INPUT -s 10.103.0.0/16 -j ACCEPT
+
+            # chain to log and drop (used in syn protection)
+            $ipt -N LDROP
+            $ipt -A LDROP -j $NFLOG --nflog-prefix "syn-in"
+            $ipt -A LDROP -j DROP
+
+            # tcp syn/connections limits
+            $ipt -N TCPSYN
+            $ipt -A TCPSYN -p tcp -m connlimit --connlimit-above 20 --connlimit-mask 32 -j REJECT --reject-with tcp-reset
+            $ipt -A TCPSYN -m connlimit --connlimit-above 100 --connlimit-mask 24 -j LDROP
+            $ipt -A TCPSYN -m hashlimit --hashlimit-above 50/second --hashlimit-mode srcip --hashlimit-srcmask 24 --hashlimit-name ddos -j LDROP
+            $ipt -A TCPSYN -j RETURN
+            $ipt -A INPUT -p tcp --syn -j TCPSYN
+
+            # open some services for all
+            # torrents(6881, 9000, 6771, 1900) + miredo(55371) + syncthing(21027, 22000)
+            # dlna (8895, 8200) tox (33445)
+            $ipt -A INPUT -p udp -m multiport --dports 6881,6771,55371,21027,1900,33445 -j ACCEPT
+            $ipt -A INPUT -p udp -m multiport --dports 67,68,123,53 -j ACCEPT
+            $ipt -A INPUT -p tcp -m multiport --dports 6881,9000,22000,8895,8200 -j ACCEPT
+            $ipt -A INPUT -p tcp -m multiport --dports 445,139 -j ACCEPT
+
+            # upnp from router
+            $ipt -A INPUT -s 192.168.1.1 -p udp --sport 1900 -j ACCEPT
+
+            # drop others
+            $ipt -A INPUT -j $NFLOG --nflog-prefix "in"
+            $ipt -P INPUT DROP
+
+            # redirects
+            $ipt -t nat -A OUTPUT -d 127.192.0.0/10 -p tcp -j DNAT --to-destination 127.0.0.1:9052    # tor
+            $ipt -t nat -A OUTPUT -m set --match-set TOR dst -p tcp -m multiport --dports 80,443 -j DNAT --to-destination 127.0.0.1:9052    # tor
+            #$ipt -t nat -A PREROUTING -i br0 -p tcp --dport 80 -j REDIRECT --to-ports 3128
+
+            # fix dhcpd "bad udp checksums" errors with lxc
+            $ipt -A PREROUTING -i br0 -t mangle -p udp --dport 67 -j CHECKSUM --checksum-fill
+            $ipt -A POSTROUTING -o br0 -t mangle -p udp --sport 67 -j CHECKSUM --checksum-fill
+
+            # masquerade
+            $ipt -t nat -A POSTROUTING -o eth0 -s 10.103.0.0/16  -j MASQUERADE
+            $ipt -t nat -A POSTROUTING -o eth0 -s 172.16.0.0/12  -j MASQUERADE
+            $ipt -t nat -A POSTROUTING -o eth0 -s 192.168.0.0/16  -j MASQUERADE
+
+            # hack to workaround broken ftp
+            #$ipt -A OUTPUT -p tcp --dport 21 -j REJECT
+
+            ;;
+
+        stop)
+            echo "Stopping $msg"
+            $ipt -F
+            $ipt -t mangle -F
+            $ipt -t nat -F
+            $ipt -t raw -F
+            $ipt -P INPUT ACCEPT
+            $ipt -P FORWARD ACCEPT
+            $ipt -X TCPSYN
+            $ipt -X LDROP
+            ipset destroy TOR
+
+            $ip6 -F
+            $ip6 -P INPUT ACCEPT
+            $ip6 -P FORWARD ACCEPT
+            $ip6 -t raw -F
+            ;;
+
+        restart)
+            $0 stop
+            $0 start
+            ;;
+
+        status)
+            if [ -n "$2" ]; then
+                $ipt -n -t $2 -v -L
+            else
+                $ipt -n -v -L
+            fi
+            ;;
+
+        flush)
+            $ipt -Z
+            $ip6 -Z
+            $ipt -t nat -Z
+            $ipt -t mangle -Z
+            $ipt -t raw -Z
+            ;;
+
+        *)
+            echo "Usage: $0 {start|stop|flush|restart|status}"
+            exit 1
+            ;;
+
+esac
+
+# End /etc/init.d/
