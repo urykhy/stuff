@@ -24,7 +24,7 @@ ela_host="test"
 ela_index="fb2-index*"
 es = Elasticsearch([ela_host])
 
-mirror_path = "/u02/mirror/fb2.Flibusta.Net"
+mirror_path = "/u03/mirror/fb2.Flibusta.Net"
 tmp_path = "/tmp"
 
 class App(object):
