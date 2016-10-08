@@ -13,8 +13,7 @@ import re
 from elasticsearch import Elasticsearch
 from elasticsearch import helpers
 
-home="/u01/mirror/rutracker-torrents" # absolute path required
-info="category_info.csv"
+csv_path="/u03/mirror/rutracker-torrents" # absolute path required
 ela_host="test"
 ela_index="tracker-multi-index"
 ela_doc="torrent"
@@ -83,14 +82,14 @@ def f(a):
 # so do not mess with old data
 #
 
-folders = [f for f in os.listdir(home) if os.path.isdir(os.path.join(home, f))]
+folders = [f for f in os.listdir(csv_path) if os.path.isdir(os.path.join(csv_path, f))]
 [last_dir] = sorted(folders)[-1:]
 print ("process latest directory:",last_dir)
 
 csv_list = []
 index_list = []
-d = os.path.join(home,last_dir)
-reader = csv.reader(open(os.path.join(d, info), 'r'), delimiter=';', quotechar='\"')
+d = os.path.join(csv_path,last_dir)
+reader = csv.reader(open("lostandfound/category_info.csv", 'r'), delimiter=';', quotechar='\"')
 for [cat_id,cat_name,fname] in reader:
     index = get_index_name(fname)
     index_list.append(index)

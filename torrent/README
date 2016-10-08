@@ -1,0 +1,7 @@
+
+1. скачать xml dump.
+2. прописать пути в *.py скриптах
+3. ./xml2cvs.py
+4. ./indexer.py
+5. ./app.py
+
