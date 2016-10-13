@@ -7,7 +7,7 @@ import subprocess
 import sys
 import yaml
 
-#  start and stop KVM virtual machones, described in yml
+#  start and stop KVM virtual machines, described in yml
 #  macaddr must be used in command to detect VM status
 #
 #  sample kvm.yml
@@ -52,11 +52,18 @@ def operation_up(d):
         else:
             print ("starting "+x+" ... ", end="")
             try:
-                p = subprocess.Popen(shlex.split(services[x]["up"]), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).pid
-                # FIXME: no error handling here. if communicate is used - then console is garbage after script exit.
+                args = ["nohup"]
+                args.extend(shlex.split(services[x]["up"]))
+                p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.DEVNULL, close_fds=True)
+                o, e = p.communicate(timeout = 2)
+                msg = e.decode()
+                print ("Failed:", msg)
+                #p = subprocess.Popen(shlex.split(services[x]["down"]), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True).pid
+            except subprocess.TimeoutExpired:
                 print ("OK")
             except Exception as e:
                 print ("Failed:", e)
+                p.wait()
     return 0
 
 def operation_status(d):
@@ -75,10 +82,10 @@ def operation_down(d):
         if x in state:
             print ("stopping "+x+" ... ", end="")
             try:
-                p = subprocess.Popen(shlex.split(services[x]["down"]), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                p = subprocess.Popen(shlex.split(services[x]["down"]), stdout=subprocess.PIPE, stderr=subprocess.PIPE, close_fds=True)
                 o, e = p.communicate(timeout = 2)
                 msg = e.decode()
-                if msg.find("closed by remote host") == -1:
+                if msg.find("closed by remote host") == -1 and len(msg) > 1:
                     print ("Failed:", msg)
                 else:
                     print ("OK");
