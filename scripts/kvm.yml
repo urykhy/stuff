@@ -1,0 +1,10 @@
+version: 1
+
+services:
+  centos7-1:
+    up: kvm -m 1G -net nic,vlan=1,macaddr=52:62:33:44:56:01,model=virtio -net tap,vlan=1,ifname=vif-c1 -drive cache=unsafe,file=/u01/vm/gfs/centos7-1,if=virtio -nographic
+    down: ssh user@centos7-1 sudo poweroff
+  cantos7-2:
+    up: kvm -m 1G -net nic,vlan=1,macaddr=52:62:33:44:56:02,model=virtio -net tap,vlan=1,ifname=vif-c2 -drive cache=unsafe,file=/u01/vm/gfs/centos7-2,if=virtio -nographic
+    down: ssh user@centos7-2 sudo poweroff
+
