@@ -30,8 +30,8 @@ case "$1" in
 		modprobe ifb
 		ip l set ifb0 up
 		tc qdisc add dev $dev ingress
-		tc filter add dev $dev parent ffff: protocol ip u32 match u32 0 0 action mirred egress redirect dev ifb0
-		#tc filter add dev $dev parent ffff: protocol ip u32 match u32 0 0 action connmark action mirred egress redirect dev ifb0
+		#tc filter add dev $dev parent ffff: protocol ip u32 match u32 0 0 action mirred egress redirect dev ifb0
+		tc filter add dev $dev parent ffff: protocol ip u32 match u32 0 0 action connmark action mirred egress redirect dev ifb0
 		$qdisc root handle 1: htb default 102
 		$class parent 1: classid 1:10 $est htb $rate quantum 11000      # internet
 		$class parent 1: classid 1:20 $est htb rate 1gbit quantum 11000 # for lan
@@ -44,36 +44,40 @@ case "$1" in
 
 		# lan
 		$filter parent 1: prio 1 u32 match ip src 192.168.0.0/16 flowid 1:20
-        # bulk prio by iptables (long downloads, commented, since affect youtube too.)
-		#$filter parent 1: prio 2 handle 0xa fw flowid 1:102
 
-		# prio traffic
-		$filter parent 1: prio 3 u32 match ip sport 22 0xffff flowid 1:100    # ssh
-		$filter parent 1: prio 3 u32 match ip sport 53 0xffff flowid 1:100    # dns
-		$filter parent 1: prio 3 u32 match ip sport 123 0xffff flowid 1:100   # ntp
-		$filter parent 1: prio 3 u32 match ip sport 5190 0xffff flowid 1:100  # icq
-		$filter parent 1: prio 3 u32 match ip sport 5222 0xffff flowid 1:100  # xmpp
-		$filter parent 1: prio 3 u32 match ip sport 5223 0xffff flowid 1:100  # xmpp
-		$filter parent 1: prio 3 u32 match ip sport 6667 0xffff flowid 1:100  # irc
-		$filter parent 1: prio 3 u32 match ip sport 9944 0xffff flowid 1:100  # irc
-		$filter parent 1: prio 3 u32 match ip sport 28763 0xffff flowid 1:100 # assalutcube
-		$filter parent 1: prio 3 u32 match ip sport 28764 0xffff flowid 1:100
-		$filter parent 1: prio 3 u32 match ip dport 1027 0xffff flowid 1:100  # skype/settings/advanced/
-		$filter parent 1: prio 3 u32 match ip protocol 1 0xff flowid 1:100    # icmp
-		$filter parent 1: prio 3 u32 match ip sport 1022 0xffff flowid 1:100  # ssh/pg
-
-		# www, pop3, imap4, imaps
-		$filter parent 1: prio 3 u32 match ip sport 80 0xffff flowid 1:101    # http
-		$filter parent 1: prio 3 u32 match ip sport 443 0xffff flowid 1:101   # https
-		$filter parent 1: prio 3 u32 match ip sport 143 0xffff flowid 1:101   # imap
-		$filter parent 1: prio 3 u32 match ip sport 110 0xffff flowid 1:101   # pop3
-		$filter parent 1: prio 3 u32 match ip sport 993 0xffff flowid 1:101   # imaps
-		$filter parent 1: prio 3 u32 match ip sport 1122 0xffff flowid 1:101  # open vpn
-
-		# bulk is default + add debian mirrors
+        # bulk is default + add debian mirrors
         for ip in $bulk_src; do
             $filter parent 1: prio 2 u32 match ip src $ip/32 flowid 1:102 #
         done
+
+        # bulk prio by iptables
+        # long downloads
+		$filter parent 1: prio 3 handle 0xa fw flowid 1:102
+        # skype. UDP from wlan
+		$filter parent 1: prio 4 handle 0xb fw flowid 1:101
+
+		# prio traffic
+		$filter parent 1: prio 10 u32 match ip sport 22 0xffff flowid 1:100    # ssh
+		$filter parent 1: prio 10 u32 match ip sport 53 0xffff flowid 1:100    # dns
+		$filter parent 1: prio 10 u32 match ip sport 123 0xffff flowid 1:100   # ntp
+		$filter parent 1: prio 10 u32 match ip sport 5190 0xffff flowid 1:100  # icq
+		$filter parent 1: prio 10 u32 match ip sport 5222 0xffff flowid 1:100  # xmpp
+		$filter parent 1: prio 10 u32 match ip sport 5223 0xffff flowid 1:100  # xmpp
+		$filter parent 1: prio 10 u32 match ip sport 6667 0xffff flowid 1:100  # irc
+		$filter parent 1: prio 10 u32 match ip sport 9944 0xffff flowid 1:100  # irc
+		$filter parent 1: prio 10 u32 match ip sport 28763 0xffff flowid 1:100 # assalutcube
+		$filter parent 1: prio 10 u32 match ip sport 28764 0xffff flowid 1:100
+		$filter parent 1: prio 10 u32 match ip dport 1027 0xffff flowid 1:100  # skype/settings/advanced/
+		$filter parent 1: prio 10 u32 match ip protocol 1 0xff flowid 1:100    # icmp
+		$filter parent 1: prio 10 u32 match ip sport 1022 0xffff flowid 1:100  # ssh/pg
+
+		# www, pop3, imap4, imaps
+		$filter parent 1: prio 20 u32 match ip sport 80 0xffff flowid 1:101    # http
+		$filter parent 1: prio 20 u32 match ip sport 443 0xffff flowid 1:101   # https
+		$filter parent 1: prio 20 u32 match ip sport 143 0xffff flowid 1:101   # imap
+		$filter parent 1: prio 20 u32 match ip sport 110 0xffff flowid 1:101   # pop3
+		$filter parent 1: prio 20 u32 match ip sport 993 0xffff flowid 1:101   # imaps
+		$filter parent 1: prio 20 u32 match ip sport 1122 0xffff flowid 1:101  # open vpn
 
 		tc qdisc add dev $dev root $sfq
 	;;

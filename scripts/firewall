@@ -24,7 +24,7 @@ case "$1" in
             ipset add TOR 62.133.161.112 # booktracker
             ipset add TOR 188.42.196.32  # lurkmore.to
 
-            NFLOG="NFLOG --nflog-group 1"
+            NFLOG="NFLOG --nflog-group 1 --nflog-range=4096"
 
             # IPv6 really simple
             $ip6 -A INPUT -m conntrack --ctstate established,related -j ACCEPT
@@ -54,8 +54,11 @@ case "$1" in
             $ipt -A PREROUTING -t raw -p tcp --dport 21 -j CT --helper ftp
 
             # lower prio for long-live http transfers
-            $ipt -t mangle -A INPUT -i eth0 -p tcp --sport 80 -m connmark --mark 0 -m connbytes --connbytes 10240000: --connbytes-dir both --connbytes-mode bytes -j CONNMARK --set-mark 0xa
-            $ipt -t mangle -A INPUT -i eth0 -p tcp --sport 443 -m connmark --mark 0 -m connbytes --connbytes 10240000: --connbytes-dir both --connbytes-mode bytes -j CONNMARK --set-mark 0xa
+            $ipt -t mangle -A INPUT -i eth0 -p tcp --sport 80 -m connmark --mark 0 -m connbytes --connbytes 1024000: --connbytes-dir both --connbytes-mode bytes -j CONNMARK --set-mark 0xa
+            $ipt -t mangle -A INPUT -i eth0 -p tcp --sport 443 -m connmark --mark 0 -m connbytes --connbytes 1024000: --connbytes-dir both --connbytes-mode bytes -j CONNMARK --set-mark 0xa
+
+            # skype
+            $ipt -t mangle -A FORWARD -i wlan0 -o eth0 -p udp -m connmark --mark 0 -j CONNMARK --set-mark 0xb
 
             # input
             $ipt -A INPUT -m conntrack --ctstate established,related -j ACCEPT
