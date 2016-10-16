@@ -60,6 +60,9 @@ case "$1" in
             # skype
             $ipt -t mangle -A FORWARD -i wlan0 -o eth0 -p udp -m connmark --mark 0 -j CONNMARK --set-mark 0xb
 
+            # dns proxy
+            $ipt -t mangle -A OUTPUT -m owner --uid-owner _dnscrypt-proxy -m connmark --mark 0 -j CONNMARK --set-mark 0xc
+
             # input
             $ipt -A INPUT -m conntrack --ctstate established,related -j ACCEPT
             $ipt -A INPUT -i tun* -m conntrack --ctstate new -j DROP

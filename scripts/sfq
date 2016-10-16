@@ -50,11 +50,10 @@ case "$1" in
             $filter parent 1: prio 2 u32 match ip src $ip/32 flowid 1:102 #
         done
 
-        # bulk prio by iptables
-        # long downloads
-		$filter parent 1: prio 3 handle 0xa fw flowid 1:102
-        # skype. UDP from wlan
-		$filter parent 1: prio 4 handle 0xb fw flowid 1:101
+        # mark from iptables
+		$filter parent 1: prio 3 handle 0xa fw flowid 1:102     # long downloads
+		$filter parent 1: prio 3 handle 0xb fw flowid 1:101     # skype
+		$filter parent 1: prio 3 handle 0xc fw flowid 1:100     # dnscrypt
 
 		# prio traffic
 		$filter parent 1: prio 10 u32 match ip sport 22 0xffff flowid 1:100    # ssh
@@ -65,11 +64,7 @@ case "$1" in
 		$filter parent 1: prio 10 u32 match ip sport 5223 0xffff flowid 1:100  # xmpp
 		$filter parent 1: prio 10 u32 match ip sport 6667 0xffff flowid 1:100  # irc
 		$filter parent 1: prio 10 u32 match ip sport 9944 0xffff flowid 1:100  # irc
-		$filter parent 1: prio 10 u32 match ip sport 28763 0xffff flowid 1:100 # assalutcube
-		$filter parent 1: prio 10 u32 match ip sport 28764 0xffff flowid 1:100
-		$filter parent 1: prio 10 u32 match ip dport 1027 0xffff flowid 1:100  # skype/settings/advanced/
 		$filter parent 1: prio 10 u32 match ip protocol 1 0xff flowid 1:100    # icmp
-		$filter parent 1: prio 10 u32 match ip sport 1022 0xffff flowid 1:100  # ssh/pg
 
 		# www, pop3, imap4, imaps
 		$filter parent 1: prio 20 u32 match ip sport 80 0xffff flowid 1:101    # http
