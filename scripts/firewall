@@ -56,6 +56,8 @@ case "$1" in
             # lower prio for long-live http transfers
             $ipt -t mangle -A INPUT -i eth0 -p tcp --sport 80 -m connmark --mark 0 -m connbytes --connbytes 1024000: --connbytes-dir both --connbytes-mode bytes -j CONNMARK --set-mark 0xa
             $ipt -t mangle -A INPUT -i eth0 -p tcp --sport 443 -m connmark --mark 0 -m connbytes --connbytes 1024000: --connbytes-dir both --connbytes-mode bytes -j CONNMARK --set-mark 0xa
+            $ipt -t mangle -A FORWARD -i eth0 -p tcp --sport 80 -m connmark --mark 0 -m connbytes --connbytes 1024000: --connbytes-dir both --connbytes-mode bytes -j CONNMARK --set-mark 0xa
+            $ipt -t mangle -A FORWARD -i eth0 -p tcp --sport 443 -m connmark --mark 0 -m connbytes --connbytes 1024000: --connbytes-dir both --connbytes-mode bytes -j CONNMARK --set-mark 0xa
 
             # skype
             $ipt -t mangle -A FORWARD -i wlan0 -o eth0 -p udp -m connmark --mark 0 -j CONNMARK --set-mark 0xb
