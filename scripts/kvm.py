@@ -3,8 +3,10 @@
 import os
 import psutil
 import shlex
+import socket
 import subprocess
 import sys
+import time
 import yaml
 
 #  start and stop KVM virtual machines, described in yml
@@ -29,6 +31,19 @@ def update_status(d):
             if i in test:
                 state[x]=1
 
+def wait_up(d, name):
+    for x in range(1,30):
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(1)
+                s.connect((name, 22))
+                print ("OK");
+                return
+        except:
+            print (".", end="", flush=True)
+        time.sleep(1)
+    print ("Timeout")
+
 def operation_up(d, arg):
     global state
     services = d["services"]
@@ -38,7 +53,7 @@ def operation_up(d, arg):
         if x in state:
             print (x+" already started")
         else:
-            print ("starting "+x+" ... ", end="")
+            print ("starting "+x+" ... ", end="", flush=True)
             try:
                 args = ["nohup"]
                 args.extend(shlex.split(services[x]["up"]))
@@ -48,7 +63,10 @@ def operation_up(d, arg):
                 print ("Failed:", msg)
                 #p = subprocess.Popen(shlex.split(services[x]["down"]), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True).pid
             except subprocess.TimeoutExpired:
-                print ("OK")
+                if services[x]["wait"]:
+                    wait_up(d, x)
+                else:
+                    print ("OK")
             except Exception as e:
                 print ("Failed:", e)
                 p.wait()
@@ -63,6 +81,19 @@ def operation_status(d):
             print (x,"is stopped")
     return 0;
 
+def wait_down(d, name):
+    global state
+    for x in range(1,10):
+        update_status(d)
+        if name in state:
+            print (".", end="", flush=True)
+        else:
+            print ("OK");
+            return
+        time.sleep(1)
+    print ("Timeout")
+
+
 def operation_down(d, arg):
     global state
     services = d["services"]
@@ -70,7 +101,7 @@ def operation_down(d, arg):
         if len(arg) > 0 and x not in arg:
             continue
         if x in state:
-            print ("stopping "+x+" ... ", end="")
+            print ("stopping "+x+" ... ", end="", flush=True)
             try:
                 p = subprocess.Popen(shlex.split(services[x]["down"]), stdout=subprocess.PIPE, stderr=subprocess.PIPE, close_fds=True)
                 o, e = p.communicate(timeout = 2)
@@ -78,7 +109,10 @@ def operation_down(d, arg):
                 if msg.find("closed by remote host") == -1 and len(msg) > 1:
                     print ("Failed:", msg)
                 else:
-                    print ("OK");
+                    if services[x]["wait"]:
+                        wait_down(d, x)
+                    else:
+                        print ("OK");
             except Exception as e:
                 print ("Failed:", e)
             p.wait()
