@@ -18,12 +18,15 @@ def update_status(d):
     state = {}
     test=[]
     for pid in psutil.pids():
-        p = psutil.Process(pid)
-        l = p.cmdline()
-        if len(l) > 1 and l[0]=="qemu-system-x86_64":
-            for i in l:
-                if i.find("macaddr") != -1:
-                    test.append(i)
+        try:
+            p = psutil.Process(pid)
+            l = p.cmdline()
+            if len(l) > 1 and l[0]=="qemu-system-x86_64":
+                for i in l:
+                    if i.find("macaddr") != -1:
+                        test.append(i)
+        except:
+            pass
     services = d["services"]
     for x in services:
         flag = False
@@ -43,12 +46,13 @@ def wait_up(d, name):
             print (".", end="", flush=True)
         time.sleep(1)
     print ("Timeout")
+    raise TimeoutError
 
 def operation_up(d, arg):
     global state
     services = d["services"]
     for x in services:
-        if len(arg) > 0 and x not in arg:
+        if x not in arg and ("noauto" in services[x] or len(arg) > 0):
             continue
         if x in state:
             print (x+" already started")
@@ -61,6 +65,7 @@ def operation_up(d, arg):
                 o, e = p.communicate(timeout = 2)
                 msg = e.decode()
                 print ("Failed:", msg)
+                return 2
                 #p = subprocess.Popen(shlex.split(services[x]["down"]), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True).pid
             except subprocess.TimeoutExpired:
                 if services[x]["wait"]:
@@ -68,8 +73,9 @@ def operation_up(d, arg):
                 else:
                     print ("OK")
             except Exception as e:
-                print ("Failed:", e)
                 p.wait()
+                print ("Failed:", e)
+                return 2
     return 0
 
 def operation_status(d):
@@ -83,7 +89,7 @@ def operation_status(d):
 
 def wait_down(d, name):
     global state
-    for x in range(1,10):
+    for x in range(1,30):
         update_status(d)
         if name in state:
             print (".", end="", flush=True)
@@ -92,13 +98,13 @@ def wait_down(d, name):
             return
         time.sleep(1)
     print ("Timeout")
-
+    raise TimeoutError
 
 def operation_down(d, arg):
     global state
     services = d["services"]
     for x in services:
-        if len(arg) > 0 and x not in arg:
+        if x not in arg and ("noauto" in services[x] or len(arg) > 0):
             continue
         if x in state:
             print ("stopping "+x+" ... ", end="", flush=True)
@@ -108,6 +114,7 @@ def operation_down(d, arg):
                 msg = e.decode()
                 if msg.find("closed by remote host") == -1 and len(msg) > 1:
                     print ("Failed:", msg)
+                    return 2
                 else:
                     if services[x]["wait"]:
                         wait_down(d, x)
@@ -115,6 +122,7 @@ def operation_down(d, arg):
                         print ("OK");
             except Exception as e:
                 print ("Failed:", e)
+                return 2
             p.wait()
         else:
             print (x+" already stopped")
