@@ -9,20 +9,6 @@ import yaml
 
 #  start and stop KVM virtual machines, described in yml
 #  macaddr must be used in command to detect VM status
-#
-#  sample kvm.yml
-#
-"""
-version: 1
-
-services:
-  centos7-1:
-    up: kvm -m 1G -net nic,vlan=1,macaddr=52:62:33:44:56:01,model=virtio -net tap,vlan=1,ifname=vif-c1 -drive cache=unsafe,file=/u01/vm/gfs/centos7-1,if=virtio -nographic
-    down: ssh user@centos7-1 sudo poweroff
-  cantos7-2:
-    up: kvm -m 1G -net nic,vlan=1,macaddr=52:62:33:44:56:02,model=virtio -net tap,vlan=1,ifname=vif-c2 -drive cache=unsafe,file=/u01/vm/gfs/centos7-2,if=virtio -nographic
-    down: ssh user@centos7-2 sudo poweroff
-"""
 
 state = {}
 def update_status(d):
@@ -43,10 +29,12 @@ def update_status(d):
             if i in test:
                 state[x]=1
 
-def operation_up(d):
+def operation_up(d, arg):
     global state
     services = d["services"]
     for x in services:
+        if len(arg) > 0 and x not in arg:
+            continue
         if x in state:
             print (x+" already started")
         else:
@@ -75,10 +63,12 @@ def operation_status(d):
             print (x,"is stopped")
     return 0;
 
-def operation_down(d):
+def operation_down(d, arg):
     global state
     services = d["services"]
     for x in services:
+        if len(arg) > 0 and x not in arg:
+            continue
         if x in state:
             print ("stopping "+x+" ... ", end="")
             try:
@@ -112,9 +102,9 @@ update_status(d)
 if len(sys.argv) == 1:
     sys.exit(operation_status(d))
 if sys.argv[1] == "up":
-    sys.exit(operation_up(d))
+    sys.exit(operation_up(d, sys.argv[2:]))
 elif sys.argv[1] == "down":
-    sys.exit(operation_down(d))
+    sys.exit(operation_down(d, sys.argv[2:]))
 
 print ("unknown command. only up and down are supported")
 sys.exit(-1)
