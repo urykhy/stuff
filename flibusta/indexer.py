@@ -67,7 +67,6 @@ def indexer(fname, books):
     es = Elasticsearch([ela_host], timeout=timeout)
     new_index(es, index_name_)
     helpers.bulk(es, actions, index=index_name_, doc_type=ela_doc)
-    es.indices.optimize(index=index_name_)
     global files_read
     files_read += 1
     progress = files_read / float(files_to_process)

@@ -74,7 +74,6 @@ def f(a):
     es = Elasticsearch([ela_host], timeout=timeout)
     new_index(es, index_name)
     helpers.bulk(es, actions, index=index_name, doc_type=ela_doc)
-    es.indices.optimize(index=index_name)
     print("done:",fname)
 
 #
