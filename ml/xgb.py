@@ -6,25 +6,25 @@ import pandas as pd
 import numpy as np
 
 X = pd.read_csv('wine.csv')
+split_at = int(len(X)*0.75)
+Xtrain = X.head(split_at)
+Xtest = X[split_at:]
+print "loaded "+str(len(X))+" rows, train size "+str(len(Xtrain))+", test size "+str(len(Xtest))
 
-dtrain = xgb.DMatrix(X.drop('Type', axis=1), map(lambda x: 1 if x == "White" else 0, X["Type"].values))
+dtrain = xgb.DMatrix(Xtrain.drop('Type', axis=1), map(lambda x: 1 if x == "White" else 0, Xtrain["Type"].values))
+dtest  = xgb.DMatrix(Xtest.drop('Type', axis=1),  map(lambda x: 1 if x == "White" else 0, Xtest["Type"].values))
+ytest  = map(lambda x: 1 if x == "White" else 0, Xtest["Type"].values)
 
 print "training ..."
 
 param = {'silent':1, 'objective':'binary:logistic','eval_metric': 'logloss'}
 param['nthread'] = 4
-num_round = 10
-model = xgb.train( param.items(), dtrain, num_round, [(dtrain,'train')])
+num_round = 30
+model = xgb.train( param.items(), dtrain, num_round, [(dtrain,'train'),(dtest,'test')])
 
-ypred = model.predict(xgb.DMatrix(X.drop('Type', axis=1)))
-ypred = map(lambda x: int(round(x)), ypred)
-
-count = 0
-for ((index,x),y) in zip(X.iterrows(), ypred):
-    xgood = 1 if x['Type'] == "White" else 0
-    if y == xgood:
-        count+=1
-print "Good is",count*100.0/len(X),": ",count,"from",len(X)
+pred = model.predict(dtest);
+pred_ok = sum( round(pred[i]) == ytest[i] for i in range(len(ytest)) )
+print 'OK is ',pred_ok,"(",pred_ok/float(len(ytest)),")"
 
 # feature importance
 from matplotlib import pylab as plt
