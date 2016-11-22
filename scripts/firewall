@@ -62,6 +62,8 @@ case "$1" in
 
             # dns proxy
             $ipt -t mangle -A OUTPUT -m owner --uid-owner _dnscrypt-proxy -m connmark --mark 0 -j CONNMARK --set-mark 0xc
+            # tor
+            $ipt -t mangle -A OUTPUT -m owner --uid-owner debian-tor -m connmark --mark 0 -j CONNMARK --set-mark 0xc
 
             # input
             $ipt -A INPUT -m conntrack --ctstate established,related -j ACCEPT
