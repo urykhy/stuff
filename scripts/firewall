@@ -1,7 +1,6 @@
 #!/bin/sh
 # Begin /etc/init.d/
 
-#
 # Include the functions declared in the /etc/init.d/functions file
 #
 msg="firewall"
@@ -22,7 +21,9 @@ case "$1" in
             ipset add TOR 193.189.117.92 # rutor
             ipset add TOR 185.61.149.0   # tfile
             ipset add TOR 62.133.161.112 # booktracker
+            ipset add TOR 83.220.170.60  # booktracker
             ipset add TOR 188.42.196.32  # lurkmore.to
+            ipset add TOR 81.17.30.22    # nnm-club.me
 
             NFLOG="NFLOG --nflog-group 1 --nflog-range=4096"
 
@@ -31,9 +32,12 @@ case "$1" in
             $ip6 -A INPUT -i lo -j ACCEPT
             $ip6 -A INPUT -i tun* -m conntrack --ctstate new -j DROP
             $ip6 -A INPUT -p icmpv6 -j ACCEPT
-            $ip6 -A INPUT -p udp -m multiport --dports 6771,6881 -j ACCEPT # torrent
-            $ip6 -A INPUT -p udp -m multiport --dports 49052,21027 -j ACCEPT # syncthing
-            $ip6 -A INPUT -p tcp --dport 22000 -j ACCEPT # syncthing
+            # syncthing
+            $ip6 -A INPUT -p udp -m multiport --dports 21027 -j ACCEPT
+            $ip6 -A INPUT -p tcp -m multiport --dports 22000 -j ACCEPT
+            # torrents
+            $ip6 -A INPUT -p udp -m multiport --dports 6771,6881:6889 -j ACCEPT
+            $ip6 -A INPUT -p tcp -m multiport --dports 6771,6881:6889 -j ACCEPT
             $ip6 -A INPUT -j $NFLOG --nflog-prefix "ip6"
             $ip6 -P INPUT DROP
             $ip6 -P FORWARD DROP
@@ -67,11 +71,17 @@ case "$1" in
 
             # input
             $ipt -A INPUT -m conntrack --ctstate established,related -j ACCEPT
-            $ipt -A INPUT -i tun* -m conntrack --ctstate new -j DROP
+            # block traffic from open-vpn peers
+            $ipt -A INPUT -i tun* -m conntrack --ctstate new -j REJECT
+            # allow good local
             $ipt -A INPUT -i lo -j ACCEPT
             $ipt -A INPUT -i br0 -j ACCEPT
             $ipt -A INPUT -p icmp -j ACCEPT
             $ipt -A INPUT -s 10.103.0.0/16 -j ACCEPT
+
+            # upnp from router
+            $ipt -A INPUT -s 192.168.1.254 -p udp --dport 1900 -j ACCEPT
+            $ipt -A INPUT -s 192.168.1.254 -p udp --sport 1900 -j ACCEPT
 
             # chain to log and drop (used in syn protection)
             $ipt -N LDROP
@@ -86,20 +96,21 @@ case "$1" in
             $ipt -A TCPSYN -j RETURN
             $ipt -A INPUT -p tcp --syn -j TCPSYN
 
-            # open some services for all
-            # torrents(6881, 9000, 6771, 1900) + miredo(55371) + syncthing(21027, 22000)
-            # dlna (8895, 8200) tox (33445)
-            $ipt -A INPUT -p udp -m multiport --dports 6881,6771,55371,21027,1900,33445 -j ACCEPT
-            $ipt -A INPUT -p udp -m multiport --dports 67,68,123,53 -j ACCEPT
-            $ipt -A INPUT -p tcp -m multiport --dports 6881,9000,22000,8895,8200 -j ACCEPT
-            $ipt -A INPUT -p tcp -m multiport --dports 445,139 -j ACCEPT
+            # syncthing, open for all
+            $ipt -A INPUT -p udp -m multiport --dports 21027 -j ACCEPT
+            $ipt -A INPUT -p tcp -m multiport --dports 22000 -j ACCEPT
 
-            # upnp from router
-            $ipt -A INPUT -s 192.168.1.1 -p udp --sport 1900 -j ACCEPT
+            # torrents
+            $ipt -A INPUT -p udp -m multiport --dports 6771,6881:6889 -j ACCEPT
+            $ipt -A INPUT -p tcp -m multiport --dports 6771,6881:6889 -j ACCEPT
+
+            # open some services for locals
+            $ipt -A INPUT -p udp -m multiport --dports 67,68,123,53 -j ACCEPT
+            $ipt -A INPUT -p tcp -m multiport --dports 445,139,80,443 -j ACCEPT
 
             # drop others
             $ipt -A INPUT -j $NFLOG --nflog-prefix "in"
-            $ipt -P INPUT DROP
+            $ipt -A INPUT -j REJECT
 
             # redirects
             $ipt -t nat -A OUTPUT -d 127.192.0.0/10 -p tcp -j DNAT --to-destination 127.0.0.1:9052    # tor
@@ -114,9 +125,10 @@ case "$1" in
             $ipt -t nat -A POSTROUTING -o eth0 -s 10.103.0.0/16  -j MASQUERADE
             $ipt -t nat -A POSTROUTING -o eth0 -s 172.16.0.0/12  -j MASQUERADE
             $ipt -t nat -A POSTROUTING -o eth0 -s 192.168.0.0/16  -j MASQUERADE
+            $ipt -t nat -A POSTROUTING -o wlan1 -j MASQUERADE
 
-            # hack to workaround broken ftp
-            #$ipt -A OUTPUT -p tcp --dport 21 -j REJECT
+            # fix for wrong ports by torrent
+            $ipt -t nat -A PREROUTING -i wlan1 -p tcp --dport 6881:6889 -j DNAT --to-destination 10.103.10.3:6881
 
             ;;
 
