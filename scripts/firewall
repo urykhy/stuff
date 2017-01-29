@@ -105,7 +105,7 @@ case "$1" in
             $ipt -A INPUT -p tcp -m multiport --dports 6771,6881:6889 -j ACCEPT
 
             # open some services for locals
-            $ipt -A INPUT -p udp -m multiport --dports 67,68,123,53 -j ACCEPT
+            $ipt -A INPUT -p udp -m multiport --dports 67,68,123,53,514 -j ACCEPT
             $ipt -A INPUT -p tcp -m multiport --dports 445,139,80,443 -j ACCEPT
 
             # drop others
