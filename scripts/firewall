@@ -128,8 +128,8 @@ case "$1" in
             $ipt -t nat -A POSTROUTING -o wlan1 -j MASQUERADE
 
             # fix for wrong ports by torrent
-            $ipt -t nat -A PREROUTING -i wlan1 -p tcp --dport 6881:6889 -j DNAT --to-destination 10.103.10.3:6881
-            $ipt -t nat -A PREROUTING -i wlan1 -p udp --dport 6881:6889 -j DNAT --to-destination 10.103.10.3:6881
+            $ipt -t nat -A PREROUTING -i wlan1 -p tcp --dport 6881:6899 -j DNAT --to-destination 10.103.10.3:6881
+            $ipt -t nat -A PREROUTING -i wlan1 -p udp --dport 6881:6899 -j DNAT --to-destination 10.103.10.3:6881
 
             ;;
 
