@@ -32,5 +32,6 @@ l = json.loads(subprocess.check_output(["docker", "network","inspect",ZONE]))
 cont = l[0]["Containers"]
 for i in cont:
     print >>f, cont[i]["Name"].replace("_","-"), "A", cont[i]["IPv4Address"].split("/")[0]
+f.close()
 
 subprocess.call(["rndc","reload"])
