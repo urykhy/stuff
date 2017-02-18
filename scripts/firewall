@@ -24,6 +24,7 @@ case "$1" in
             ipset add TOR 83.220.170.60  # booktracker
             ipset add TOR 188.42.196.32  # lurkmore.to
             ipset add TOR 81.17.30.22    # nnm-club.me
+            ipset add TOR 217.12.204.113 # maxima-library.org
 
             NFLOG="NFLOG --nflog-group 1 --nflog-range=4096"
 
@@ -122,14 +123,12 @@ case "$1" in
             $ipt -A POSTROUTING -o br0 -t mangle -p udp --sport 67 -j CHECKSUM --checksum-fill
 
             # masquerade
-            $ipt -t nat -A POSTROUTING -o eth0 -s 10.103.0.0/16  -j MASQUERADE
-            $ipt -t nat -A POSTROUTING -o eth0 -s 172.16.0.0/12  -j MASQUERADE
-            $ipt -t nat -A POSTROUTING -o eth0 -s 192.168.0.0/16  -j MASQUERADE
+            $ipt -t nat -A POSTROUTING -o eth0  -j MASQUERADE
             $ipt -t nat -A POSTROUTING -o wlan1 -j MASQUERADE
 
             # fix for wrong ports by torrent
-            $ipt -t nat -A PREROUTING -i wlan1 -p tcp --dport 6881:6899 -j DNAT --to-destination 10.103.10.3:6881
-            $ipt -t nat -A PREROUTING -i wlan1 -p udp --dport 6881:6899 -j DNAT --to-destination 10.103.10.3:6881
+            $ipt -t nat -A PREROUTING -i wlan1 -p tcp --dport 6881:6921 -j DNAT --to-destination 10.103.10.3:6881
+            $ipt -t nat -A PREROUTING -i wlan1 -p udp --dport 6881:6921 -j DNAT --to-destination 10.103.10.3:6881
 
             ;;
 
