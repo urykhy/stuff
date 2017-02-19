@@ -26,109 +26,90 @@ case "$1" in
             ipset add TOR 81.17.30.22    # nnm-club.me
             ipset add TOR 217.12.204.113 # maxima-library.org
 
+            # safe networks
+            ipset create LOCALS hash:net
+            ipset add LOCALS 192.168.1.0/24 # LAN
+            ipset add LOCALS 10.103.10.0/24 # local bridge/qemu
+            ipset add LOCALS 10.103.11.0/24 # local wifi ap
+            ipset add LOCALS 172.16.0.0/12  # docker
+
             NFLOG="NFLOG --nflog-group 1 --nflog-range=4096"
 
             # IPv6 really simple
             $ip6 -A INPUT -m conntrack --ctstate established,related -j ACCEPT
             $ip6 -A INPUT -i lo -j ACCEPT
-            $ip6 -A INPUT -i tun* -m conntrack --ctstate new -j DROP
+            $ip6 -A INPUT -m conntrack --ctstate invalid -j REJECT
+            $ip6 -A INPUT -i tun* -m conntrack --ctstate new -j REJECT # drop from open vpn networks
             $ip6 -A INPUT -p icmpv6 -j ACCEPT
-            # syncthing
-            $ip6 -A INPUT -p udp -m multiport --dports 21027 -j ACCEPT
-            $ip6 -A INPUT -p tcp -m multiport --dports 22000 -j ACCEPT
-            # torrents
-            $ip6 -A INPUT -p udp -m multiport --dports 6771,6881:6889 -j ACCEPT
-            $ip6 -A INPUT -p tcp -m multiport --dports 6771,6881:6889 -j ACCEPT
+            # torrent + syncthing
+            $ip6 -A INPUT -p udp -m multiport --dports 21027,6771,6881 -j ACCEPT
+            $ip6 -A INPUT -p tcp -m multiport --dports 22000,6771,6881 -j ACCEPT
             $ip6 -A INPUT -j $NFLOG --nflog-prefix "ip6"
             $ip6 -P INPUT DROP
-            $ip6 -P FORWARD DROP
+            $ip6 -A FORWARD -i tun* -j REJECT # drop from open vpn networks
+            $ip6 -P FORWARD ACCEPT
 
             # IPv4
             # forward
-            $ipt -A FORWARD -m conntrack --ctstate established,related -j ACCEPT
-            $ipt -A FORWARD -i tun* -m conntrack --ctstate new -j DROP
-            $ipt -A FORWARD -s 10.103.0.0/16 -j ACCEPT
-            # docker networks
-            $ipt -A FORWARD -s 172.16.0.0/12 -j ACCEPT
-            #
-            $ipt -A FORWARD -j $NFLOG --nflog-prefix "fwd"
-            $ipt -P FORWARD DROP
-
-            # setup conntrack helpers (or only wifi/eth0?)
-            $ipt -A OUTPUT -t raw -p tcp --dport 21 -j CT --helper ftp
-            $ipt -A PREROUTING -t raw -p tcp --dport 21 -j CT --helper ftp
-
-            # lower prio for long-live http transfers
-            $ipt -t mangle -A INPUT -i eth0 -p tcp -m multiport --sports 80,443 -m connmark --mark 0 -m connbytes --connbytes 1024000: --connbytes-dir both --connbytes-mode bytes -j CONNMARK --set-mark 0xa
-            $ipt -t mangle -A FORWARD -i eth0 -p tcp -m multiport --sports 80,443 -m connmark --mark 0 -m connbytes --connbytes 1024000: --connbytes-dir both --connbytes-mode bytes -j CONNMARK --set-mark 0xa
-
-            # skype
-            $ipt -t mangle -A FORWARD -i wlan0 -o eth0 -p udp -m connmark --mark 0 -j CONNMARK --set-mark 0xb
-
-            # dns proxy
-            $ipt -t mangle -A OUTPUT -m owner --uid-owner _dnscrypt-proxy -m connmark --mark 0 -j CONNMARK --set-mark 0xc
-            # tor
-            $ipt -t mangle -A OUTPUT -m owner --uid-owner debian-tor -m connmark --mark 0 -j CONNMARK --set-mark 0xb
+            $ipt -A FORWARD -i tun* -j REJECT # drop from open vpn networks
+            $ipt -P FORWARD ACCEPT
 
             # input
             $ipt -A INPUT -m conntrack --ctstate established,related -j ACCEPT
-            # block traffic from open-vpn peers
-            $ipt -A INPUT -i tun* -m conntrack --ctstate new -j REJECT
+            $ipt -A INPUT -m conntrack --ctstate invalid -j REJECT
+            $ipt -A INPUT -i tun* -m conntrack --ctstate new -j REJECT # drop from open vpn networks
             # allow good local
             $ipt -A INPUT -i lo -j ACCEPT
-            $ipt -A INPUT -i br0 -j ACCEPT
             $ipt -A INPUT -p icmp -j ACCEPT
-            $ipt -A INPUT -s 10.103.0.0/16 -j ACCEPT
-
-            # upnp from router
-            $ipt -A INPUT -s 192.168.1.254 -p udp --dport 1900 -j ACCEPT
-            $ipt -A INPUT -s 192.168.1.254 -p udp --sport 1900 -j ACCEPT
-
-            # chain to log and drop (used in syn protection)
-            $ipt -N LDROP
-            $ipt -A LDROP -j $NFLOG --nflog-prefix "syn-in"
-            $ipt -A LDROP -j DROP
+            $ipt -A INPUT -m set --match-set LOCALS src -j ACCEPT   # accept from safe networks
 
             # tcp syn/connections limits
             $ipt -N TCPSYN
-            $ipt -A TCPSYN -p tcp -m connlimit --connlimit-above 20 --connlimit-mask 32 -j REJECT --reject-with tcp-reset
-            $ipt -A TCPSYN -m connlimit --connlimit-above 100 --connlimit-mask 24 -j LDROP
-            $ipt -A TCPSYN -m hashlimit --hashlimit-above 50/second --hashlimit-mode srcip --hashlimit-srcmask 24 --hashlimit-name ddos -j LDROP
+            $ipt -A TCPSYN -p tcp -m connlimit --connlimit-above 20 --connlimit-mask 32 -j REJECT
+            $ipt -A TCPSYN -m connlimit --connlimit-above 100 --connlimit-mask 24 -j DROP
+            $ipt -A TCPSYN -m hashlimit --hashlimit-above 50/second --hashlimit-mode srcip --hashlimit-srcmask 24 --hashlimit-name ddos -j DROP
             $ipt -A TCPSYN -j RETURN
-            $ipt -A INPUT -p tcp --syn -j TCPSYN
+            $ipt -A INPUT  -p tcp --syn -j TCPSYN
 
-            # syncthing, open for all
-            $ipt -A INPUT -p udp -m multiport --dports 21027 -j ACCEPT
-            $ipt -A INPUT -p tcp -m multiport --dports 22000 -j ACCEPT
-
-            # torrents
-            $ipt -A INPUT -p udp -m multiport --dports 6771,6881:6889 -j ACCEPT
-            $ipt -A INPUT -p tcp -m multiport --dports 6771,6881:6889 -j ACCEPT
-
-            # open some services for locals
-            $ipt -A INPUT -p udp -m multiport --dports 67,68,123,53,514 -j ACCEPT
-            $ipt -A INPUT -p tcp -m multiport --dports 445,139,80,443 -j ACCEPT
-
+            # open for internet
+            # syncthing and torrents
+            $ipt -A INPUT -p udp -m multiport --dports 21027,6771,6881 -j ACCEPT
+            $ipt -A INPUT -p tcp -m multiport --dports 22000,6771,6881 -j ACCEPT
             # drop others
             $ipt -A INPUT -j $NFLOG --nflog-prefix "in"
             $ipt -A INPUT -j REJECT
 
+            # NAT
             # redirects
             $ipt -t nat -A OUTPUT -d 127.192.0.0/10 -p tcp -j DNAT --to-destination 127.0.0.1:9052    # tor
             $ipt -t nat -A OUTPUT -m set --match-set TOR dst -p tcp -m multiport --dports 80,443 -j DNAT --to-destination 127.0.0.1:9052    # tor
             #$ipt -t nat -A PREROUTING -i br0 -p tcp --dport 80 -j REDIRECT --to-ports 3128
 
-            # fix dhcpd "bad udp checksums" errors with lxc
-            $ipt -A PREROUTING -i br0 -t mangle -p udp --dport 67 -j CHECKSUM --checksum-fill
-            $ipt -A POSTROUTING -o br0 -t mangle -p udp --sport 67 -j CHECKSUM --checksum-fill
+            # fix for wrong ports by torrent
+            #$ipt -t nat -A PREROUTING -i wlan1 -p tcp --dport 6881:6882 -j DNAT --to-destination 10.103.10.3:6881
+            #$ipt -t nat -A PREROUTING -i wlan1 -p udp --dport 6881:6882 -j DNAT --to-destination 10.103.10.3:6881
 
-            # masquerade
+            # masquerade on output interfaces
             $ipt -t nat -A POSTROUTING -o eth0  -j MASQUERADE
             $ipt -t nat -A POSTROUTING -o wlan1 -j MASQUERADE
 
-            # fix for wrong ports by torrent
-            $ipt -t nat -A PREROUTING -i wlan1 -p tcp --dport 6881:6921 -j DNAT --to-destination 10.103.10.3:6881
-            $ipt -t nat -A PREROUTING -i wlan1 -p udp --dport 6881:6921 -j DNAT --to-destination 10.103.10.3:6881
+            # setup conntrack helpers (or only wifi/eth0?)
+            $ipt -t raw -A OUTPUT     -p tcp --dport 21 -j CT --helper ftp
+            $ipt -t raw -A PREROUTING -p tcp --dport 21 -j CT --helper ftp
+
+            # fix dhcpd "bad udp checksums" errors with lxc
+            $ipt -t mangle -A PREROUTING  -i br0 -p udp --dport 67 -j CHECKSUM --checksum-fill
+            $ipt -t mangle -A POSTROUTING -o br0 -p udp --sport 67 -j CHECKSUM --checksum-fill
+
+            # marks for traffic shaper
+            # lower prio for long-live http transfers
+            $ipt -t mangle -A INPUT   -i eth0 -p tcp -m multiport --sports 80,443 -m connmark --mark 0 -m connbytes --connbytes 1024000: --connbytes-dir both --connbytes-mode bytes -j CONNMARK --set-mark 0xa
+            $ipt -t mangle -A FORWARD -i eth0 -p tcp -m multiport --sports 80,443 -m connmark --mark 0 -m connbytes --connbytes 1024000: --connbytes-dir both --connbytes-mode bytes -j CONNMARK --set-mark 0xa
+
+            # priority for some traffic
+            $ipt -t mangle -A FORWARD -i wlan0 -p udp                     -m connmark --mark 0 -j CONNMARK --set-mark 0xb # skype
+            $ipt -t mangle -A OUTPUT -m owner --uid-owner _dnscrypt-proxy -m connmark --mark 0 -j CONNMARK --set-mark 0xc # dns proxy
+            $ipt -t mangle -A OUTPUT -m owner --uid-owner debian-tor      -m connmark --mark 0 -j CONNMARK --set-mark 0xb # tor
 
             ;;
 
@@ -141,8 +122,8 @@ case "$1" in
             $ipt -P INPUT ACCEPT
             $ipt -P FORWARD ACCEPT
             $ipt -X TCPSYN
-            $ipt -X LDROP
             ipset destroy TOR
+            ipset destroy LOCALS
 
             $ip6 -F
             $ip6 -P INPUT ACCEPT
