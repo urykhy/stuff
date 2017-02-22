@@ -85,10 +85,6 @@ case "$1" in
             $ipt -t nat -A OUTPUT -m set --match-set TOR dst -p tcp -m multiport --dports 80,443 -j DNAT --to-destination 127.0.0.1:9052    # tor
             #$ipt -t nat -A PREROUTING -i br0 -p tcp --dport 80 -j REDIRECT --to-ports 3128
 
-            # fix for wrong ports by torrent
-            #$ipt -t nat -A PREROUTING -i wlan1 -p tcp --dport 6881:6882 -j DNAT --to-destination 10.103.10.3:6881
-            #$ipt -t nat -A PREROUTING -i wlan1 -p udp --dport 6881:6882 -j DNAT --to-destination 10.103.10.3:6881
-
             # masquerade on output interfaces
             $ipt -t nat -A POSTROUTING -o eth0  -j MASQUERADE
             $ipt -t nat -A POSTROUTING -o wlan1 -j MASQUERADE
