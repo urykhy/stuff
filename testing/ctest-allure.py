@@ -9,8 +9,7 @@ import time as time
 # mkdir /tmp/allure/
 # ctest > ctest.out
 # ./ctest-allure.py
-# mv ctest*.xml /tmp/allure/
-# allure generate -o /tmp/allure /tmp/allure;
+# allure generate -o /tmp/allure .
 # firefox /tmp/allure/index.html
 
 f = open("ctest.out")
@@ -72,5 +71,5 @@ for i in f.readlines():
             SubElement(f,"message").text = msg
             SubElement(f,"stack-trace").text = bt
 
-print >>open("ctest-"+str(time.time())+"-testsuite.xml","w"), minidom.parseString(tostring(root)).toprettyxml(indent="\t")
+print >>open("ctest-total-testsuite.xml","w"), minidom.parseString(tostring(root)).toprettyxml(indent="\t")
 
