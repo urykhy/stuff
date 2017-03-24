@@ -9,4 +9,4 @@ some information about scripts here:
 - scripts/ - small scripts to simplify life
 - ml/ - little games with Machine learning, FTRL, LR.
 - logger - simple and dirty implementation of logger which can be enabled/disabled per function/log-level.
-
+- parser - naive string parser (with csv)
