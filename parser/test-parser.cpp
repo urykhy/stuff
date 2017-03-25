@@ -27,14 +27,34 @@ BOOST_AUTO_TEST_CASE(simple)
 }
 BOOST_AUTO_TEST_CASE(quoted)
 {
-    std::list<std::string> result;
-    std::string line="asd,\"foo\",\"Super, \"\"luxurious\"\" truck\",";
-    BOOST_CHECK(Parse::quoted(line, [&result]() mutable -> std::string* {
-        result.push_back("");
-        return &result.back();
-    }));
+    {
+        std::list<std::string> result;
+        std::string line="asd,\"foo\",\"Super, \"\"luxurious\"\" truck\",";
+        BOOST_CHECK(Parse::quoted(line, [&result]() mutable -> std::string* {
+            result.push_back("");
+            return &result.back();
+        }));
 
-    std::list<std::string> expected = {"asd", "foo", "Super, \"luxurious\" truck", ""};
-    BOOST_CHECK_EQUAL_COLLECTIONS(result.begin(), result.end(), expected.begin(), expected.end());
+        std::list<std::string> expected = {"asd", "foo", "Super, \"luxurious\" truck", ""};
+        BOOST_CHECK_EQUAL_COLLECTIONS(result.begin(), result.end(), expected.begin(), expected.end());
+    }
+
+    {
+        std::list<std::string> result;
+        std::string line="asd,\"foo\"";
+        BOOST_CHECK(Parse::quoted(line, [&result]() mutable -> std::string* {
+            result.push_back("");
+            return &result.back();
+        }));
+    }
+
+    {
+        std::list<std::string> result;
+        std::string line="asd,\"foo";
+        BOOST_CHECK(false == Parse::quoted(line, [&result]() mutable -> std::string* {
+            result.push_back("");
+            return &result.back();
+        }));
+    }
 }
 BOOST_AUTO_TEST_SUITE_END()

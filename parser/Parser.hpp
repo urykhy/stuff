@@ -83,6 +83,8 @@ namespace Parse
                     current->push_back(c);
             }
         }
+        if (quoted_string and !skip_quote and nullptr != current)
+            return false;
         if (c == sep)   // if last char in string is separator - append empty token
             f();
 
