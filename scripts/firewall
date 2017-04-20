@@ -86,8 +86,8 @@ case "$1" in
             #$ipt -t nat -A PREROUTING -i br0 -p tcp --dport 80 -j REDIRECT --to-ports 3128
 
             # masquerade on output interfaces
-            $ipt -t nat -A POSTROUTING -o eth0  -m set --match-set LOCALS dst -j MASQUERADE
-            $ipt -t nat -A POSTROUTING -o wlan1 -m set --match-set LOCALS dst -j MASQUERADE
+            $ipt -t nat -A POSTROUTING -o eth0  -m set ! --match-set LOCALS dst -j MASQUERADE
+            $ipt -t nat -A POSTROUTING -o wlan1 -m set ! --match-set LOCALS dst -j MASQUERADE
 
             # setup conntrack helpers (or only wifi/eth0?)
             $ipt -t raw -A OUTPUT     -p tcp --dport 21 -j CT --helper ftp
