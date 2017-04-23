@@ -2,6 +2,7 @@
 quick and dirty (must be errors, i promise) ML games in C++
     FTRL
     Logistic regression
+    Decision tree
 
 BUILD DEPENDS:
     libgsl0-dev (Lr, can be avoided)
