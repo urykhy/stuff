@@ -59,6 +59,23 @@ struct Dt
         return e;
     }
 
+    // entropy of chunk
+    auto entropy(size_t pos, const List& fv, bool le, double rotate)
+    {
+        size_t total = 0;
+        size_t positive = 0;
+        for (auto& x : fv)
+        {
+            if ((le and x.second[pos] <= rotate) or (!le and x.second[pos] > rotate))
+            {
+                total++;
+                positive += x.first;
+            }
+        }
+        auto e = entropy(positive/(double)total);
+        return std::make_pair(total, e);
+    }
+
     std::vector<double> get_unique(size_t pos, const List& fv)
     {
         std::vector<double> res;
@@ -76,12 +93,11 @@ struct Dt
         double rotate_val = 0;
         for (auto& x : uni)
         {
-            auto fv_set1 = make_partial(pos, x, fv);
-            auto fv_set2 = make_partial(pos, x, fv, false);
-            auto ent = fv_set1.size() / (double)fv.size() * entropy(fv_set1) +
-                       fv_set2.size() / (double)fv.size() * entropy(fv_set2);
-
-            if ((fv_set1.size() > 0 and ent < best_ent) or best_ent == 1) {
+            auto i1 = entropy(pos, fv, false, x);
+            auto i2 = entropy(pos, fv, true, x);
+            auto ent = i1.first / (double)fv.size() * i1.second +
+                       i2.first / (double)fv.size() * i2.second;
+            if ((i1.first > 0 and ent < best_ent) or best_ent == 1) {
                 best_ent = ent;
                 rotate_val = x;
             }
@@ -89,6 +105,7 @@ struct Dt
         return std::make_pair(best_ent, rotate_val);
     }
 
+    // FIXME: make some kind of view-class
     List make_partial(size_t pos, double value, const List& fv, bool less = true)
     {
         List res;
