@@ -140,7 +140,6 @@ struct Dt
     {
         tree.attr_id = pos;
         tree.rotate = rotate;
-        std::vector<double> ents;
 
         auto fv_set = make_partial(pos, rotate, fv);
 
