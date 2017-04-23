@@ -59,21 +59,31 @@ struct Dt
         return e;
     }
 
-    // entropy of chunk
-    auto entropy(size_t pos, const List& fv, bool le, double rotate)
+    // entropy after split
+    double entropy(size_t pos, const List& fv, double rotate)
     {
-        size_t total = 0;
-        size_t positive = 0;
+        size_t total1 = 0;
+        size_t positive1 = 0;
+        size_t total2 = 0;
+        size_t positive2 = 0;
+
         for (auto& x : fv)
         {
-            if ((le and x.second[pos] <= rotate) or (!le and x.second[pos] > rotate))
+            if (x.second[pos] <= rotate)
             {
-                total++;
-                positive += x.first;
+                total1++;
+                positive1 += x.first;
+            } else {
+                total2++;
+                positive2 += x.first;
             }
         }
-        auto e = entropy(positive/(double)total);
-        return std::make_pair(total, e);
+        auto e1 = entropy(positive1/(double)total1);
+        auto e2 = entropy(positive2/(double)total2);
+
+        auto ent = total1 / (double)fv.size() * e1 +
+                   total2 / (double)fv.size() * e2;
+        return ent;
     }
 
     std::vector<double> get_unique(size_t pos, const List& fv)
@@ -93,11 +103,8 @@ struct Dt
         double rotate_val = 0;
         for (auto& x : uni)
         {
-            auto i1 = entropy(pos, fv, false, x);
-            auto i2 = entropy(pos, fv, true, x);
-            auto ent = i1.first / (double)fv.size() * i1.second +
-                       i2.first / (double)fv.size() * i2.second;
-            if ((i1.first > 0 and ent < best_ent) or best_ent == 1) {
+            auto ent = entropy(pos, fv, x);
+            if (ent < best_ent) {
                 best_ent = ent;
                 rotate_val = x;
             }
