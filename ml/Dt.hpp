@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include <vector>
 #include <map>
 #include <iomanip>
@@ -21,14 +22,18 @@ struct Dt
         size_t attr_id = 0xFFFF;
         bool end = false;
         bool value = false;
-        Split child;
+        size_t rows = 0;
+
+        double rotate = 0;
+        std::unique_ptr<SplitTree> left;
+        std::unique_ptr<SplitTree> right;
     };
     SplitTree root_tree;
-    Vector mask;
+    std::array<size_t, MAX> mask;
+    size_t depth = 0;
 
     struct Info
     {
-        bool result = 0;
         size_t total = 0;
         size_t positive = 0;
         double entropy = 0;
@@ -52,11 +57,11 @@ struct Dt
             positive += x.first;
         }
         auto e = entropy(positive/(double)total);
-        std::cout << "entropy for " << positive << "/" << total - positive << " = " << e << std::endl;
+        //std::cout << "entropy for " << positive << "/" << total - positive << " = " << e << std::endl;
         return e;
     }
 
-    std::vector<double> make_unique(size_t pos, const List& fv)
+    std::vector<double> get_unique(size_t pos, const List& fv)
     {
         std::vector<double> res;
         res.reserve(fv.size());
@@ -67,21 +72,25 @@ struct Dt
         return res;
     }
 
-    Info collect_info(size_t pos, double val, const List& fv)
+    Info collect_info(size_t pos, double val, const List& fv, bool eq = true)
     {
         Info i;
         for (auto& x : fv)
         {
-            if (x.second[pos] == val)
+            if ((eq and x.second[pos] == val))
             {
                 i.total++;
                 i.positive += x.first;
-                i.result = x.first;
+            }
+            if (!eq and x.second[pos] <= val)
+            {
+                i.positive += x.first;
+                i.total++;
             }
         }
         assert (i.total > 0);
         i.entropy = entropy(i.positive/(double)i.total);
-        std::cout << "entropy for (" << pos << ":" << val << ") " << i.positive << "/" << i.total - i.positive << " is " << i.entropy << std::endl;
+        //std::cout << "entropy for (" << pos << ":" << val << ") " << i.positive << "/" << i.total - i.positive << " is " << i.entropy << std::endl;
         return i;
     }
 
@@ -105,70 +114,150 @@ struct Dt
         throw "1";
     }
 
-    List make_partial(size_t pos, double value, const List& fv)
+    List make_partial(size_t pos, double value, const List& fv, bool less = true)
     {
         List res;
         res.reserve(fv.size());
         for (auto& x : fv)
-            if (x.second[pos] == value)
+            if ((less and x.second[pos] <= value) || (!less and x.second[pos] > value))
                 res.push_back(x);
         return res;
     }
 
-    void fill(SplitTree& tree, size_t pos, const std::vector<double>& uni, const List& fv)
+    void split(SplitTree& tree, size_t pos, const std::vector<double>& uni, const List& fv)
     {
         tree.attr_id = pos;
+        std::vector<double> ents;
+
+        double best_val = 0;
+        double best_gain = 0;
         for (auto& x : uni)
         {
-            std::cout << "split value " << x << std::endl;
-            auto part_fv = make_partial(pos, x, fv);
-            double ent = entropy(part_fv);
-            auto& leaf = tree.child[x] = SplitTree();
-            if (0 == ent)
+            auto fv_set1 = make_partial(pos, x, fv);
+            auto fv_set2 = make_partial(pos, x, fv, false);
+            auto ent = fv_set1.size() / (double)fv.size() * entropy(fv_set1) +
+                       fv_set2.size() / (double)fv.size() * entropy(fv_set2);
+            auto gain = entropy(fv) - ent;
+
+            std::cout << "try value " << x << ", gain: " << gain << "(ent: " << ent << ")" << std::endl;
+            if (fv_set1.size() > 0 and gain > best_gain) {
+                best_gain = gain;
+                best_val = x;
+            }
+        }
+
+        if (best_gain == 0) {
+            std::cout << "finished" << std::endl;
+            tree.end = true;
+            if (uni.empty())
+                std::cout << "XXX empty unique set" << std::endl;
+            else
+                tree.value = get_result(pos, uni[0], fv);
+            return;
+        }
+        std::cout << "best split on value " << best_val << " with gain " << best_gain << std::endl;
+
+        tree.rotate = best_val;
+        auto fv_set = make_partial(pos, best_val, fv);
+
+
+        if (!fv_set.empty())
+        {
+            tree.left = std::make_unique<SplitTree>();
+            if (fv_set.size() == fv.size())
             {
-                std::cout << "finished" << std::endl;
-                leaf.end = true;
-                leaf.value = get_result(pos, x, fv);
+                std::cout << "XXX: set not decreasing" << std::endl;
+                tree.left->end = true;
+                tree.left->value = 0.5;
             } else {
-                std::cout << "want to train " << std::endl;
-                train(leaf, part_fv);
+                double ent = entropy(fv_set);
+                if (0 == ent) {
+                    std::cout << "entropy 0 after partitioning" << std::endl;
+                    tree.left->end = true;
+                    tree.left->value = fv_set[0].first;
+                } else {
+                    train(*tree.left, fv_set);
+                }
+            }
+        }
+        fv_set = make_partial(pos, best_val, fv, false);
+
+        if (!fv_set.empty())
+        {
+            tree.right = std::make_unique<SplitTree>();
+            if (fv_set.size() == fv.size())
+            {
+                std::cout << "XXX: set not decreasing" << std::endl;
+                tree.right->end = true;
+                tree.right->value = 0.5;
+            } else {
+                double ent = entropy(fv_set);
+                if (0 == ent) {
+                    std::cout << "entropy 0 after partitioning" << std::endl;
+                    tree.right->end = true;
+                    tree.right->value = fv_set[0].first;
+                } else {
+                    train(*tree.right, fv_set);
+                }
             }
         }
     }
 
     void train(SplitTree& tree, const List& fv)
     {
+        tree.rows = fv.size();
         double ent = entropy(fv);
-        std::cout << "train step, initial entropy: " << ent << std::endl;
+        std::cout << "train step over " << fv.size() << " rows, initial entropy: " << ent << std::endl;
+        // if number of rows not decreasing - break iteration
 
         size_t best_attr = 0;
         double best_gain = 0;
         std::vector<double> uniq_values;
+        bool once = false;
+
+re:
         for (size_t i = 0; i < max_features; i++)   // every attr
         {
-            if (mask[i])    // do not split second time on the same attr
+            // hmmm. Oblivious Tree ?
+            if (mask[i] > 0)    // do not split second time on the same attr
                 continue;
 
-            auto uni = make_unique(i, fv);
+            auto uni = get_unique(i, fv);
             auto g = ent - find_sum(i, uni, fv);
-            std::cout << "found " << uni.size() << " uniq elements for feature " << i << ", gain: " << std::setprecision(10) << g << std::endl;
+            std::cout << "found " << uni.size() << " uniq elements for feature " << i << ", gain: " << g << std::endl;
             if (g > best_gain) {
                 best_attr = i;
                 best_gain = g;
                 uniq_values = std::move(uni);
             }
         }
+        //if (depth < 100 and 0 == best_gain and std::all_of(mask.begin(), mask.end(), [](auto v){ return v == 1; })) {
+        if (depth < 20 and 0 == best_gain and !once) {
+            std::cout << "Oblivious!" << std::endl;
+            std::fill(mask.begin(), mask.end(), 0);
+            once = true;
+            goto re;
+        }
         if (0 == best_gain)
         {
-            std::cout << "no split" << std::endl;
+            std::cout << "XXX no split (depth: " << depth << ")" << std::endl;
+            for (auto& x : fv) {
+                std::cout << x.first << ": ";
+                for (auto& y : x.second)
+                    std::cout << y << ',';
+                std::cout << std::endl;
+            }
             tree.end = true;
+            tree.value = 0.5;
             return;
         }
-        std::cout << std::endl << "split on " << best_attr << " with gain " << best_gain << std::endl << std::endl;
 
-        Vector local_mask = mask;
-        mask[best_attr] = 1;
-        fill(tree, best_attr, uniq_values, fv);
+        auto local_mask = mask;
+        std::cout << std::endl << "split on attribute " << best_attr << " with gain " << best_gain << std::endl << std::endl;
+        mask[best_attr]++;
+        depth++;
+        split(tree, best_attr, uniq_values, fv);
+        depth--;
         mask = local_mask;
     }
 
@@ -180,20 +269,23 @@ struct Dt
 
     double predict(const SplitTree& tree, const Vector& fv)
     {
+        if (tree.end)
+            return tree.value;
+
         auto key = fv[tree.attr_id];
-        auto it = tree.child.find(key);
-
-        if (it == tree.child.end())
+        if (key <= tree.rotate)
         {
-            std::cout << "no value " << key << std::endl;
-            return 0.5;  // no value
+            if (tree.left)
+                return predict(*tree.left, fv);
+            std::cerr << "XXX miss value" << std::endl;
         }
-
-        auto& res = it->second;
-        if (res.end) {
-            return res.value;
+        else
+        {
+            if (tree.right)
+                return predict(*tree.right, fv);
+            std::cerr << "XXX miss value" << std::endl;
         }
-        return predict(res, fv);
+        return 0.5;
     }
 
     double predict(const Vector& fv)
@@ -201,4 +293,29 @@ struct Dt
         return predict(root_tree, fv);
     }
 
+    void print(const SplitTree& tree, int off = 0)
+    {
+        std::string skip(off, ' ');
+        if (tree.end)
+            std::cout << skip << "end with value " << tree.value << std::endl;
+        else
+        {
+//            std::cout << skip << "tree with " << tree.rows << " rows" << std::endl;
+            if (tree.left)
+            {
+                std::cout << skip << "if attribute " << tree.attr_id << " le than " << tree.rotate << std::endl;
+                print(*tree.left, off+1);
+            }
+            if (tree.right)
+            {
+                std::cout << skip << "if attribute " << tree.attr_id << " gt than " << tree.rotate << std::endl;
+                print(*tree.right, off+1);
+            }
+        }
+    }
+
+    void print()
+    {
+        print(root_tree);
+    }
 };

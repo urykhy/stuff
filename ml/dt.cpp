@@ -17,15 +17,29 @@ void wine_test()
     d.clear();
 
     std::cout << "train on " << d_train.size() << " elements" << std::endl;
+
+    for (size_t i = 0; i < 10; i++)
+    {
+        std::cout << d_train[i].first << ' ';
+        for (auto& x : d_train[i].second)
+            std::cout << x << ", ";
+        std::cout << std::endl;
+    }
+
     wine.train(d_train);
 
+    std::cout << std::endl;
+    wine.print();
+    std::cout << std::endl;
+
     size_t ok = 0;
-    //for (const auto& x : d_test) {
-    for (const auto& x : d_train) {
+    //for (const auto& x : d_train) {
+    for (const auto& x : d_test) {
         const auto p = wine.predict(x.second);
         if (x.first == (bool)p) ok++;
     }
-    std::cout << "OK is " << ok << " (" << ok / (double)d_train.size() * 100.<< "%)"
+    //std::cout << "OK is " << ok << " (" << ok / (double)d_train.size() * 100.<< "%)"
+    std::cout << "OK is " << ok << " (" << ok / (double)d_test.size() * 100.<< "%)"
               << std::endl;
 }
 
@@ -38,6 +52,9 @@ void tennis_test()
 {
     using DT = Dt<4>;
     DT tennis;
+
+    std::cout << "t1: " << tennis.entropy(29/64.0) << " == 0.994" << std::endl;
+    std::cout << "t2: " << tennis.entropy(21/26.0) << " == 0.706" << std::endl;
 
 #if 1
     DT::List data = {
@@ -58,10 +75,10 @@ void tennis_test()
         {false, {RAIN,      MILD,        HIGH,     STRONG}}
     };
     // должно быть
-    // feature 0, gain: 0.2467498198        // outlook
-    // feature 1, gain: 0.02922256566       // temperature
-    // feature 2, gain: 0.1518355014        // humidity
-    // feature 3, gain: 0.04812703041       // wind
+    // feature 0, gain: 0.2467       // outlook
+    // feature 1, gain: 0.0292       // temperature
+    // feature 2, gain: 0.1518       // humidity
+    // feature 3, gain: 0.0481       // wind
 #else
     DT::List data = {
         //       outlook    temperature  humidity  wind
@@ -73,11 +90,17 @@ void tennis_test()
 #endif
 
     tennis.train(data);
+    std::cout << std::endl;
+    tennis.print();
+    std::cout << std::endl;
 
     size_t ok = 0;
+    size_t i = 0;
     for (const auto& x : data) {
         const auto p = tennis.predict(x.second);
         if (x.first == (bool)p) ok++;
+        else std::cout << "error for row " << i << std::endl;
+        i++;
     }
     std::cout << "OK is " << ok << " (" << ok / (double)data.size() * 100.<< "%)"
               << std::endl;
@@ -85,7 +108,7 @@ void tennis_test()
 
 int main(void)
 {
-#if 1
+#if 0
     tennis_test();
 #else
     wine_test();

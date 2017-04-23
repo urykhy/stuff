@@ -4,7 +4,7 @@
 MAKEFLAGS += -r
 
 CXX := g++
-CXXFLAGS := -std=c++11 -O3 -ggdb -I. -Wall -W -pedantic -mtune=native
+CXXFLAGS := -std=c++14 -O3 -ggdb -I. -Wall -W -pedantic -mtune=native
 
 all: lr ftrl dt
 clean:
