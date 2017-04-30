@@ -76,7 +76,7 @@ def _update_ns(name, addr):
     rv.reverse()
     parts = ".".join(rv[:2])
     zone_name = ".".join(rv[2:])+".in-addr.arpa"
-    print "updating rev zone %s for %s:%s ..." % (zone_name, name, addr)
+    print "updating rev zone %s for %s..." % (zone_name, name)
     update = dns.update.Update(zone_name, keyring=KEYRING, keyalgorithm=ALGORITHM)
     update.delete(parts, "PTR")
     update.add(parts, 60, dns.rdatatype.PTR, str(name)+".docker.")
@@ -96,7 +96,7 @@ def _rm_ns(name, addr):
     rv.reverse()
     parts = ".".join(rv[:2])
     zone_name = ".".join(rv[2:])+".in-addr.arpa"
-    print "delete from rev zone %s for %s:%s ..." % (zone_name, name, addr)
+    print "delete from rev zone %s ..." % (zone_name)
     update = dns.update.Update(zone_name, keyring=KEYRING, keyalgorithm=ALGORITHM)
     update.delete(parts, "PTR")
     response = dns.query.tcp(update, DDNS_SERVER)
