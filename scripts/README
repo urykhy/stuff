@@ -1,0 +1,9 @@
+
+* docker-ddns.py - update dns server with docker hosts
+* docker-to-zone.py - obsolete - make DNS zone from `docker network inspect`
+* firewall       - simple script to configure iptables
+* sfq            - traffic control
+* gen_certs      - small CA, easy way to generate cerficates
+* luks.py        - mount and umount LUKS volumes
+* wifi.py        - connect to WiFi
+
