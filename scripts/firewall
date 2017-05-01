@@ -20,8 +20,7 @@ case "$1" in
             ipset add TOR 104.24.107.53
             ipset add TOR 193.189.117.92 # rutor
             ipset add TOR 185.61.149.0   # tfile
-            ipset add TOR 62.133.161.112 # booktracker
-            ipset add TOR 83.220.170.60  # booktracker
+            ipset add TOR 46.21.250.43   # booktracker
             ipset add TOR 188.42.196.32  # lurkmore.to
             ipset add TOR 81.17.30.22    # nnm-club.me
             ipset add TOR 217.12.204.113 # maxima-library.org
