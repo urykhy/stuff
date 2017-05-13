@@ -7,6 +7,7 @@ from keras.datasets import mnist
 from keras.utils import np_utils
 from keras import initializations
 from keras import backend as K
+from keras.layers.advanced_activations import LeakyReLU, PReLU, ELU
 
 batch_size = 128
 nb_classes = 10
@@ -64,7 +65,9 @@ model.add(Flatten())
 model.add(Dropout(prob_drop_conv))
 
 # fc1 layer
-model.add(Dense(625, activation='relu', init=init_weights))
+#model.add(Dense(625, activation='relu', init=init_weights))
+model.add(Dense(625, activation='linear', init=init_weights))
+model.add(ELU())
 model.add(Dropout(prob_drop_hidden))
 
 # fc2 layer
@@ -79,6 +82,6 @@ history = model.fit(X_train, Y_train, nb_epoch=nb_epoch, batch_size=batch_size, 
 
 # Evaluate
 evaluation = model.evaluate(X_test, Y_test, batch_size=256, verbose=1)
-print('Summary: Loss over the test dataset: %.2f, Accuracy: %.2f' % (evaluation[0], evaluation[1]))
+print('Summary: Loss over the test dataset: %.4f, Accuracy: %.4f' % (evaluation[0], evaluation[1]))
 
 
