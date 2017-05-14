@@ -40,6 +40,7 @@ def _get_names(name, labels):
         project = project[:-6]
     if service > 0 and project > 0:
         name = '%s.%s' % (str(service), str(project))
+    #name = name.replace("_",".") # if enabled - dns zone filled with crapy names from `--rm` containers
     return [name]
 
 def _inspect(cid):
