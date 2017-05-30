@@ -51,7 +51,7 @@ def add_new(a):
 
 def up():
     print "ifup ... "
-    subprocess.call(["/sbin/ifup",dev+"=client"])
+    subprocess.call(["/sbin/ifup",dev])
 
 def connect(a):
     try:
