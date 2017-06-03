@@ -11,7 +11,7 @@ import zipfile,shutil
 from elasticsearch import Elasticsearch
 from elasticsearch import helpers
 
-ela_host="test"
+ela_host="elasticsearch.elk"
 ela_index="fb2-index"
 ela_doc="fb2"
 timeout=600

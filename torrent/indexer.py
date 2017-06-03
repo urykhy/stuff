@@ -14,7 +14,7 @@ from elasticsearch import Elasticsearch
 from elasticsearch import helpers
 
 csv_path="/u03/mirror/rutracker-torrents" # absolute path required
-ela_host="test"
+ela_host="elasticsearch.elk"
 ela_index="tracker-multi-index"
 ela_doc="torrent"
 threads=4

@@ -16,7 +16,7 @@ _home = os.path.dirname(os.path.abspath(__file__))
 
 from elasticsearch import Elasticsearch
 from elasticsearch_dsl import Search, Q
-ela_host="test"
+ela_host="elasticsearch.elk"
 ela_index="tracker-multi-index*"
 es = Elasticsearch([ela_host])
 
