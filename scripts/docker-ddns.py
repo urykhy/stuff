@@ -20,7 +20,7 @@ import dns.update
 import dns.rdatatype
 
 Container = namedtuple('Container', 'id, name, running, addrs')
-client = docker.Client("unix:///var/run/docker.sock", version='auto')
+client = docker.APIClient("unix:///var/run/docker.sock", version='auto')
 KEYRING = dns.tsigkeyring.from_text({'rndc-key' : 'oqLIg3VDxYIscfWapwwNSA=='})
 ALGORITHM = dns.tsig.HMAC_MD5
 DDNS_SERVER="127.0.0.1"
