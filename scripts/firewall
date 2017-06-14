@@ -32,7 +32,7 @@ case "$1" in
             ipset add LOCALS 10.103.11.0/24 # local wifi ap
             ipset add LOCALS 172.16.0.0/12  # docker
 
-            NFLOG="NFLOG --nflog-group 1 --nflog-range=4096"
+            NFLOG="NFLOG --nflog-group 1 --nflog-size=4096"
 
             # IPv6 really simple
             $ip6 -A INPUT -m conntrack --ctstate established,related -j ACCEPT
