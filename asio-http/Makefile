@@ -29,7 +29,7 @@ $(LIBPARSER): $(PARSER_O)
 ##
 SUFFIXES += .d
 NODEPS:=clean tags
-SOURCES:=$(shell find . -name "*.cpp" -printf "%f\n")
+SOURCES:=$(shell find . -name "*.cpp" -printf "%p\n")
 DEPFILES:=$(patsubst %.cpp,.build/%.d,$(SOURCES))
 #Don't create dependencies when we're cleaning, for instance
 ifeq (0, $(words $(findstring $(MAKECMDGOALS), $(NODEPS))))
