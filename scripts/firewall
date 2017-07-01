@@ -24,6 +24,7 @@ case "$1" in
             ipset add TOR 188.42.196.32  # lurkmore.to
             ipset add TOR 81.17.30.22    # nnm-club.me
             ipset add TOR 217.12.204.113 # maxima-library.org
+            ipset add TOR 91.90.192.40   # mirknig.ws
 
             # safe networks
             ipset create LOCALS hash:net
