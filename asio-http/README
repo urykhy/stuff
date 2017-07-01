@@ -1,0 +1,12 @@
+
+games with asio/http
+====================
+
+DEPENDENCIES
+============
+asio
+log4cxx
+nodejs/http-parser (http_parser.cpp already here)
+
+
+
