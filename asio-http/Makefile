@@ -4,7 +4,7 @@
 MAKEFLAGS += -r
 
 LIBPARSER  = .build/libparser.a
-PARSER_SRC = src/HttpParser.cpp src/http_parser.cpp
+PARSER_SRC = src/Parser.cpp src/http_parser.cpp
 PARSER_O   = $(patsubst %.cpp,.build/%.o,$(PARSER_SRC))
 
 CXXFLAGS   = -std=c++14 -Iinclude -O0 -ggdb -pedantic -W -Wall -pthread
