@@ -1,0 +1,38 @@
+FileLoader:
+  - file_count: Count
+    loading: Time
+    processing: type=Time, flags=RPS
+    error: Bool
+
+Tarantool:
+  - select: type=Time, flags=RPS
+    insert: type=Time, flags=RPS
+    update: type=Time, flags=RPS
+
+Datasource:
+  - http: FileLoader
+    tnt: Tarantool
+
+Common:
+  - cpu: Count
+    memory: Count
+    version: Count
+    start: type=Time, flags=AGO
+
+VisitMatch:
+  - hits: Count
+    refresh: type=Time, flags=AGO
+    size: Count
+
+VisistsStat:
+  - match: VisitMatch
+  - http: FileLoader
+  - tnt: Tarantool
+
+Main:
+  - audience: Datasource
+    visits: VisistsStat
+    games: Datasource
+    actions: Datasource
+    common: Common
+

@@ -10,3 +10,4 @@ some information about scripts here:
 - ml/ - little games with Machine learning, FTRL, LR.
 - logger - simple and dirty implementation of logger which can be enabled/disabled per function/log-level.
 - parser - naive string parser (with csv)
+- stats - games with generated statistics for c++
