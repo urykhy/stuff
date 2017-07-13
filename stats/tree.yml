@@ -22,6 +22,7 @@ Common:
 VisitMatch:
   - hits: Count
     refresh: type=Time, flags=AGO
+    refresh_time: Time
     size: Count
 
 VisistsStat:

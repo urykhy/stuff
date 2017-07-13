@@ -14,7 +14,7 @@ clean:
 	rm -r .build $(TARGETS) $(GENERATED) || true
 
 %.hpp: %.yml parser.py
-	@./parser.py > $@
+	./parser.py > $@
 
 .PRECIOUS: $(GENERATED)
 %: .build/%.o

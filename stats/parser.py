@@ -8,14 +8,14 @@ def makeDict(s):
     return dict(re.findall(r'(\S+)=(".*?"|\w+)', s))
 
 def get_type(type):
-    if ',' in type:
+    if '=' in type:
         x = makeDict(type)
         return x['type'];
     else:
         return type
 
 def create(name, type):
-    if ',' in type:
+    if '=' in type:
         x = makeDict(type)
         return x['type'] + ' ' + name + '{' + x['type'] + "::" + x['flags'] + '}'
     else:

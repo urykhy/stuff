@@ -36,34 +36,27 @@ namespace Stat
         void update(double v) { Lock lk(mutex); count++; time+=v; min = (min == 0 ? v : std::min(min, v));  max = std::max(max, v); }
         void set(double v) { Lock lk(mutex);  count=1; time = v;  min = v;  max = v; }
 
-        // call with 1sec as minimal period if rps mode
         void format(std::ostream& os, const std::string& prefix)
         {
+            Lock lk(mutex);
             time_t now = ::time(0);
-            if (flags == AGO)
+            if (flags == 0)
+                os << prefix << ' ' << time << ' ' << now << std::endl;
+            else if (flags == AGO)
                 os << prefix << "_ago" << ' ' << now - time << ' ' << now << std::endl;
-            else
+            else if (flags == RPS)
             {
                 double avg = count > 0 ? time/(float)count : 0;
                 os << prefix << "_min" << ' ' << min << ' ' << now << std::endl;
                 os << prefix << "_max" << ' ' << max << ' ' << now << std::endl;
                 os << prefix << "_avg" << ' ' << avg << ' ' << now << std::endl;
-                if (flags == RPS)
-                {
-                    if (last > 0)
-                    {
-                        auto ela = now - last;
-                        os << prefix << "_rps" << ' ' << (ela > 0 ? count / float(ela) : 0.f) << ' ' << now << std::endl;
-                    }
-                    else
-                        os << prefix << "_rps" << ' ' << count << ' ' << now << std::endl;
-                    last = now;
-                    clear();
-                }
+                auto ela = now - last;
+                if (last > 0 and ela > 0)
+                    os << prefix << "_rps" << ' ' << count / float(ela) << ' ' << now << std::endl;
                 else
-                {
-                    os << prefix << "_count" << ' ' << count << ' ' << now << std::endl;
-                }
+                    os << prefix << "_rps" << ' ' << count << ' ' << now << std::endl;
+                last = now;
+                clear();
             }
         }
         void clear() { min = 0; max = 0; time = 0; count = 0; }

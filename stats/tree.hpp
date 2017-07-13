@@ -37,10 +37,12 @@ memory.format(os, prefix+'.'+"memory");
 };
 struct VisitMatch{
 Count hits;
+Time refresh_time;
 Time refresh{Time::AGO};
 Count size;
 void format(std::ostream& os, const std::string& prefix) {
 hits.format(os, prefix+'.'+"hits");
+refresh_time.format(os, prefix+'.'+"refresh_time");
 refresh.format(os, prefix+'.'+"refresh");
 size.format(os, prefix+'.'+"size");
 }
