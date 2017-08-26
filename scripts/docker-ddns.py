@@ -30,7 +30,9 @@ def get(d, *keys):
     return reduce(lambda d, k: d.get(k, empty), keys, d) or None
 
 def _get_addrs(networks):
-    return [ value['IPAddress'] for value in networks.values() ]
+    if networks:
+        return [ value['IPAddress'] for value in networks.values() ]
+    return []
 
 def _get_names(name, labels):
     labels = labels or {}
