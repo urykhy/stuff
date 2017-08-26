@@ -62,6 +62,7 @@ case "$1" in
             $ipt -A INPUT -i lo -j ACCEPT
             $ipt -A INPUT -p icmp -j ACCEPT
             $ipt -A INPUT -m set --match-set LOCALS src -j ACCEPT   # accept from safe networks
+            $ipt -A INPUT -p UDP --sport 68 --dport 67 -j ACCEPT    # DHCP
 
             # tcp syn/connections limits
             $ipt -N TCPSYN
