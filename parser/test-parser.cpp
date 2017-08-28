@@ -91,5 +91,17 @@ BOOST_AUTO_TEST_CASE(escape)
             return &result.back();
         }));
     }
+    {
+        std::list<std::string> result;
+        std::string line=R"(asd,\"foo,"""bar""")";
+        BOOST_CHECK(true == Parse::quoted(line, [&result]() mutable -> std::string* {
+            result.push_back("");
+            return &result.back();
+        }));
+        auto it = result.begin();
+        BOOST_CHECK_EQUAL(*it++, "asd");
+        BOOST_CHECK_EQUAL(*it++, "\"foo");
+        BOOST_CHECK_EQUAL(*it++, "\"bar\"");
+    }
 }
 BOOST_AUTO_TEST_SUITE_END()

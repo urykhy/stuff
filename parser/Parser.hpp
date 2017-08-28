@@ -49,11 +49,12 @@ namespace Parse
             }
 
             if (first_character) {
-                if (c == quote)      quoted_string = true;
-                else if (c == sep)   current = nullptr;
-                else                 current->push_back(c);
                 first_character = false;
-                continue;
+                if (c == quote)
+                {
+                    quoted_string = true;
+                    continue;
+                }
             }
             if (esc_quote) {
                 current->push_back(c);
