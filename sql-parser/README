@@ -1,0 +1,11 @@
+
+dummy sql parser
+(based on https://github.com/jgarzik/sqlfun)
+======
+
+usage
+-----
+```
+make && echo "select A.B as AB, B, TRUE,45,67.89 from people as PPL, city as CCT, region where C > D and H > L group by E1,E2,E3 order by F1,F2 desc limit 12;" | ./parser
+```
+
