@@ -13,7 +13,7 @@ case "$1" in
 
             # create ipset rules for tor
             ipset create TOR hash:net
-            ipset add TOR 195.82.146.0/23
+            #ipset add TOR 195.82.146.0/23 # rutracker
             ipset add TOR 5.79.86.208    # coollib
             ipset add TOR 81.17.19.227   # flibusta
             ipset add TOR 104.24.106.53  # kinozal
@@ -25,6 +25,11 @@ case "$1" in
             ipset add TOR 81.17.30.22    # nnm-club.me
             ipset add TOR 217.12.204.113 # maxima-library.org
             ipset add TOR 91.90.192.40   # mirknig.ws
+            ipset add TOR 80.82.77.83    # sci-hub.io
+
+            # privoxy
+            ipset create PROXY hash:net
+            ipset add PROXY 195.82.146.0/23 # rutracker
 
             # safe networks
             ipset create LOCALS hash:net
@@ -73,9 +78,9 @@ case "$1" in
             $ipt -A INPUT  -p tcp --syn -j TCPSYN
 
             # open for internet
-            # syncthing and torrents
+            # syncthing and torrents and i2p
             $ipt -A INPUT -p udp -m multiport --dports 21027,6771,6881 -j ACCEPT
-            $ipt -A INPUT -p tcp -m multiport --dports 22000,6771,6881 -j ACCEPT
+            $ipt -A INPUT -p tcp -m multiport --dports 22000,6771,6881,61089 -j ACCEPT
             # drop others
             $ipt -A INPUT -j $NFLOG --nflog-prefix "in"
             $ipt -A INPUT -j REJECT
@@ -83,7 +88,8 @@ case "$1" in
             # NAT
             # redirects
             $ipt -t nat -A OUTPUT -d 127.192.0.0/10 -p tcp -j DNAT --to-destination 127.0.0.1:9052    # tor
-            $ipt -t nat -A OUTPUT -m set --match-set TOR dst -p tcp -m multiport --dports 80,443 -j DNAT --to-destination 127.0.0.1:9052    # tor
+            $ipt -t nat -A OUTPUT -m set --match-set TOR   dst -p tcp -m multiport --dports 80,443 -j DNAT --to-destination 127.0.0.1:9052 # tor
+            $ipt -t nat -A OUTPUT -m set --match-set PROXY dst -p tcp -m multiport --dports 80,443 -j DNAT --to-destination 127.0.0.1:9050 # privoxy
             #$ipt -t nat -A PREROUTING -i br0 -p tcp --dport 80 -j REDIRECT --to-ports 3128
 
             # masquerade on output interfaces
@@ -121,6 +127,7 @@ case "$1" in
             $ipt -X TCPSYN
             ipset destroy TOR
             ipset destroy LOCALS
+            ipset destroy PROXY
 
             $ip6 -F
             $ip6 -P INPUT ACCEPT
