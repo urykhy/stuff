@@ -13,14 +13,13 @@ case "$1" in
 
             # create ipset rules for tor
             ipset create TOR hash:net
-            #ipset add TOR 195.82.146.0/23 # rutracker
+            ipset add TOR 46.21.250.43   # booktracker
             ipset add TOR 5.79.86.208    # coollib
             ipset add TOR 81.17.19.227   # flibusta
             ipset add TOR 104.24.106.53  # kinozal
             ipset add TOR 104.24.107.53
             ipset add TOR 193.189.117.92 # rutor
             ipset add TOR 185.61.149.0   # tfile
-            ipset add TOR 46.21.250.43   # booktracker
             ipset add TOR 188.42.196.32  # lurkmore.to
             ipset add TOR 81.17.30.22    # nnm-club.me
             ipset add TOR 217.12.204.113 # maxima-library.org
@@ -30,6 +29,7 @@ case "$1" in
             # privoxy
             ipset create PROXY hash:net
             ipset add PROXY 195.82.146.0/23 # rutracker
+            ipset add PROXY 212.8.244.193   # bt.booktracker.work
 
             # safe networks
             ipset create LOCALS hash:net
