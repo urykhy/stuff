@@ -13,7 +13,7 @@ case "$1" in
 
             # create ipset rules for tor
             ipset create TOR hash:net
-            ipset add TOR 195.82.146.214 # rutracker, web
+            ipset add TOR 195.82.146.0/24 # rutracker, web
             ipset add TOR 46.21.250.43   # booktracker
             ipset add TOR 5.79.86.208    # coollib
             ipset add TOR 81.17.19.227   # flibusta
@@ -29,7 +29,10 @@ case "$1" in
 
             # privoxy
             ipset create PROXY hash:net
-            ipset add PROXY 195.82.146.0/23 # bt.rutracker
+            ipset add PROXY 195.82.146.120 # bt.rutracker
+            ipset add PROXY 195.82.146.121 # bt2.rutracker
+            ipset add PROXY 195.82.146.122 # bt3.rutracker
+            ipset add PROXY 195.82.146.123 # bt4.rutracker
             ipset add PROXY 212.8.244.193   # bt.booktracker.work
 
             # safe networks
@@ -89,8 +92,8 @@ case "$1" in
             # NAT
             # redirects
             $ipt -t nat -A OUTPUT -d 127.192.0.0/10 -p tcp -j DNAT --to-destination 127.0.0.1:9052    # tor
+            $ipt -t nat -A OUTPUT -m set --match-set PROXY dst -p tcp -m multiport --dports 80     -j DNAT --to-destination 127.0.0.1:9050 # privoxy
             $ipt -t nat -A OUTPUT -m set --match-set TOR   dst -p tcp -m multiport --dports 80,443 -j DNAT --to-destination 127.0.0.1:9052 # tor
-            $ipt -t nat -A OUTPUT -m set --match-set PROXY dst -p tcp -m multiport --dports 80,443 -j DNAT --to-destination 127.0.0.1:9050 # privoxy
             #$ipt -t nat -A PREROUTING -i br0 -p tcp --dport 80 -j REDIRECT --to-ports 3128
 
             # masquerade on output interfaces
