@@ -26,6 +26,7 @@ case "$1" in
             ipset add TOR 217.12.204.113 # maxima-library.org
             ipset add TOR 91.90.192.40   # mirknig.ws
             ipset add TOR 80.82.77.83    # sci-hub.io
+            ipset add TOR 108.174.0.0/20 # linkedin, slideshare
 
             # privoxy
             ipset create PROXY hash:net
