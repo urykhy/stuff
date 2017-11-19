@@ -19,7 +19,7 @@ case "$1" in
             ipset add TOR 81.17.19.227   # flibusta
             ipset add TOR 104.24.106.53  # kinozal
             ipset add TOR 104.24.107.53
-            ipset add TOR 193.189.117.92 # rutor
+            ipset add TOR 185.191.239.203 # rutor
             ipset add TOR 185.61.149.0   # tfile
             ipset add TOR 188.42.196.32  # lurkmore.to
             ipset add TOR 81.17.30.22    # nnm-club.me
@@ -34,6 +34,7 @@ case "$1" in
             ipset add TOR 91.225.249.0/24 # ru.linkedin.com
             ipset add TOR 91.225.250.0/24 # ru.linkedin.com
             ipset add TOR 91.225.251.0/24 # ru.linkedin.com
+            ipset add TOR 108.174.0.0/20  # linkedin.com
 
             # privoxy
             ipset create PROXY hash:net
