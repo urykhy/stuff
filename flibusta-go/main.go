@@ -39,7 +39,7 @@ var replacer = strings.NewReplacer(",", ", ", "/", " ", "\"", "", "$", "", "(", 
 func clearString(s string) string {
 	s = replacer.Replace(s)
 	s = strings.Trim(s, ",-: ")
-    return s
+	return s
 }
 
 func parseLine(s string) (result Book) {
@@ -123,7 +123,7 @@ func collectBook(b Book) {
 		b.author = clearString(author)
 		e, ok := byAuthor[b.author]
 		if !ok {
-            tmp_e := make(BookList)
+			tmp_e := make(BookList)
 			e = &tmp_e
 			byAuthor[b.author] = e
 		}
