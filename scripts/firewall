@@ -20,6 +20,7 @@ case "$1" in
             ipset add TOR 104.24.106.53  # kinozal
             ipset add TOR 104.24.107.53
             ipset add TOR 185.191.239.203 # rutor
+            ipset add TOR 185.191.239.205 # rutor
             ipset add TOR 185.61.149.0   # tfile
             ipset add TOR 188.42.196.32  # lurkmore.to
             ipset add TOR 81.17.30.22    # nnm-club.me
