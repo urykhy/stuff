@@ -1,5 +1,3 @@
-# Conky sample configuration
-#
 background yes
 use_xft yes
 override_utf8_locale yes
@@ -7,9 +5,7 @@ xftfont Monospace:size=10
 xftalpha 1
 
 update_interval 5.0
-#own_window no
-#own_window_transparent yes
-own_window yes
+own_window false
 own_window_colour brown
 own_window_transparent yes
 own_window_type desktop
@@ -27,7 +23,7 @@ border_width 0
 default_color 679FD2
 default_shade_color black
 default_outline_color black
-color1 408DD2
+color1 409DFF
 
 alignment bottom_left
 gap_x 0
@@ -42,44 +38,61 @@ net_avg_samples 2
 # luarocks install luautf8
 lua_load ~/.conky.lua
 
-#${offset 5}${voffset 18}${color1}Load${color}  ${loadavg 1} ${loadavg 2} ${loadavg 3}
-#${offset 5}Uptime ${lua conky_uptime}
-#${offset 5}Kernel ${lua conky_kernel_version}
-#${offset 1400}${voffset 0}${lua date}
-#${offset 1400}${voffset 0}${alignr}${font style:bold}${time %H}${font}:${time %M }
+#${offset 900}${voffset -77}${color1}Battery${color}
+#${offset 900}${voffset 0}${if_match ${battery_percent} <= 80}${if_match ${battery_percent} <= 40}${color red}${else}${color yellow}${endif}${endif}${lua conky_battery_state}${color}
+#${offset 900}${voffset 0}${battery_percent}%
+#${offset 900}${voffset 0}${battery_time}
+
+#${offset 5}${voffset -3}${color1}Audacious ${audacious_status}${color}
+#${offset 5}${voffset 0}${lua audacious_title_1}
+#${offset 5}${voffset 0}${lua audacious_title_2}
+
+#${offset 1720}${voffset -77}${color1}LAN priorities${color}
+#${offset 1720}${voffset 0}${lua lan_update}www  ${lua_bar 8, 100 lan_www}
+#${offset 1720}${voffset 0}bulk ${lua_bar 8, 100 lan_bulk}
 
 TEXT
 ${image ~/devel/conky-background.png -p 0,10}
-${offset 5}${voffset -3}${color1}Audacious ${audacious_status}${color}
-${offset 5}${voffset 0}${lua audacious_title_1}
-${offset 5}${voffset 0}${lua audacious_title_2}
-${offset 400}${voffset -57}${color1}CPU${color}
-${offset 400}${voffset 0}${cpubar 8,70}
-${offset 400}${voffset 0}${lua conky_freq} GHz
-${offset 400}${voffset 0}${lua conky_temp}°C
-${offset 490}${voffset -77}${color1}Memory${color}
-${offset 490}${voffset 0}${membar 8,70}
-${offset 490}${voffset 0}${color yellow}${swapbar 8,70}${color}
-${offset 490}${voffset 0}${lua conky_mb_temp}°C
-${offset 580}${voffset -77}${color1}Disk${color}
-${offset 580}${voffset 0}sda: ${lua_bar 8,100 disk_util sda}
-${offset 580}${voffset 0}sdb: ${lua_bar 8,100 disk_util sdb}
-${offset 580}${voffset 0}Dirty: ${lua disk_dirty}
-${offset 750}${voffset -77}${color1}Free space${color}
-${offset 750}${voffset 0}/     ${fs_free /}
-${offset 750}${voffset 0}/home ${fs_free /home}
-${offset 750}${voffset 0}/u01  ${fs_free /u01}
-${offset 900}${voffset -77}${color1}Battery${color}
-${offset 900}${voffset 0}${if_match ${battery_percent} <= 80}${if_match ${battery_percent} <= 40}${color red}${else}${color yellow}${endif}${endif}${lua conky_battery_state}${color}
-${offset 900}${voffset 0}${battery_percent}%
-${offset 900}${voffset 0}${battery_time}
-${offset 1000}${voffset -77}${color1}Local Mail${color}
-${offset 1000}${voffset 0}Unseen: ${imap_unseen localhost A B}
-${offset 1000}${voffset 0}Total:  ${imap_messages localhost A B}
-${offset 1140}${voffset -57}${color1}Network${color}
-${offset 1140}${voffset 0}eth0 ${downspeedf eth0}/${upspeedf eth0} Kb/s
-${offset 1140}${voffset 0}wifi ${downspeedf wifi}/${upspeedf wifi} Kb/s
-${offset 1400}${voffset -57}${color1}Weather${color}
-${offset 1400}${voffset 0}${lua weather1}
-${offset 1400}${voffset 0}${lua weather2}
-${offset 1400}${voffset 0}${lua weather_tom}
+${offset 5}${voffset -3}${color1}Weather${color}
+${offset 5}${voffset 0}${lua weather1}
+${offset 5}${voffset 0}${lua weather2}
+${offset 5}${voffset 0}${lua weather_tom}
+${offset 500}${voffset -77}${color1}Kernel${color}
+${offset 500}${voffset 0}Version: ${lua conky_kernel_version}
+${offset 500}${voffset 0}Uptime:  ${lua conky_uptime}
+${offset 500}${voffset 0}Load  ${loadavg 1} ${loadavg 2} ${loadavg 3}
+${offset 740}${voffset -77}${color1}FAN${color}
+${offset 740}${voffset 0}CPU ${lua conky_fan2}rpm
+${offset 740}${voffset 0}CHA ${lua conky_fan1}rpm
+${offset 740}${voffset 0}CHA ${lua conky_fan3}rpm
+${offset 880}${voffset -77}${color1}CPU${color}
+${offset 880}${voffset 0}${cpubar 8,100}
+${offset 880}${voffset 0}${lua conky_freq} GHz
+${offset 880}${voffset 0}${lua conky_temp}°C
+${offset 1010}${voffset -77}${color1}Memory${color}
+${offset 1010}${voffset 0}${membar 8,100}
+${offset 1010}${voffset 0}${color yellow}${swapbar 8,100}${color}
+${offset 1010}${voffset 0}Dirty: ${lua disk_dirty}
+${offset 1150}${voffset -77}${color1}Disk utilization${color}
+${offset 1150}${voffset 0}EVO : ${lua_bar 8,100 disk_util sdb}
+${offset 1150}${voffset 0}ST  : ${lua_bar 8,100 disk_util sdc}
+${offset 1150}${voffset 0}HGST: ${lua_bar 8,100 disk_util sda}
+${offset 1330}${voffset -77}${color1}Free space${color}
+${offset 1330}${voffset 0}/u01  ${fs_free /u01}
+${offset 1330}${voffset 0}/u02  ${fs_free /u02}
+${offset 1330}${voffset 0}/u03  ${fs_free /u03}
+${offset 1500}${voffset -77}${color1}Disk Temp${color}
+${offset 1500}${voffset 0}Samsung 500: ${hddtemp /dev/sdb}°C
+${offset 1500}${voffset 0}Seagate 2Tb: ${hddtemp /dev/sdc}°C
+${offset 1500}${voffset 0}Hitachi 1Tb: ${hddtemp /dev/sda}°C
+${offset 1800}${voffset -77}${color1}Network${color}
+${offset 1800}${voffset 0}eth0 ${downspeedf eth0}/${upspeedf eth0} KB/s
+${offset 1800}${voffset 0}wlan0 ${downspeedf wlan0}/${upspeedf wlan0} KB/s
+${offset 1800}${voffset 0}wlan1 ${downspeedf wlan1}/${upspeedf wlan1} KB/s
+${offset 2220}${voffset -77}${color1}Local Mail${color}
+${offset 2220}${voffset 0}Unseen: ${imap_unseen localhost XXX YYY}
+${offset 2220}${voffset 0}Total:  ${imap_messages localhost XXX YYY}
+${offset 2350}${voffset -57}${color1}Today      ${color}
+${offset 2350}${voffset 0}${lua date}
+${offset 2350}${voffset 0}${alignr}${font style:bold}${time %H}${font}:${time %M }
+
