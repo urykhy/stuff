@@ -23,6 +23,19 @@ struct Ftrl
     Vector n;
     Vector w;
 
+    void init(Vector& v)
+    {
+        for (auto& x : v)
+            x = 0;
+    }
+
+    Ftrl()
+    {
+        init(z);
+        init(n);
+        init(w);
+    }
+
     double sigmoid(const double a)
     {
         return 1. / (1. + std::exp(-a));
