@@ -29,6 +29,8 @@ def cleanup(s):
 	s = s.replace("<BR>","")
 	s = s.replace("<p>","")
 	s = s.replace("<P>","")
+	s = s.replace("<dd>","")
+        s = s.strip()
 	return s
 
 def push_text(parent, s):
@@ -77,7 +79,7 @@ def book():
 	title.text = bt.decode('utf-8')
 	section = SubElement(body, 'section')
 	s_title = SubElement(section, 'title')
-	push_text(s_title, "название главы")
+	push_text(s_title, "название первой главы")
 	dump = False
 	for i in content:
 		if dump == True:
@@ -87,7 +89,7 @@ def book():
 			if -1 != i.find(cut_at_start):
 				i = i[len(cut_at_start):-1].strip()
 			i = cleanup(i)
-			if -1 != i.find("Глава ") and len(i.strip()) < 32:
+			if (-1 != i.find("Глава ") and len(i.strip()) < 64) or (-1 != i.find("align='center'")):
 				section = SubElement(body, 'section')
 				s_title = SubElement(section, 'title')
 				push_text(s_title, i)
