@@ -1,0 +1,17 @@
+[ ca ]
+default_ca = CA_default
+
+[ CA_default ]
+dir         = .
+database    = $dir/index.txt
+default_md  = default
+default_days    = 18250
+default_crl_days= 18250
+
+[mclient]
+keyUsage = digitalSignature, keyEncipherment
+extendedKeyUsage = clientAuth
+
+[mserver]
+keyUsage = digitalSignature, keyEncipherment
+extendedKeyUsage = serverAuth
