@@ -4,7 +4,7 @@ set -e
 set -x
 
 DAYS="-days 18250"
-SUBJ="-subj /C=RU/ST=Moscow/O=Urykhy-FSF"
+SUBJ="-subj /C=RU/ST=Moscow/O=Dark"
 PARM="$DAYS $SUBJ/OU=Security/CN=elf.dark"
 UPARM="$DAYS $SUBJ/OU=Mobile/CN=elf.dark"
 SIGN="$DAYS -CA ca.crt -CAkey ca.key -CAcreateserial"
