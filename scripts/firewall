@@ -21,7 +21,7 @@ case "$1" in
             ipset add TOR 104.24.107.53
             ipset add TOR 185.191.239.203 # rutor
             ipset add TOR 185.191.239.205 # rutor
-            ipset add TOR 185.61.149.0   # tfile
+            ipset add TOR 185.141.26.93   # tfile
             ipset add TOR 188.42.196.32  # lurkmore.to
             ipset add TOR 81.17.30.22    # nnm-club.me
             ipset add TOR 217.12.204.113 # maxima-library.org
@@ -36,6 +36,7 @@ case "$1" in
             ipset add TOR 91.225.250.0/24 # ru.linkedin.com
             ipset add TOR 91.225.251.0/24 # ru.linkedin.com
             ipset add TOR 108.174.0.0/20  # linkedin.com
+            ipset add TOR 52.192.0.0/11   # amazon
 
             # privoxy
             ipset create PROXY hash:net
@@ -81,7 +82,6 @@ case "$1" in
             $ipt -A INPUT -i lo -j ACCEPT
             $ipt -A INPUT -p icmp -j ACCEPT
             $ipt -A INPUT -m set --match-set LOCALS src -j ACCEPT   # accept from safe networks
-            $ipt -A INPUT -p UDP --sport 68 --dport 67 -j ACCEPT    # DHCP
 
             # tcp syn/connections limits
             $ipt -N TCPSYN
