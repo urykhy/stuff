@@ -9,6 +9,7 @@
 #include <LRU.hpp>
 #include <LFU.hpp>
 #include <Expiration.hpp>
+#include <IoC.hpp>
 
 BOOST_AUTO_TEST_SUITE(Cache)
 BOOST_AUTO_TEST_CASE(lru)
@@ -84,5 +85,14 @@ BOOST_AUTO_TEST_CASE(expiration)
     }
     sleep(2);
     BOOST_CHECK(e.Get(9) == nullptr );
+}
+BOOST_AUTO_TEST_CASE(ioc)
+{
+    Cache::IoC r;
+    int i = 10; r.Put(i);
+    double j = 20; r.Put(j);
+
+    BOOST_CHECK(10 == r.Get<int>());
+    BOOST_CHECK(abs(20 - r.Get<double>()) < 0.001 );
 }
 BOOST_AUTO_TEST_SUITE_END()
