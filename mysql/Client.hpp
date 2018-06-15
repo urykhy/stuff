@@ -91,6 +91,11 @@ namespace MySQL
                 aHandler(Row(sRow, sFields));
             mysql_free_result(sResult);
         }
+
+        bool ping()
+        {
+            return 0 == mysql_ping(&m_Handle);
+        }
     };
 
 };
