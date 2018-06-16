@@ -10,6 +10,7 @@
 #include <LFU.hpp>
 #include <Expiration.hpp>
 #include <IoC.hpp>
+#include <ListArray.hpp>
 
 BOOST_AUTO_TEST_SUITE(Cache)
 BOOST_AUTO_TEST_CASE(lru)
@@ -94,5 +95,20 @@ BOOST_AUTO_TEST_CASE(ioc)
 
     BOOST_CHECK(10 == r.Get<int>());
     BOOST_CHECK(abs(20 - r.Get<double>()) < 0.001 );
+}
+BOOST_AUTO_TEST_CASE(listArray)
+{
+	Cache::ListArray<size_t> a(10);
+	BOOST_CHECK(a.size() == 0);
+	const size_t max = 25;
+	for (size_t i = 0; i < max; i++) a.push_back(i);
+	BOOST_CHECK(a.begin() == a.begin());
+	BOOST_CHECK(a.end() == a.end());
+	BOOST_CHECK(a.begin() != a.end());
+	BOOST_CHECK(a.size() == max);
+	size_t c = 0;
+	for (const auto& x : a) {
+		BOOST_CHECK(c++ == x);
+	}
 }
 BOOST_AUTO_TEST_SUITE_END()
