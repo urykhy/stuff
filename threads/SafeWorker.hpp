@@ -2,6 +2,10 @@
 #include <SafeQueue.hpp>
 #include <Periodic.hpp>
 
+// like single-threaded SafeQueueThread
+//
+// if task failed - it will be placed to start of the queue and repeated
+
 namespace Threads
 {
     template<class T>
