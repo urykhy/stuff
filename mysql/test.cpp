@@ -1,6 +1,7 @@
 
 #include <Client.hpp>
 #include <Pool.hpp>
+#include <Updateable.hpp>
 #include <TimeMeter.hpp>
 #include <iostream>
 #include <cassert>
@@ -51,6 +52,22 @@ int main(void)
         std::cout << "pool size " << sPool.size() << std::endl;
     }
 
+    // test3
+    {
+        struct Departments
+        {
+            using Container = std::map<std::string, std::string>;
+            static void parse(Container& aDest, const MySQL::Row& aRow) { aDest[aRow.as_str(0)] = aRow.as_str(1); }
+            static std::string query() { return "select dept_no, dept_name from departments"; }
+        };
+
+        MySQL::Connection c(cfg);
+        MySQL::Updateable<Departments> upd;
+        upd.update(c);
+        auto r = upd.find("d008");
+        if (r)
+            std::cout << "got " << r.value() << std::endl;
+    };
 
     return 0;
 }
