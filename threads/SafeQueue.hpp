@@ -77,7 +77,7 @@ namespace Threads
             return m_List.empty() && m_WaitCount == aExpected;
         }
 
-        bool wait(Node& aItem, std::function<bool(Node&)> aTest = [](Node&){ return true; })
+        bool wait(Node& aItem, std::function<bool(Node&)> aTest = [](Node&) -> bool { return true; })
         {
             while (!m_Stop)
             {
@@ -113,7 +113,7 @@ namespace Threads
         template<class F> SafeQueueThread(F aHandler)
         : m_Handler(aHandler)  { }
 
-        void start(Group& aGroup, std::function<bool(T&)> aCheck = [](T&){ return true; }, unsigned count = 1)
+        void start(Group& aGroup, std::function<bool(T&)> aCheck = [](T&) -> bool { return true; }, unsigned count = 1)
         {
             aGroup.start([this, aCheck]() {
                 while (!m_Queue.exiting())
@@ -129,4 +129,36 @@ namespace Threads
         void insert(const T& aItem) { m_Queue.insert(aItem); }
         bool idle() const           { return m_Queue.idle(1); }
     };
+
+    template<class T>
+    class DelayQueueThread
+    {
+        const std::function<void(T& t)> m_Handler;
+        struct Node {
+            time_t moment = 0;
+            T data;
+        };
+        struct NodeCmp {
+            bool operator()(const Node& l, const Node& r) const {
+                return l.moment > r.moment;
+            }
+        };
+        using Q = std::priority_queue<Node, std::vector<Node>, NodeCmp>;
+        SafeQueueThread<Node, Q> m_Queue;
+    public:
+        template<class F> DelayQueueThread(F aHandler)
+        : m_Handler(aHandler)
+        , m_Queue([this](auto& x){ m_Handler(x.data); }) {}
+
+        void start(Group& aGroup, unsigned count = 1)
+        {
+            m_Queue.start(aGroup, [this](auto& x) -> bool {
+                return x.moment < ::time(nullptr);
+            }, count);
+        }
+
+        void insert(time_t ts, const T& aItem) { m_Queue.insert({ts + ::time(nullptr), aItem}); }
+        bool idle() const                      { return m_Queue.idle(); }
+    };
+
 }

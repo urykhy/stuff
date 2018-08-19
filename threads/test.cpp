@@ -39,4 +39,25 @@ BOOST_AUTO_TEST_CASE(pipeline)
 
     tg.wait();  // call stop in Pipeline/SafeQueueThread
 }
+BOOST_AUTO_TEST_CASE(delay)
+{
+    int iter = 0;
+    Threads::DelayQueueThread<std::string> t([&iter](auto& x){
+        switch (iter)
+        {
+            case 0: BOOST_CHECK_EQUAL(x, "test3"); break;
+            case 1: BOOST_CHECK_EQUAL(x, "test2"); break;
+            case 2: BOOST_CHECK_EQUAL(x, "test1"); break;
+            default: throw "unexpected call";
+        }
+        iter++;
+    });
+    Threads::Group tg;
+    t.start(tg);
+    t.insert(2, "test1");
+    t.insert(1, "test2");
+    t.insert(0, "test3");
+    while (!t.idle()) Threads::sleep(0.1);
+    tg.wait();
+}
 BOOST_AUTO_TEST_SUITE_END()
