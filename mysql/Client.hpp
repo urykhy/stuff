@@ -56,7 +56,11 @@ namespace MySQL
     public:
         Connection(const Config& aCfg)
         {
+            int sReconnectTimeout = 1;
+            int sReadTimeout = 10;
             mysql_init(&m_Handle);
+            mysql_options(&m_Handle, MYSQL_OPT_CONNECT_TIMEOUT, &sReconnectTimeout);
+            mysql_options(&m_Handle, MYSQL_OPT_READ_TIMEOUT, &sReadTimeout);
             if (!mysql_real_connect(&m_Handle, aCfg.host.data(), aCfg.username.data(), aCfg.password.data(), aCfg.database.data(), aCfg.port, NULL, 0))
                 throw std::runtime_error("mysql_real_connect");
         }
