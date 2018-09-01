@@ -48,6 +48,154 @@ namespace MySQL
         }
     };
 
+    namespace aux
+    {
+        template <class F, class... Ts>
+        void for_each_argument(F f, Ts&&... a) {
+            (void)std::initializer_list<int>{(f(std::forward<Ts>(a)), 0)...};
+        }
+
+        class Buffer
+        {
+            std::array<unsigned char, 4096> m_Buffer;
+            unsigned char* m_Data;
+
+        public:
+            Buffer() : m_Data(m_Buffer.data()) { }
+
+            template<class T>
+            T* allocate(size_t count = 1)
+            {
+                unsigned sLen = sizeof(T) * count;
+                if (m_Data + sLen >= m_Buffer.end())
+                    throw std::bad_alloc();
+
+                T* sResult = reinterpret_cast<T*>(m_Data);
+                m_Data += sLen;
+                return sResult;
+            }
+        };
+
+    };
+
+    class Statment
+    {
+        Statment(const Statment&) = delete;
+        Statment operator=(const Statment&) = delete;
+
+        MYSQL_STMT* m_Stmt = nullptr;
+        void cleanup()
+        {
+            if (m_Stmt != nullptr)
+            {
+                mysql_stmt_close(m_Stmt);
+                m_Stmt = nullptr;
+            }
+        }
+
+        void bind_one(MYSQL_BIND& aParam, const char* aValue)
+        {
+            aParam.buffer_type = MYSQL_TYPE_STRING;
+            aParam.buffer = const_cast<char*>(aValue);
+            aParam.buffer_length = strlen(aValue);
+            aParam.is_null=0;
+            aParam.length = &aParam.buffer_length;
+        }
+
+        void report(const char* aMsg)
+        {
+            const std::string sMsg = std::string(aMsg) + ": " + mysql_stmt_error(m_Stmt);
+            throw std::runtime_error(sMsg);
+        }
+
+    public:
+        Statment(MYSQL* aHandle, const std::string& aQuery)
+        {
+            m_Stmt = mysql_stmt_init(aHandle);
+            if (!m_Stmt)
+                throw std::runtime_error("mysql_stmt_init");
+
+            if (mysql_stmt_prepare(m_Stmt, aQuery.c_str(), aQuery.size()))
+            {
+                const std::string sMsg = std::string("mysql_stmt_prepare: ") + mysql_stmt_error(m_Stmt);
+                cleanup();
+                throw std::runtime_error(sMsg);
+            }
+        }
+        Statment(Statment&& aParent)
+        {
+            cleanup();
+            m_Stmt = aParent.m_Stmt;
+            aParent.m_Stmt = nullptr;
+        }
+        ~Statment()
+        {
+            cleanup();
+        }
+
+        unsigned count() const { return mysql_stmt_param_count(m_Stmt); }
+
+        template<class... T>
+        void Execute(const T&... t)
+        {
+            MYSQL_BIND sBind[sizeof...(t)];
+            memset(sBind, 0, sizeof(sBind));
+
+            aux::for_each_argument([this, &sBind, index = 0](const auto& x) mutable {
+                this->bind_one(sBind[index++], x);
+            }, t...);
+
+            if (mysql_stmt_bind_param(m_Stmt, sBind))
+                report("mysql_stmt_bind_param");
+
+            if(mysql_stmt_execute(m_Stmt))
+                report("mysql_stmt_execute");
+        }
+
+        template<class T>
+        void Use(T aHandler)
+        {
+            aux::Buffer sBuffer;
+
+            auto sMeta = mysql_stmt_result_metadata(m_Stmt);
+            int sFields = mysql_num_fields(sMeta);
+            //std::cout << "column count: " << sFields << std::endl;
+
+            MYSQL_BIND sResult[sFields];
+            memset(sResult, 0, sizeof(sResult));
+
+            for (int i = 0; i < sFields; i++)
+            {
+                MYSQL_FIELD* sField = &sMeta->fields[i];
+                // std::cout << "field length " << sField->length << ", name = " << sField->name << std::endl;
+                sResult[i].buffer = sBuffer.allocate<char>(sField->length);
+                sResult[i].buffer_length = sField->length;
+                sResult[i].length = sBuffer.allocate<unsigned long>();
+                sResult[i].error  = sBuffer.allocate<my_bool>();
+            }
+            mysql_free_result(sMeta);
+
+            if (mysql_stmt_bind_result(m_Stmt, sResult))
+                report("mysql_stmt_bind_result");
+
+            // To cause the complete result set to be buffered on the client
+            //if (mysql_stmt_store_result(m_Stmt))
+            //    report("mysql_stmt_store_result");
+
+            //std::cout << "row count:    " << mysql_stmt_num_rows(m_Stmt) << std::endl;
+
+            int sCode = 0;
+            while (sCode == 0)
+            {
+                sCode = mysql_stmt_fetch(m_Stmt);
+                if (sCode == 1)
+                    report("mysql_stmt_fetch");
+                if (sCode == 0)
+                    aHandler(&sResult[0], sFields);
+            };
+        }
+    };
+
     class Connection
     {
         MYSQL m_Handle;
@@ -70,6 +218,10 @@ namespace MySQL
             mysql_close(&m_Handle);
         }
 
+        Statment Prepare(const std::string& aQuery)
+        {
+            return Statment(&m_Handle, aQuery);
+        }
 
         void Query(const std::string& aQuery)
         {
