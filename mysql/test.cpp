@@ -6,6 +6,7 @@
 #include <Pool.hpp>
 #include <Updateable.hpp>
 #include <Upload.hpp>
+#include <Quote.hpp>
 
 #include <TimeMeter.hpp>
 #include <iostream>
@@ -118,5 +119,11 @@ BOOST_AUTO_TEST_CASE(prepare)
         i++;
         BOOST_CHECK(i <= 2);
     });
+}
+BOOST_AUTO_TEST_CASE(quote)
+{
+    BOOST_CHECK_EQUAL(MySQL::Quote("123"), "123");
+    BOOST_CHECK_EQUAL(MySQL::Quote("'123'"), "\\'123\\'");
+    BOOST_CHECK_EQUAL(MySQL::Quote("\"123\""), "\\\"123\\\"");
 }
 BOOST_AUTO_TEST_SUITE_END()
