@@ -12,6 +12,7 @@
 #include <cassert>
 
 // g++ test.cpp -I. `mariadb_config --include` `mariadb_config --libs` -lcctz -I/usr/include/cctz -I../threads/ -lboost_filesystem -lboost_system -lboost_unit_test_framework -pthread -ggdb -std=c++14 -O3
+// ./a.out -l all -t MySQL/prepare
 
 struct Entry
 {
