@@ -55,11 +55,19 @@ namespace MySQL::Upload
 
             std::string sBuffer;
             std::ifstream sFile(sFileName);
-            while (std::getline(sFile, sBuffer)) {
-                sClient.Query(sBuffer);
+            sFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+            try
+            {
+                while (std::getline(sFile, sBuffer)) {
+                    sClient.Query(sBuffer);
+                }
+            } catch (...) {
+                if (!sFile.eof())
+                    throw;
             }
             boost::filesystem::remove(sFileName);
             sClient.Query("COMMIT");
+
         }
 
         void worker()
@@ -115,11 +123,20 @@ namespace MySQL::Upload
         {
             Time::Zone t(cctz::utc_time_zone());
             const std::string sFileName = t.format(::time(NULL), Time::ISO);
-            std::ofstream sFile(m_BaseFolder + "/" + sFileName + ".sql");
-            sFile.exceptions(std::ifstream::failbit);
-
-            std::copy(aData.begin(), aData.end(), std::ostream_iterator<std::string>(sFile, "\n"));
-            std::cerr << "Queue: written " << sFileName << std::endl;
+            const std::string sTmpName  = m_BaseFolder + "/" + sFileName + ".tmp";
+            const std::string sName     = m_BaseFolder + "/" + sFileName + ".sql";
+            try
+            {
+                std::ofstream sFile(sTmpName);
+                sFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+                std::copy(aData.begin(), aData.end(), std::ostream_iterator<std::string>(sFile, "\n"));
+                sFile.close();
+                boost::filesystem::rename(sTmpName, sName);
+                std::cerr << "Queue: written " << sFileName << std::endl;
+            } catch (const std::exception& e) {
+                boost::filesystem::remove(sTmpName);
+                throw;
+            }
         }
     };
 }
