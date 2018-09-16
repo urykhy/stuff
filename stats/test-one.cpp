@@ -15,15 +15,23 @@
 
  */
 
+#define STAT_ENABLE_TAGS
+
 #include <iostream>
 #include <Stat.hpp>
 #include <tree.hpp>
 
 #include <unistd.h>
 
+Stat::Main s;
+namespace Tag
+{
+    STAT_DECLARE_TAG(s.common.start, stat_start);
+    STAT_DECLARE_TAG(s.visits.http.error, stat_bool);
+}
+
 int main(void)
 {
-    Stat::Main s;
     s.common.start.set(time(0)-4);
     s.common.format(std::cout, "common");
 
@@ -48,6 +56,16 @@ int main(void)
     s.actions.http.error.clear();
     s.actions.http.file_count.set(6);
     s.actions.http.format(std::cout, "X3");
+
+    {
+        const auto v = time(0)-10;
+        Stat::set<Tag::stat_start>(v);
+        if (s.common.start.time != v) { std::cout << "incorrect set for Time: " << s.common.start.time << " != " << v; }
+
+        s.visits.http.error.set();
+        Stat::clear<Tag::stat_bool>();
+        if (s.visits.http.error.flag != false) { std::cout << "incorrect clear for Bool: " << s.visits.http.error.flag << " != " << false; }
+    }
 
     return 0;
 }

@@ -74,4 +74,30 @@ namespace Stat
         }
     };
 
+#ifdef STAT_ENABLE_TAGS
+
+    template <typename T, typename = std::enable_if_t<std::is_same<Stat::Count, typename T::S>::value>>
+    void set(size_t v) { T::m_Element->set(v); }
+    template <typename T, typename = std::enable_if_t<std::is_same<Stat::Count, typename T::S>::value>>
+    void update(size_t v) { T::m_Element->set(v); }
+
+    template <typename T, typename = std::enable_if_t<std::is_same<Stat::Time, typename T::S>::value>>
+    void set(double v) { T::m_Element->set(v); }
+    template <typename T, typename = std::enable_if_t<std::is_same<Stat::Time, typename T::S>::value>>
+    void update(double v) { T::m_Element->set(v); }
+
+    template <typename T, typename = std::enable_if_t<std::is_same<Stat::Bool, typename T::S>::value>>
+    void set() { T::m_Element->set(); }
+    template <typename T, typename = std::enable_if_t<std::is_same<Stat::Bool, typename T::S>::value>>
+    void clear() { T::m_Element->clear(); }
+
+#define STAT_DECLARE_TAG(element, tag_name)                     \
+    struct tag_name {                                           \
+        using S = decltype(element);                            \
+        constexpr static S* m_Element = &element;               \
+    };                                                          \
+    constexpr decltype(element)* tag_name::m_Element
+
+#endif
+
 }
