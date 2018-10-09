@@ -3,6 +3,7 @@
 #include <boost/test/unit_test.hpp>
 #include <Parser.hpp>
 #include <Atoi.hpp>
+#include <Hex.hpp>
 
 #if 0
 g++ test-parser.cpp -std=c++14 -I . -lboost_unit_test_framework
@@ -104,6 +105,12 @@ BOOST_AUTO_TEST_CASE(escape)
         BOOST_CHECK_EQUAL(*it++, "\"foo");
         BOOST_CHECK_EQUAL(*it++, "\"bar\"");
     }
+}
+BOOST_AUTO_TEST_CASE(hex)
+{
+    BOOST_CHECK_EQUAL(Parser::to_hex("ABC1="), "414243313d");
+    BOOST_CHECK_EQUAL(Parser::from_hex("414243313d"), "ABC1=");
+
 }
 BOOST_AUTO_TEST_CASE(atoi)
 {
