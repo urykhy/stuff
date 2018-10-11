@@ -7,6 +7,7 @@
 #include <Updateable.hpp>
 #include <Upload.hpp>
 #include <Quote.hpp>
+#include <Format.hpp>
 
 #include <TimeMeter.hpp>
 #include <iostream>
@@ -75,9 +76,9 @@ BOOST_AUTO_TEST_CASE(updateable)
 BOOST_AUTO_TEST_CASE(upload)
 {
 /*
-    create table newdata (
-        `ID` int(11) NOT NULL auto_increment,
-        `Name` char(35) NOT NULL default '',
+    CREATE TABLE newdata (
+        `ID` INT NOT NULL AUTO_INCREMENT,
+        `Name` CHAR(35) NOT NULL DEFAULT '',
         PRIMARY KEY  (`ID`)
     ) ENGINE=NDBCLUSTER DEFAULT CHARSET=utf8;
 */
@@ -125,5 +126,23 @@ BOOST_AUTO_TEST_CASE(quote)
     BOOST_CHECK_EQUAL(MySQL::Quote("123"), "123");
     BOOST_CHECK_EQUAL(MySQL::Quote("'123'"), "\\'123\\'");
     BOOST_CHECK_EQUAL(MySQL::Quote("\"123\""), "\\\"123\\\"");
+}
+struct FormatPolicy
+{
+    static size_t      max_size() { return 3; }
+    static std::string table()    { return "newdata"; }
+    static std::string fields()   { return "id, name"; }
+    static std::string finalize() { return "ON DUPLICATE KEY UPDATE name=name"; }
+    static void        format(std::ostream& aStream, const std::pair<int, std::string>& aData) {
+        aStream << aData.first << ", '" << aData.second << "'";
+    }
+};
+BOOST_AUTO_TEST_CASE(format)
+{
+    std::list<std::pair<int, std::string>> sData{{1,"one"},{2, "two"},{3, "three"},{4, "four"}};
+    std::list<std::string> sExpected{{"INSERT INTO newdata (id, name) VALUES (1, 'one'), (2, 'two'), (3, 'three') ON DUPLICATE KEY UPDATE name=name"},
+                                     {"INSERT INTO newdata (id, name) VALUES (4, 'four') ON DUPLICATE KEY UPDATE name=name"}};
+    const auto sResult = MySQL::Format<FormatPolicy>(sData);
+    BOOST_CHECK_EQUAL_COLLECTIONS(sResult.begin(), sResult.end(), sExpected.begin(), sExpected.end());
 }
 BOOST_AUTO_TEST_SUITE_END()
