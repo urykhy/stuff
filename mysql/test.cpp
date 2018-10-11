@@ -126,6 +126,7 @@ BOOST_AUTO_TEST_CASE(quote)
     BOOST_CHECK_EQUAL(MySQL::Quote("123"), "123");
     BOOST_CHECK_EQUAL(MySQL::Quote("'123'"), "\\'123\\'");
     BOOST_CHECK_EQUAL(MySQL::Quote("\"123\""), "\\\"123\\\"");
+    BOOST_CHECK_EQUAL(MySQL::Quote("'Строка'"), "\\'Строка\\'");
 }
 struct FormatPolicy
 {

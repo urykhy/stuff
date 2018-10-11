@@ -4,11 +4,14 @@
 
 namespace MySQL
 {
-    std::string Quote(const std::string aQuery)
+    // does not corrupt UTF-8 string
+    inline std::string Quote(const std::string aStr)
     {
         std::string sResult;
-        sResult.reserve(aQuery.size());
-        for (const char a : aQuery)
+        sResult.reserve(aStr.size() * 2);
+
+        for (const char a : aStr)
+        {
             switch (a) {
                 case '\\':
                 case '\'':
@@ -21,6 +24,8 @@ namespace MySQL
                 default:
                     sResult.push_back(a);
             }
+        }
+
         return sResult;
     }
 }
