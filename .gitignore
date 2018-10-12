@@ -1,0 +1,41 @@
+*.d
+.*.swp
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+
+# cmake stuff
+CMakeCache.txt
+CMakeFiles
+CPackConfig.cmake
+CPackSourceConfig.cmake
+CTestTestfile.cmake
+Makefile
+Testing
+bin
+cmake_install.cmake
+
+# protobuf tmp
+rpc.pb.*
+*.beam
+erl_crash.dump
+
