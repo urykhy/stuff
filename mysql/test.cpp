@@ -103,9 +103,9 @@ BOOST_AUTO_TEST_CASE(prepare)
     //s.Execute();
     MySQL::Statment s=c.Prepare("select * from departments where dept_no > ? and dept_no < ? order by dept_no");
     s.Execute("d004","d007");
-    s.Use([i = 0](const auto* aBind, size_t aCount) mutable {
-        const std::string sNumber((const char*)aBind[0].buffer, *aBind[0].length);
-        const std::string sName((const char*)aBind[1].buffer, *aBind[1].length);
+    s.Use([i = 0](const auto& aRow) mutable {
+        const std::string sNumber = aRow[0];
+        const std::string sName   = aRow[1];
         std::cout << sNumber << " = " << sName << std::endl;
         if (i == 0)
         {
@@ -120,6 +120,19 @@ BOOST_AUTO_TEST_CASE(prepare)
         i++;
         BOOST_CHECK(i <= 2);
     });
+
+    MySQL::Statment s1=c.Prepare("select * from salaries where from_date=? and emp_no > ? order by emp_no");
+    s1.Execute("1997-11-28", 494301);
+    s1.Use([i=0](const auto& aRow) mutable {
+        std::cout << aRow[0] << ' ' << aRow[1] << ' ' << aRow[2] << ' ' << aRow[3] << std::endl;
+        if (i == 0)
+        {
+            BOOST_CHECK_EQUAL(aRow[0], "495165");
+            BOOST_CHECK_EQUAL(aRow[1], "48649");
+        }
+        i++;
+    });
+
 }
 BOOST_AUTO_TEST_CASE(quote)
 {

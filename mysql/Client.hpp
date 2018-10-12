@@ -78,6 +78,15 @@ namespace MySQL
 
     };
 
+    // get mysql enum from type
+    template <class T> constexpr enum_field_types GetEnum();
+    template <> constexpr enum_field_types GetEnum<char>()          { return MYSQL_TYPE_TINY; };
+    template <> constexpr enum_field_types GetEnum<short>()         { return MYSQL_TYPE_SHORT; };
+    template <> constexpr enum_field_types GetEnum<int>()           { return MYSQL_TYPE_LONG; };
+    template <> constexpr enum_field_types GetEnum<long long int>() { return MYSQL_TYPE_LONGLONG; };
+    template <> constexpr enum_field_types GetEnum<float>()         { return MYSQL_TYPE_FLOAT; };
+    template <> constexpr enum_field_types GetEnum<double>()        { return MYSQL_TYPE_DOUBLE; };
+
     class Statment
     {
         Statment(const Statment&) = delete;
@@ -102,10 +111,36 @@ namespace MySQL
             aParam.length = &aParam.buffer_length;
         }
 
+        template<class T>
+        typename std::enable_if<
+            std::is_arithmetic<T>::value, void
+        >::type
+        bind_one(MYSQL_BIND& aParam, const T& aValue)
+        {
+            aParam.buffer_type = GetEnum<typename std::make_signed<T>::type>();
+            aParam.buffer = const_cast<int*>(&aValue);
+            aParam.buffer_length = sizeof(aValue);
+            aParam.is_null=0;
+            aParam.length = &aParam.buffer_length;
+            aParam.is_unsigned = std::is_unsigned<T>::value;
+        }
+
         void report(const char* aMsg)
         {
             const std::string sMsg = std::string(aMsg) + ": " + mysql_stmt_error(m_Stmt);
             throw std::runtime_error(sMsg);
+        }
+
+        // FIXME: use string_ref
+        using ResultRow = std::vector<std::string>;
+        template<class T>
+        ResultRow prepareRow(const T* aBind, size_t aCount)
+        {
+            ResultRow sRow;
+            sRow.reserve(aCount);
+            for (size_t i = 0; i < aCount; i++)
+                sRow.push_back(std::string((const char*)aBind[i].buffer, *aBind[i].length));
+            return sRow;
         }
 
     public:
@@ -167,7 +202,7 @@ namespace MySQL
             for (int i = 0; i < sFields; i++)
             {
                 MYSQL_FIELD* sField = &sMeta->fields[i];
-                // std::cout << "field length " << sField->length << ", name = " << sField->name << std::endl;
+                //std::cout << "field length " << sField->length << ", name = " << sField->name << std::endl;
                 sResult[i].buffer = sBuffer.allocate<char>(sField->length);
                 sResult[i].buffer_length = sField->length;
                 sResult[i].length = sBuffer.allocate<unsigned long>();
@@ -191,7 +226,7 @@ namespace MySQL
                 if (sCode == 1)
                     report("mysql_stmt_fetch");
                 if (sCode == 0)
-                    aHandler(&sResult[0], sFields);
+                    aHandler(prepareRow(&sResult[0], sFields));
             };
         }
     };
