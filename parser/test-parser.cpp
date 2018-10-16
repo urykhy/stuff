@@ -4,6 +4,7 @@
 #include <Parser.hpp>
 #include <Atoi.hpp>
 #include <Hex.hpp>
+#include <ULeb128.hpp>
 
 #if 0
 g++ test-parser.cpp -std=c++14 -I . -lboost_unit_test_framework
@@ -119,5 +120,21 @@ BOOST_AUTO_TEST_CASE(atoi)
     BOOST_CHECK_THROW(Parser::Atoi<int>("12.456"), Parser::NotNumber);
     BOOST_CHECK_CLOSE(Parser::Atof<float>("12.456"), 12.456, 0.0001);
     BOOST_CHECK_CLOSE(Parser::Atof<float>("-45"), -45, 0.0001);
+}
+BOOST_AUTO_TEST_CASE(uleb128)
+{
+    {
+        std::stringstream s;
+        Parser::ULEB128::encode(45, s);
+        BOOST_CHECK_EQUAL(s.str(), "\x2D");
+        BOOST_CHECK_EQUAL(Parser::ULEB128::decode(s), 45);
+    }
+
+    {
+        std::stringstream s;
+        Parser::ULEB128::encode(624485, s);
+        BOOST_CHECK_EQUAL(s.str(), "\xE5\x8E\x26");
+        BOOST_CHECK_EQUAL(Parser::ULEB128::decode(s), 624485);
+    }
 }
 BOOST_AUTO_TEST_SUITE_END()
