@@ -36,7 +36,7 @@ namespace Parser
     {
         std::string sResult;
         if (x.size() % 2 != 0)
-            throw std::runtime_error("bad string size");
+            throw std::runtime_error("Parser::from_hex");
         sResult.reserve(x.size() / 2);
         for (unsigned i = 0; i < x.size() / 2; i++)
         {
