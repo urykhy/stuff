@@ -46,4 +46,22 @@ namespace Parser
         }
         return sResult;
     }
+
+    inline std::string to_hex_c_string(const std::string& aData)
+    {
+        std::string sResult;
+        sResult.reserve(aData.size() * 4);
+
+        for (const auto& i : aData)
+        {
+            auto a1 = i >> 4;
+            auto a2 = i & 0x0F;
+            sResult.push_back('\\');
+            sResult.push_back('x');
+            sResult.push_back(aux::sDict[a1]);
+            sResult.push_back(aux::sDict[a2]);
+        }
+
+        return sResult;
+    }
 }
