@@ -44,13 +44,14 @@ BOOST_AUTO_TEST_CASE(simple)
     {
         MyPerson sMyPerson;
         Protobuf::Walker sWalker(sInput);
-        sWalker.parse([&sMyPerson](const Protobuf::FieldInfo& aField, Protobuf::Walker* aWalker){
+        sWalker.parse([&sMyPerson](const Protobuf::FieldInfo& aField, Protobuf::Walker* aWalker) -> Protobuf::Action {
             switch (aField.id)
             {
-            case 1: aWalker->skip(aField);  break;
-            case 2: sMyPerson.id    = aWalker->readVarUInt(); break;
-            case 3: sMyPerson.email = aWalker->readString();  break;
+                case 1: return Protobuf::ACT_SKIP;
+                case 2: sMyPerson.id    = aWalker->readVarInt<int>(); return Protobuf::ACT_USED;
+                case 3: sMyPerson.email = aWalker->readString();  return Protobuf::ACT_USED;
             }
+            return Protobuf::ACT_BREAK;
         });
         BOOST_CHECK(sWalker.empty());
         BOOST_CHECK_THROW(sWalker.readTag(), Protobuf::EndOfBuffer);
@@ -75,6 +76,6 @@ BOOST_AUTO_TEST_CASE(sint)
     Protobuf::Buffer sInput(sBuf);
     Protobuf::Walker sWalker(sInput);
     const auto sTag1 = sWalker.readTag(); BOOST_CHECK_EQUAL(1, sTag1.id); sWalker.skip(sTag1);
-    const auto sTag2 = sWalker.readTag(); BOOST_CHECK_EQUAL(2, sTag2.id); BOOST_CHECK_EQUAL(sPerson.id(), sWalker.readVarInt());
+    const auto sTag2 = sWalker.readTag(); BOOST_CHECK_EQUAL(2, sTag2.id); BOOST_CHECK_EQUAL(sPerson.id(), sWalker.readVarInt<int>());
 }
 BOOST_AUTO_TEST_SUITE_END()

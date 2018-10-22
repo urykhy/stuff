@@ -11,10 +11,11 @@
     https://developers.google.com/protocol-buffers/docs/encoding
 
     reason to make one:
-    Benchmark           Time           CPU Iterations
-    --------------------------------------------------
-    BM_Google         109 ns        109 ns    5359322
-    BM_Custom          28 ns         28 ns   25246605
+    Benchmark                Time           CPU Iterations
+    -------------------------------------------------------
+    BM_Google              107 ns        107 ns    6210852
+    BM_Google_reuse         71 ns         71 ns    9792583
+    BM_Custom               17 ns         17 ns   40178021
 */
 
 namespace Protobuf
@@ -23,6 +24,12 @@ namespace Protobuf
     struct EndOfBuffer : std::runtime_error { EndOfBuffer() : std::runtime_error("End of buffer") {} };
     struct BadTag      : std::runtime_error { BadTag()      : std::runtime_error("Bad tag") {} };
     struct BadInput    : std::runtime_error { BadInput()    : std::runtime_error("Bad input") {} };
+
+    enum Action {
+        ACT_USED
+      , ACT_SKIP
+      , ACT_BREAK
+    };
 
     struct FieldInfo
     {
@@ -76,6 +83,17 @@ namespace Protobuf
             } while (sByte > 0x80); // Each byte in a varint, except the last byte, has the most significant bit (msb) set
         }
 
+#ifdef BOOST_TEST_DYN_LINK  // open for tests only
+    public:
+#endif
+        FieldInfo readTag()
+        {
+            return FieldInfo(readByte());
+        }
+
+        // ZigZag not supported (sint32/64 in schema)
+        // fixed width not supported (fixed64, sfixed64, double, fixed32, sfixed32, float)
+
         template<class T>
         T readVarInt()
         {
@@ -94,25 +112,9 @@ namespace Protobuf
             return sValue;
         }
 
-    public:
-
-        Walker(const Buffer& aBuffer)
-        : m_Buffer(aBuffer)
-        { }
-
-        FieldInfo readTag()
-        {
-            return FieldInfo(readByte());
-        }
-
-        // ZigZag not supported (sint32/64 in schema)
-        // fixed width not supported (fixed64, sfixed64, double, fixed32, sfixed32, float)
-        uint64_t readVarUInt() { return readVarInt<uint64_t>(); }
-        int64_t  readVarInt()  { return readVarInt<int64_t>(); }
-
         std::string readString()
         {
-            const auto sSize = readVarUInt();
+            const auto sSize = readVarInt<size_t>();
             if (sSize > m_Buffer.size())
                 throw BadInput();
 
@@ -138,19 +140,53 @@ namespace Protobuf
             }
 
             // Length-delimited
-            sSize = readVarUInt();
+            sSize = readVarInt<size_t>();
             if (sSize > m_Buffer.size())
                 throw BadInput();
 
             m_Buffer.remove_prefix(sSize);
         }
 
+    public:
+
+        Walker(const Buffer& aBuffer)
+        : m_Buffer(aBuffer)
+        { }
+
+        // get destination in argument
+        template<class T>
+        typename std::enable_if<
+            std::is_arithmetic<T>::value, void
+        >::type
+        read(T& aDest) { aDest = readVarInt<T>(); }
+
+        template<class T>
+        typename std::enable_if<
+            std::is_class<T>::value, void
+        >::type
+        read(T& aDest)
+        {
+            const auto sSize = readVarInt<size_t>();
+            if (sSize > m_Buffer.size())
+                throw BadInput();
+
+            aDest.assign(m_Buffer.data(), sSize);
+            m_Buffer.remove_prefix(sSize);
+        }
+
         template<class T>
         void parse(T aCallback)
         {
-            // user must consume or skip data
             while (!m_Buffer.empty())
-                aCallback(readTag(), this);
+            {
+                const auto sField = readTag();
+                switch (aCallback(sField, this))
+                {
+                    case ACT_USED:  break;
+                    case ACT_SKIP:  skip(sField); break;
+                    case ACT_BREAK: return;
+                }
+            }
         }
 
         bool empty() const
