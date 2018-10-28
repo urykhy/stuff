@@ -1,0 +1,21 @@
+- package: test
+  version: 1.0
+  architecture: all
+  maintainer: Dummy <dummy@example.org>
+  short: example package
+  long: >
+    very
+    very
+    long
+    description
+  root: /opt/test
+  etc:
+    - openssl.cnf
+  bin:
+    - docker-ddns.py
+    - firewall
+    - luks.py
+    - make_certs
+    - sfq
+  init:
+    - zram
