@@ -2,6 +2,9 @@
   version: 1.0
   architecture: all
   maintainer: Dummy <dummy@example.org>
+  homepage: https://github.com/urykhy/stuff
+  depends: python, iptables, iproute2
+  recommends: ipset
   short: example package
   long: >
     very
@@ -11,13 +14,14 @@
   root: /opt/test
   user: root
   group: root
-  etc:
-    - openssl.cnf
-  bin:
-    - docker-ddns.py
-    - firewall
-    - luks.py
-    - make_certs
-    - sfq
-  init:
-    - zram
+  files:
+    - etc:
+      - openssl.cnf
+    - etc/init.d:
+      - zram
+    - usr/bin:
+      - docker-ddns.py
+      - firewall
+      - luks.py
+      - make_certs
+      - sfq

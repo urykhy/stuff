@@ -1,41 +1,81 @@
 #!/usr/bin/env python
 
+from stat import *
+import os
+import shutil
 import subprocess
 import tarfile
-import os
 import tempfile
-import shutil
 import yaml
+
 import logging
 logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', level=logging.DEBUG)
 
-def tar_add_dir(file, name, user, group):
-    t = tarfile.TarInfo(name)
-    t.type = tarfile.DIRTYPE
-    t.uname = user
-    t.gname = group
-    file.addfile(t)
-
-def tar_add_root(file, path, user, group):
+def split_folders(path):
     folders = []
     folders.append(path)
     while 1:
         path, folder = os.path.split(path)
-        if folder != "":
+        if folder != "" and path != "":
             folders.append(path)
         else:
             break
     folders.reverse()
-    for x in folders:
-        tar_add_dir(file, "." + x, user, group)
+    return folders
 
-def tar_file(file, name, user, group):
-    t = tarfile.TarInfo(name)
-    t.type = tarfile.REGTYPE
-    t.uname = user
-    t.gname = group
-    t.size = os.path.getsize(file)
-    return t
+def write_optional(name, file, cfg):
+    if name in c:
+        f.write("{}: {}\n".format(name, cfg[name]))
+
+class XTar:
+    tar = None
+    root = ""
+    user = "root"
+    group = "root"
+    dir_history = {}
+
+    def add_x_dir(self, name):
+        name = "." + name
+        if name in self.dir_history:
+            return
+        t = tarfile.TarInfo(name)
+        t.type = tarfile.DIRTYPE
+        t.uname = self.user
+        t.gname = self.group
+        t.mtime = os.path.getmtime(".")
+        t.mode = 0o755
+        self.tar.addfile(t)
+        self.dir_history[name] = 1
+
+    def add_root(self):
+        for x in split_folders(self.root):
+            self.add_x_dir(x)
+
+    def add_dir(self, name):
+        for x in split_folders(name):
+            mtar.add_x_dir(os.path.join(self.root, x))
+
+    # TODO: add recursion
+    def add_file(self, name, folder):
+        tname = "." + os.path.join(self.root, folder, os.path.basename(name))
+        t = tarfile.TarInfo(tname)
+        t.type = tarfile.REGTYPE
+        t.uname = self.user
+        t.gname = self.group
+        t.size = os.path.getsize(name)
+        t.mtime = os.path.getmtime(name)
+        if os.access(name, os.X_OK):
+            t.mode = 0o755
+        else:
+            t.mode = 0o644
+        self.tar.addfile(t, open(name))
+
+    def __init__(self, tar, c):
+        self.tar = tar
+        self.root = c["root"] if "root" in c else ""
+        self.user = c["user"]
+        self.group = c["group"]
+        self.add_root()
 
 with open("package.yml", 'r') as f:
     try:
@@ -52,33 +92,29 @@ for c in cfg:
     logging.info("build package {}".format(c["package"]))
     logging.debug("... control")
     with open(os.path.join(dirpath,"control"), "w") as f:
-        f.write("Package: {}\n".format(c["package"]))
-        f.write("Version: {}\n".format(c["version"]))
-        f.write("Architecture: {}\n".format(c["architecture"]))
-        f.write("Maintainer: {}\n".format(c["maintainer"]))
-        f.write("Description: {}\n".format(c["short"]))
+        for opt in ("package","version","architecture","maintainer","homepage"):
+            f.write("{}: {}\n".format(opt, c[opt]))
+        for opt in ("depends","pre-depends","recommends","suggests","breaks","conflicts","replaces","provides","section","priority","tag","bugs","source"):
+            write_optional(opt, f, c)
+        f.write("description: {}\n".format(c["short"]))
         f.write("  {}\n".format(c["long"]))
 
     logging.debug("... conffiles")
     with open(os.path.join(dirpath,"conffiles"), "w") as f:
-        for x in c["etc"]:
-            f.write("{}\n".format(os.path.join(root, "etc", x)))
+        for dir in c["files"]:
+            for cf in dir:
+                if cf == "etc":
+                    for e in dir[cf]:
+                        f.write("{}\n".format(os.path.join(root, cf, os.path.basename(e))))
 
     logging.debug("... data.tar.gz")
     with tarfile.open(os.path.join(dirpath,"data.tar.gz"), "w:gz") as tar:
-        tar_add_root(tar, root, c["user"], c["group"])
-        if "etc" in c:
-            tar_add_dir(tar, "." + os.path.join(root, "etc"), c["user"], c["group"])
-            for x in c["etc"]:
-                tar.addfile(tar_file(x, "." + os.path.join(root, "etc", x), c["user"], c["group"]), open(x))
-        if "init" in c:
-            tar_add_dir(tar, "." + os.path.join(root, "etc/init.d"), c["user"], c["group"])
-            for x in c["init"]:
-                tar.addfile(tar_file(x, "." + os.path.join(root, "etc/init.d", x), c["user"], c["group"]), open(x))
-        if "bin" in c:
-            tar_add_dir(tar, "." + os.path.join(root, "bin"), c["user"], c["group"])
-            for x in c["bin"]:
-                tar.addfile(tar_file(x, "." + os.path.join(root, "bin", x), c["user"], c["group"]), open(x))
+        mtar = XTar(tar, c)
+        for dir in c["files"]:
+            for cf in dir:
+                mtar.add_dir(cf)
+                for e in dir[cf]:
+                    mtar.add_file(e, cf)
 
     logging.debug("... debian-binary")
     with open(os.path.join(dirpath,"debian-binary"), "w") as f:
