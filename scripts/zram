@@ -17,22 +17,22 @@ MOUNT="mount -o barrier=0,commit=300,relatime,nodev,discard"
 
 case "$1" in
   start)
-      #if [ -d /sys/block/zram0 ]; then
-      #    echo "Enable 2G zRAM swap ..."
-      #    echo 4  > /sys/block/zram0/max_comp_streams
-      #    echo 2G > /sys/block/zram0/disksize
-      #    mkswap /dev/zram0
-      #    swapon -p 100 /dev/zram0
-      #fi
-      #if [ -d /sys/block/zram1 ]; then
-      #    echo "Enable 4G zRAM tmp ..."
-      #    echo lz4 > /sys/block/zram1/comp_algorithm
-      #    echo 4  > /sys/block/zram1/max_comp_streams
-      #    echo 4G > /sys/block/zram1/disksize
-      #    $MKFS /dev/zram1
-      #    $MOUNT /dev/zram1 /tmp
-      #    chmod 1777 /tmp
-      #fi
+      if [ -d /sys/block/zram0 ]; then
+          echo "Enable 2G zRAM swap ..."
+          echo 4  > /sys/block/zram0/max_comp_streams
+          echo 2G > /sys/block/zram0/disksize
+          mkswap /dev/zram0
+          swapon -p 100 /dev/zram0
+      fi
+      if [ -d /sys/block/zram1 ]; then
+          echo "Enable 4G zRAM tmp ..."
+          echo lz4 > /sys/block/zram1/comp_algorithm
+          echo 4  > /sys/block/zram1/max_comp_streams
+          echo 4G > /sys/block/zram1/disksize
+          $MKFS /dev/zram1
+          $MOUNT /dev/zram1 /tmp
+          chmod 1777 /tmp
+      fi
     ;;
   stop)
     echo "skip zram stop"
