@@ -9,12 +9,14 @@ import yaml
 import logging
 logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', level=logging.DEBUG)
 
-def tar_add_dir(file, name):
+def tar_add_dir(file, name, user, group):
     t = tarfile.TarInfo(name)
     t.type = tarfile.DIRTYPE
+    t.uname = user
+    t.gname = group
     file.addfile(t)
 
-def tar_add_root(file, path):
+def tar_add_root(file, path, user, group):
     folders = []
     folders.append(path)
     while 1:
@@ -25,7 +27,15 @@ def tar_add_root(file, path):
             break
     folders.reverse()
     for x in folders:
-        tar_add_dir(file, "." + x)
+        tar_add_dir(file, "." + x, user, group)
+
+def tar_file(file, name, user, group):
+    t = tarfile.TarInfo(name)
+    t.type = tarfile.REGTYPE
+    t.uname = user
+    t.gname = group
+    t.size = os.path.getsize(file)
+    return t
 
 with open("package.yml", 'r') as f:
     try:
@@ -56,19 +66,19 @@ for c in cfg:
 
     logging.debug("... data.tar.gz")
     with tarfile.open(os.path.join(dirpath,"data.tar.gz"), "w:gz") as tar:
-        tar_add_root(tar, root)
+        tar_add_root(tar, root, c["user"], c["group"])
         if "etc" in c:
-            tar_add_dir(tar, "." + os.path.join(root, "etc"))
+            tar_add_dir(tar, "." + os.path.join(root, "etc"), c["user"], c["group"])
             for x in c["etc"]:
-                tar.add(x, "." + os.path.join(root, "etc", x))
+                tar.addfile(tar_file(x, "." + os.path.join(root, "etc", x), c["user"], c["group"]), open(x))
         if "init" in c:
-            tar_add_dir(tar, "." + os.path.join(root, "etc/init.d"))
+            tar_add_dir(tar, "." + os.path.join(root, "etc/init.d"), c["user"], c["group"])
             for x in c["init"]:
-                tar.add(x, "." + os.path.join(root, "etc/init.d", x))
+                tar.addfile(tar_file(x, "." + os.path.join(root, "etc/init.d", x), c["user"], c["group"]), open(x))
         if "bin" in c:
-            tar_add_dir(tar, "." + os.path.join(root, "bin"))
+            tar_add_dir(tar, "." + os.path.join(root, "bin"), c["user"], c["group"])
             for x in c["bin"]:
-                tar.add(x, "." + os.path.join(root, "bin", x))
+                tar.addfile(tar_file(x, "." + os.path.join(root, "bin", x), c["user"], c["group"]), open(x))
 
     logging.debug("... debian-binary")
     with open(os.path.join(dirpath,"debian-binary"), "w") as f:

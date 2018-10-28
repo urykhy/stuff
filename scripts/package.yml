@@ -9,6 +9,8 @@
     long
     description
   root: /opt/test
+  user: root
+  group: root
   etc:
     - openssl.cnf
   bin:
