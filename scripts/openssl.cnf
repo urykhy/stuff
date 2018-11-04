@@ -15,3 +15,12 @@ extendedKeyUsage = clientAuth
 [mserver]
 keyUsage = digitalSignature, keyEncipherment
 extendedKeyUsage = serverAuth
+
+[mysql]
+subjectAltName=DNS:mysql.elf.dark
+
+[nextcloud]
+subjectAltName=DNS:nextcloud.elf.dark
+
+[ldap]
+subjectAltName=DNS:ldap.elf.dark

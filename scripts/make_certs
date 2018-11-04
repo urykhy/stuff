@@ -32,23 +32,21 @@ fi
 
 # make server cert
 function make_server_cert {
-    USAGE="-extfile ./openssl.tmp -extensions req_ext"
+    USAGE=""
     if [ -n "$2" ]; then
         USAGE="-extfile ./openssl.cnf -extensions $2"
     fi
     if [ ! -f server-$1.crt ]; then
         PARM="$DAYS $SUBJ/OU=Security/CN=$1"
-        (cat openssl.cnf <(printf "\n[req_ext]\nsubjectAltName=DNS:$1\n")) > openssl.tmp
         openssl req  -new -newkey $KTYPE -keyout server-$1.key -out server-$1.csr $PARM -passout pass:$NORM_PASS
         openssl x509 -req -in server-$1.csr $SIGN -out server-$1.crt $USAGE -passin pass:$CA_PASS
         openssl rsa -in server-$1.key -out server-$1.key -passin pass:$NORM_PASS
         openssl x509 -text -in server-$1.crt > server-$1.txt
-        rm openssl.tmp
     fi
 }
-make_server_cert "mysql.elf.dark"
-make_server_cert "nextcloud.elf.dark"
-make_server_cert "ldap.elf.dark"
+make_server_cert "mysql.elf.dark"     "mysql"
+make_server_cert "nextcloud.elf.dark" "nextcloud"
+make_server_cert "ldap.elf.dark"      "ldap"
 make_server_cert "mail.dark"
 make_server_cert "wifi"
 make_server_cert "racoon"
