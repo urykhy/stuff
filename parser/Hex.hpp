@@ -22,7 +22,7 @@ namespace Parser
     {
         std::string sResult;
         sResult.reserve(x.size() * 2);
-        for (const auto& i : x)
+        for (const uint8_t i : x)
         {
             auto a1 = i >> 4;
             auto a2 = i & 0x0F;
@@ -52,7 +52,7 @@ namespace Parser
         std::string sResult;
         sResult.reserve(aData.size() * 4);
 
-        for (const auto& i : aData)
+        for (const uint8_t i : aData)
         {
             auto a1 = i >> 4;
             auto a2 = i & 0x0F;
