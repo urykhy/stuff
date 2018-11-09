@@ -5,6 +5,8 @@
 #include <Protobuf.hpp>
 #include "tutorial.pb.h"
 
+#include <../parser/Hex.hpp>
+
 struct MyPerson
 {
     std::string name;
@@ -24,7 +26,6 @@ BOOST_AUTO_TEST_CASE(simple)
 
     std::string sBuf;
     BOOST_CHECK_EQUAL(true, sPerson.SerializeToString(&sBuf));
-
 
     sPerson.Clear();
     BOOST_CHECK_EQUAL(sPerson.id(), 0);
@@ -76,6 +77,26 @@ BOOST_AUTO_TEST_CASE(sint)
     Protobuf::Buffer sInput(sBuf);
     Protobuf::Walker sWalker(sInput);
     const auto sTag1 = sWalker.readTag(); BOOST_CHECK_EQUAL(1, sTag1.id); sWalker.skip(sTag1);
-    const auto sTag2 = sWalker.readTag(); BOOST_CHECK_EQUAL(2, sTag2.id); BOOST_CHECK_EQUAL(sPerson.id(), sWalker.readVarInt<int>());
+    const auto sTag2 = sWalker.readTag(); BOOST_CHECK_EQUAL(2, sTag2.id); BOOST_CHECK_EQUAL(sPerson.id(), sWalker.readVarInt<int64_t>());
 }
+/*BOOST_AUTO_TEST_CASE(person)
+{
+	GOOGLE_PROTOBUF_VERIFY_VERSION;
+	tutorial::Person sPerson;
+	sPerson.set_email("foo@bar.com");
+    sPerson.set_name("Kevin");
+    sPerson.set_id(0x01020304);
+    auto phone = sPerson.add_phones();
+    phone->set_number("+1234567890");
+    phone->set_type(tutorial::Person_PhoneType::Person_PhoneType_MOBILE);
+    phone = sPerson.add_phones();
+    phone->set_number("+0987654321");
+    phone->set_type(tutorial::Person_PhoneType::Person_PhoneType_HOME);
+
+    std::string sBuf;
+    BOOST_CHECK_EQUAL(true, sPerson.SerializeToString(&sBuf));
+
+    std::cout << "X: " << Parser::to_hex_c_string(sBuf);
+    std::cout << "Size: " << sBuf.size() << std::endl;
+}*/
 BOOST_AUTO_TEST_SUITE_END()

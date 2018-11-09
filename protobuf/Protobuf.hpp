@@ -13,9 +13,10 @@
     reason to make one:
     Benchmark                Time           CPU Iterations
     -------------------------------------------------------
-    BM_Google              107 ns        107 ns    6210852
-    BM_Google_reuse         71 ns         71 ns    9792583
-    BM_Custom               17 ns         17 ns   40178021
+    BM_Google              277 ns        277 ns    2525099
+    BM_Google_reuse        148 ns        148 ns    4738163
+    BM_Custom               65 ns         64 ns   10873117
+
 */
 
 namespace Protobuf
@@ -170,7 +171,7 @@ namespace Protobuf
             if (sSize > m_Buffer.size())
                 throw BadInput();
 
-            aDest.assign(m_Buffer.data(), sSize);
+            aDest = T(m_Buffer.data(), sSize);
             m_Buffer.remove_prefix(sSize);
         }
 
