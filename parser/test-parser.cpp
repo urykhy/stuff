@@ -138,4 +138,9 @@ BOOST_AUTO_TEST_CASE(uleb128)
         BOOST_CHECK_EQUAL(Parser::ULEB128::decode(s), 624485);
     }
 }
+BOOST_AUTO_TEST_CASE(url)
+{
+    BOOST_CHECK_EQUAL("https%3a%2f%2fwww.urlencoder.org%2f", Parser::to_url("https://www.urlencoder.org/"));
+    BOOST_CHECK_EQUAL("https://www.urlencoder.org/", Parser::from_url("https%3A%2F%2Fwww.urlencoder.org%2F"));
+}
 BOOST_AUTO_TEST_SUITE_END()
