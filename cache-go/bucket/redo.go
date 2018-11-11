@@ -1,8 +1,9 @@
 package bucket
 
 import (
+    "log"
+    "fmt"
     "errors"
-    "sync"
 )
 
 const (
@@ -15,25 +16,32 @@ type Operation int
 
 type Act struct {
     operation Operation
-    data      string
+    key       *string
+    value     *string
     serial    int
 }
 
 type Redo struct {
     data    []*Act
     serial  int
+    root    string
 }
 
-func CreateRedo() *Redo {
+func CreateRedo(root string) *Redo {
     return &Redo {
         data   :make([]*Act, REDO_LEN),
         serial :0,
-        mutex  :sync.Mutex{},
+        root   :root,
     }
 }
 
-func (me *Redo) Append(op Operation, data string) (error) {
-    me.data = append(me.data, &Act{op, data, me.serial})
+func (me *Redo) Append(op Operation, key *string, value *string) (error) {
+    if op == INSERT {
+        log.Print(fmt.Sprintf("redo: INSERT %v for [%v:%v]", me.serial, *key, *value))
+    } else {
+        log.Print(fmt.Sprintf("redo: DELETE %v for [%v]", me.serial, *key))
+    }
+    me.data = append(me.data, &Act{op, key, value, me.serial})
     me.serial++
     return nil
 }

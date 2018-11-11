@@ -28,7 +28,10 @@ var commands = api.HandlerMap {
 
 func main() {
     log.SetFlags(log.LstdFlags | log.Lmicroseconds)
-    storage = bucket.CreateOne()
 
-    api.Start(&commands);
+    config := bucket.CreateConfig()
+    log.Printf("Starting with root: %v", config.Root)
+
+    storage = bucket.CreateOne(config.Root, config.Master)
+    api.Start(&commands, config.Port);
 }

@@ -62,9 +62,9 @@ func request_handler(conn net.Conn, handler *HandlerMap) {
     }
 }
 
-func Start(handler *HandlerMap) {
-    log.Print("Starting")
-    sock, err := net.Listen("tcp", ":2081")
+func Start(handler *HandlerMap, port int) {
+    log.Printf("Listen port: %v", port)
+    sock, err := net.Listen("tcp", fmt.Sprintf(":%v", port))
 
     if err != nil {
             log.Fatalf("listen error: %v", err)
