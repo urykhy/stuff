@@ -48,7 +48,7 @@ def print_status():
             print ("%s: not connected" % (i))
         elif not os.path.exists(dev_prefix + i):
             print ("%s: connected" % (i))
-        elif not os.path.ismount(fstab[i]):
+        elif i in fstab and not os.path.ismount(fstab[i]):
             print ("%s: connected, dm started" % (i))
         else:
             print ("%s: connected, dm started, mounted" % (i))
