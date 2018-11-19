@@ -3,12 +3,13 @@
 #include <boost/test/unit_test.hpp>
 
 #include <MessageQueue.hpp>
+#include <UdpQueue.hpp>
 #include <WorkQ.hpp>
 #include <Periodic.hpp> // for sleep
 
 struct DummySender : MQ::SenderTransport
 {
-    MQ::SenderRecv* m_Back = nullptr;
+    MQ::aux::Sender* m_Back = nullptr;
     size_t m_Action = 0;
     void push(size_t sSerial, const std::string& sData) override
     {
@@ -40,7 +41,7 @@ BOOST_AUTO_TEST_CASE(sender)
     sAsio.start(1, sGroup);
 
     DummySender sDummy;
-    MQ::Sender sSender(sAsio, &sDummy);
+    MQ::aux::Sender sSender(sAsio, &sDummy);
     sDummy.m_Back = &sSender;
 
     sSender.push("test123");
@@ -63,10 +64,32 @@ BOOST_AUTO_TEST_CASE(receiver)
         }
     };
 
-    MQ::Receiver sRecv(sHandler);
+    MQ::aux::Receiver sRecv(sHandler);
     sRecv.push(1, "test123");
     sRecv.push(1, "test123");
     sRecv.push(2, "test456");
     BOOST_CHECK_EQUAL(sRecv.size(), 2);
+}
+BOOST_AUTO_TEST_CASE(udp)
+{
+    Threads::Group sGroup;
+    Threads::WorkQ sAsio;
+    sAsio.start(1, sGroup);
+
+    MQ::UDP::Config sRecvConfig{"0.0.0.0", 4567};   // LISTEN
+    MQ::UDP::Config sSendConfig{"127.0.0.1", 4567}; // CONNECT TO
+
+    MQ::UDP::Receiver sReceiver(sRecvConfig, sAsio, [](std::string&& aData) {
+        BOOST_CHECK_EQUAL(aData, "test123456");
+    });
+    MQ::UDP::Sender sSender(sSendConfig, sAsio);
+
+    sSender.push("test123");
+    sSender.push("456");
+    Threads::sleep(1.1);
+    BOOST_CHECK_EQUAL(sSender.size(), 0);
+
+    sAsio.term();
+    sGroup.wait();
 }
 BOOST_AUTO_TEST_SUITE_END()
