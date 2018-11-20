@@ -92,4 +92,33 @@ BOOST_AUTO_TEST_CASE(udp)
     sAsio.term();
     sGroup.wait();
 }
+BOOST_AUTO_TEST_CASE(retry)
+{
+    Threads::Group sGroup;
+    Threads::WorkQ sAsio;
+    sAsio.start(1, sGroup);
+
+    MQ::UDP::Config sRecvConfig{"0.0.0.0", 4567};   // LISTEN
+    MQ::UDP::Config sSendConfig{"127.0.0.1", 4567}; // CONNECT TO
+
+    MQ::UDP::Receiver sReceiver(sRecvConfig, sAsio, [sStage = 0](std::string&& aData) mutable {
+        sStage++;
+        switch (sStage)
+        {
+        case 1: throw std::runtime_error("test error 1");
+        case 2: BOOST_CHECK_EQUAL(aData, "test123456");
+        }
+    });
+    MQ::UDP::Sender sSender(sSendConfig, sAsio);
+
+    sSender.push("test123");
+    sSender.push("456");
+    Threads::sleep(1.1);
+    BOOST_CHECK_EQUAL(sSender.size(), 1);   // first time is error, so entry should stay in queue
+    Threads::sleep(6.1);
+    BOOST_CHECK_EQUAL(sSender.size(), 0);   // entry processed
+
+    sAsio.term();
+    sGroup.wait();
+}
 BOOST_AUTO_TEST_SUITE_END()

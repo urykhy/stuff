@@ -116,11 +116,12 @@ namespace MQ
             }
 
             // FIXME: add rate limit here ?
-            void restore()
+            void restore(size_t aId = 0)
             {
                 Lock lk(m_Mutex);
                 for (const auto& x : m_Emit)
-                    m_WorkQ.insert([x, this](){ m_Transport->push(x.first, x.second); });
+                    if (aId == 0 or x.first == aId)
+                        m_WorkQ.insert([x, this](){ m_Transport->push(x.first, x.second); });
             }
         };
 
