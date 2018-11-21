@@ -17,7 +17,6 @@ struct DummySender : MQ::SenderTransport
         switch (m_Action)
         {
         case 1:
-            BOOST_CHECK_EQUAL(sSerial, 1);
             BOOST_CHECK_EQUAL(sData, "test123");
             m_Back->ack(sSerial);
             break;
@@ -25,7 +24,6 @@ struct DummySender : MQ::SenderTransport
             m_Back->restore();
             break;
         case 3:
-            BOOST_CHECK_EQUAL(sSerial, 2);
             BOOST_CHECK_EQUAL(sData, "test456test789");
             m_Back->ack(sSerial);
             break;
@@ -65,9 +63,9 @@ BOOST_AUTO_TEST_CASE(receiver)
     };
 
     MQ::aux::Receiver sRecv(sHandler);
-    sRecv.push(1, "test123");
-    sRecv.push(1, "test123");
-    sRecv.push(2, "test456");
+    sRecv.push(MQ::aux::TaskSerial{1,0,0}, "test123");
+    sRecv.push(MQ::aux::TaskSerial{1,0,0}, "test123");
+    sRecv.push(MQ::aux::TaskSerial{2,0,0}, "test456");
     BOOST_CHECK_EQUAL(sRecv.size(), 2);
 }
 BOOST_AUTO_TEST_CASE(udp)

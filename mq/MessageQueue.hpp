@@ -96,7 +96,10 @@ namespace MQ
             : m_WorkQ(aWorkQ)
             , m_Group(aWorkQ.service(), [this](std::string&& aBody){ writeOut(std::move(aBody)); })
             , m_Transport(aTransport)
-            { }
+            {
+                // silly start with `random` serial, to avoid repeating used values
+                m_Serial = time(nullptr) << 32;
+            }
 
             void push(const std::string& aBody)
             {
@@ -125,6 +128,18 @@ namespace MQ
             }
         };
 
+        struct TaskSerial
+        {
+            uint64_t serial = 0;
+            uint32_t ip = 0;
+            uint16_t port = 0;
+
+            bool operator<(const TaskSerial& aOther) const
+            {
+                return std::tie(serial, ip, port) < std::tie(aOther.serial, aOther.ip, aOther.port);
+            }
+        };
+
         // network transport must call push, and then send ack to server
         // FIXME: add function to save/restore state ?
         class Receiver
@@ -132,7 +147,7 @@ namespace MQ
             mutable std::mutex m_Mutex;
             typedef std::unique_lock<std::mutex> Lock;
             const unsigned   HISTORY_SIZE = 1024;
-            std::set<size_t> m_History;
+            std::set<TaskSerial> m_History;
             Handler          m_Handler;
 
         public:
@@ -141,7 +156,7 @@ namespace MQ
             size_t size() const { return m_History.size(); }
 
             // on query
-            void push(size_t aSerial, std::string&& aBody)
+            void push(const TaskSerial& aSerial, std::string&& aBody)
             {
                 Lock lk(m_Mutex);
                 if (m_History.count(aSerial) == 0)
@@ -149,6 +164,7 @@ namespace MQ
                     lk.unlock();    // call handler without mutex held
                     m_Handler(std::move(aBody));
                     lk.lock();
+                    // FIXME: if multiple senders are used - multi_index + expiration time should be used
                     if (m_History.size() >= HISTORY_SIZE)
                         m_History.erase(m_History.begin());
                     m_History.insert(aSerial);
