@@ -29,6 +29,7 @@ namespace MQ::UDP
         uint64_t serial = 0;
         uint64_t crc    = 0;
         uint16_t size   = 0;
+        uint64_t min_serial = 0; // first serial in task queue on server
     };
 
     struct Reply
@@ -48,7 +49,7 @@ namespace MQ::UDP
         udp::endpoint m_Remote;
         const std::hash<std::string> m_Hash{};
 
-        enum { RETRY_SEC = 5, EXPIRE_BY_TIME = 0, EXPIRE_BY_SERIAL = 1, };
+        enum { RETRY_SEC = 1, EXPIRE_BY_TIME = 0, EXPIRE_BY_SERIAL = 1, };
 
         struct Expire
         {
@@ -75,9 +76,9 @@ namespace MQ::UDP
         XStore m_ExpireState;
         boost::asio::deadline_timer m_RetryTimer;
 
-        void push(size_t aSerial, const std::string& aBody) override
+        void push(size_t aSerial, const std::string& aBody, size_t aMinSerial) override
         {
-            const Header sHeader{aSerial, m_Hash(aBody), (uint16_t)aBody.size()};
+            const Header sHeader{aSerial, m_Hash(aBody), (uint16_t)aBody.size(), aMinSerial};
             std::array<asio::const_buffer, 2> sBuffer;
             sBuffer[0] = asio::buffer(&sHeader, sizeof(sHeader));
             sBuffer[1] = asio::buffer(aBody);
@@ -100,7 +101,7 @@ namespace MQ::UDP
         {
             assert(aSize == sizeof(Reply));
             const Reply* sReply = reinterpret_cast<const Reply*>(m_Buffer.data());
-            std::cerr << "got ack for " << sReply->serial << std::endl;
+            std::cerr << "recv ack for " << sReply->serial << std::endl;
             m_Sender.ack(sReply->serial);
             get<EXPIRE_BY_SERIAL>(m_ExpireState).erase(sReply->serial);
             start();
@@ -114,16 +115,25 @@ namespace MQ::UDP
 
         void retry_proc()
         {
-
+            bool sWasRetry = false;
             const time_t sDeadline = ::time(nullptr);
             for (const auto& x : get<EXPIRE_BY_TIME>(m_ExpireState))
                 if (x.timeout < sDeadline)
                 {
                     std::cerr << "retry for " << x.serial << std::endl;
                     m_Sender.restore(x.serial);
+                    sWasRetry = true;
                 }
                 else
                     break;
+
+            if (!sWasRetry)
+            {
+                const auto sMin = m_Sender.minSerial();
+                std::cerr << "send heartbeat " << sMin << std::endl;
+                const Header sHeader{0, 0, 0, sMin};
+                m_Socket.send_to(asio::buffer(&sHeader, sizeof(sHeader)), m_Endpoint);
+            }
 
             set_timer();
         }
@@ -165,20 +175,27 @@ namespace MQ::UDP
 
         void cb(std::size_t aSize)
         {
-            assert(aSize > sizeof(Header));
+            assert(aSize >= sizeof(Header));
             const Header* sHeader = reinterpret_cast<const Header*>(m_Buffer.data());
             assert(sHeader->size + sizeof(Header) == aSize);
-            std::string sBody = m_Buffer.substr(sizeof(Header), sHeader->size); // FIXME: pass string_vew to user ?
-            assert(m_Hash(sBody) == sHeader->crc);
 
-            std::cerr << "got  task " << sHeader->serial << " with " << sHeader->size << " bytes" << std::endl;
-
+            // m_Remote.address().to_v4().to_uint(), m_Remote.port()
             try
             {
-                // m_Remote.address().to_v4().to_uint(), m_Remote.port()
-                m_Receiver.push(sHeader->serial, std::move(sBody));
-                const Reply sReply{sHeader->serial};
-                m_Socket.send_to(asio::buffer(&sReply, sizeof(sReply)), m_Remote);
+                if (sHeader->size > 0)
+                {
+                    std::cerr << "recv task " << sHeader->serial << " with " << sHeader->size << " bytes" << std::endl;
+                    std::string sBody = m_Buffer.substr(sizeof(Header), sHeader->size); // FIXME: pass string_vew to user ?
+                    assert(m_Hash(sBody) == sHeader->crc);
+                    m_Receiver.push(sHeader->serial, std::move(sBody));
+                    const Reply sReply{sHeader->serial};
+                    m_Socket.send_to(asio::buffer(&sReply, sizeof(sReply)), m_Remote);
+                }
+                else
+                {
+                    std::cerr << "recv heartbeat with first task " << sHeader->min_serial << std::endl;
+                }
+                m_Receiver.clear(sHeader->min_serial);
             }
             catch (const std::exception& e)
             {

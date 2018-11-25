@@ -11,21 +11,21 @@ struct DummySender : MQ::SenderTransport
 {
     MQ::aux::Sender* m_Back = nullptr;
     size_t m_Action = 0;
-    void push(size_t sSerial, const std::string& sData) override
+    void push(size_t aSerial, const std::string& aData, size_t aMinSerial) override
     {
         m_Action++;
         switch (m_Action)
         {
         case 1:
-            BOOST_CHECK_EQUAL(sData, "test123");
-            m_Back->ack(sSerial);
+            BOOST_CHECK_EQUAL(aData, "test123");
+            m_Back->ack(aSerial);
             break;
         case 2:
-            m_Back->restore();
+            m_Back->restore(aSerial);
             break;
         case 3:
-            BOOST_CHECK_EQUAL(sData, "test456test789");
-            m_Back->ack(sSerial);
+            BOOST_CHECK_EQUAL(aData, "test456test789");
+            m_Back->ack(aSerial);
             break;
         }
     }

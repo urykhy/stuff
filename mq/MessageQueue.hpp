@@ -10,7 +10,7 @@ namespace MQ
     // sender call network transport to write out query
     struct SenderTransport
     {
-        virtual void push(size_t, const std::string&) = 0;
+        virtual void push(size_t, const std::string&, size_t) = 0;
     };
 
     enum { MAX_BYTES = 65000 };
@@ -35,7 +35,10 @@ namespace MQ
             {
                 Lock lk(m_Mutex);
                 if (!m_Buffer.empty())
+                {
                     m_Next(std::move(m_Buffer));
+                    m_Buffer.clear();
+                }
                 set_timer();
             }
 
@@ -57,7 +60,10 @@ namespace MQ
             {
                 Lock lk(m_Mutex);
                 if (m_Buffer.size() + aBody.size() > MAX_BYTES)
+                {
                     m_Next(std::move(m_Buffer));
+                    m_Buffer.clear();
+                }
                 m_Buffer.append(aBody);
             }
         };
@@ -87,8 +93,9 @@ namespace MQ
             {
                 Lock lk(m_Mutex);
                 const auto sSerial = ++m_Serial;
-                m_WorkQ.insert([sSerial, aBody, this](){ m_Transport->push(sSerial, aBody); });
-                m_Emit[sSerial] = std::move(aBody);
+                m_Emit[sSerial] = aBody;
+                const size_t sMinSerial = m_Emit.begin()->first;
+                m_WorkQ.insert([sSerial, aBody, sMinSerial, this](){ m_Transport->push(sSerial, aBody, sMinSerial); });
             }
 
         public:
@@ -118,13 +125,26 @@ namespace MQ
                 m_Emit.erase(x);
             }
 
-            // FIXME: add rate limit here ?
-            void restore(size_t aId = 0)
+            size_t minSerial() const
             {
                 Lock lk(m_Mutex);
-                for (const auto& x : m_Emit)
-                    if (aId == 0 or x.first == aId)
-                        m_WorkQ.insert([x, this](){ m_Transport->push(x.first, x.second); });
+                if (m_Emit.empty())
+                    return 0;
+                return m_Emit.begin()->first;
+            }
+
+            void restore(size_t aId)
+            {
+                Lock lk(m_Mutex);
+                if (m_Emit.empty())
+                    return;
+                const size_t sMinSerial = m_Emit.begin()->first;
+
+                const auto sIt = m_Emit.find(aId);
+                if (sIt == m_Emit.end())
+                    return;
+
+                m_WorkQ.insert([x=*sIt, sMinSerial, this](){ m_Transport->push(x.first, x.second, sMinSerial); });
             }
         };
 
@@ -134,7 +154,6 @@ namespace MQ
         {
             mutable std::mutex m_Mutex;
             typedef std::unique_lock<std::mutex> Lock;
-            const unsigned   HISTORY_SIZE = 1024;
             std::set<uint64_t> m_History;
             Handler          m_Handler;
 
@@ -143,8 +162,15 @@ namespace MQ
 
             size_t size() const { return m_History.size(); }
 
+            // clear history
+            void clear(uint64_t aSerial)
+            {
+                while (!m_History.empty() && *m_History.begin() < aSerial)
+                    m_History.erase(m_History.begin());
+            }
+
             // on query
-            void push(const uint64_t aSerial, std::string&& aBody)
+            void push(uint64_t aSerial, std::string&& aBody)
             {
                 Lock lk(m_Mutex);
                 if (m_History.count(aSerial) == 0)
@@ -152,8 +178,6 @@ namespace MQ
                     lk.unlock();    // call handler without mutex held
                     m_Handler(std::move(aBody));
                     lk.lock();
-                    if (m_History.size() >= HISTORY_SIZE)
-                        m_History.erase(m_History.begin());
                     m_History.insert(aSerial);
                 }
             }
