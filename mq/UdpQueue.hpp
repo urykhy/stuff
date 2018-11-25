@@ -175,8 +175,8 @@ namespace MQ::UDP
 
             try
             {
-                const aux::TaskSerial sSerial{sHeader->serial, m_Remote.address().to_v4().to_uint(), m_Remote.port()};
-                m_Receiver.push(sSerial, std::move(sBody));
+                // m_Remote.address().to_v4().to_uint(), m_Remote.port()
+                m_Receiver.push(sHeader->serial, std::move(sBody));
                 const Reply sReply{sHeader->serial};
                 m_Socket.send_to(asio::buffer(&sReply, sizeof(sReply)), m_Remote);
             }

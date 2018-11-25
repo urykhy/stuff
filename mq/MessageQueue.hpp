@@ -128,26 +128,14 @@ namespace MQ
             }
         };
 
-        struct TaskSerial
-        {
-            uint64_t serial = 0;
-            uint32_t ip = 0;
-            uint16_t port = 0;
-
-            bool operator<(const TaskSerial& aOther) const
-            {
-                return std::tie(serial, ip, port) < std::tie(aOther.serial, aOther.ip, aOther.port);
-            }
-        };
-
         // network transport must call push, and then send ack to server
-        // FIXME: add function to save/restore state ?
+        // only one peer supported
         class Receiver
         {
             mutable std::mutex m_Mutex;
             typedef std::unique_lock<std::mutex> Lock;
             const unsigned   HISTORY_SIZE = 1024;
-            std::set<TaskSerial> m_History;
+            std::set<uint64_t> m_History;
             Handler          m_Handler;
 
         public:
@@ -156,7 +144,7 @@ namespace MQ
             size_t size() const { return m_History.size(); }
 
             // on query
-            void push(const TaskSerial& aSerial, std::string&& aBody)
+            void push(const uint64_t aSerial, std::string&& aBody)
             {
                 Lock lk(m_Mutex);
                 if (m_History.count(aSerial) == 0)
@@ -164,7 +152,6 @@ namespace MQ
                     lk.unlock();    // call handler without mutex held
                     m_Handler(std::move(aBody));
                     lk.lock();
-                    // FIXME: if multiple senders are used - multi_index + expiration time should be used
                     if (m_History.size() >= HISTORY_SIZE)
                         m_History.erase(m_History.begin());
                     m_History.insert(aSerial);
