@@ -155,7 +155,8 @@ namespace MQ
             mutable std::mutex m_Mutex;
             typedef std::unique_lock<std::mutex> Lock;
             std::set<uint64_t> m_History;
-            Handler          m_Handler;
+            Handler            m_Handler;
+            uint64_t           m_StartId = 0;
 
         public:
             Receiver(Handler aHandler) : m_Handler(aHandler) {}
@@ -167,13 +168,14 @@ namespace MQ
             {
                 while (!m_History.empty() && *m_History.begin() < aSerial)
                     m_History.erase(m_History.begin());
+                m_StartId = aSerial;
             }
 
             // on query
             void push(uint64_t aSerial, std::string&& aBody)
             {
                 Lock lk(m_Mutex);
-                if (m_History.count(aSerial) == 0)
+                if (aSerial >= m_StartId && m_History.count(aSerial) == 0)
                 {
                     lk.unlock();    // call handler without mutex held
                     m_Handler(std::move(aBody));
