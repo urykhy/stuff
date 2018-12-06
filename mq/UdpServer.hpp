@@ -129,6 +129,7 @@ namespace MQ::UDP
         , m_Sender(aWorkQ, this)
         , m_RetryTimer(aWorkQ.service())
         {
+            std::cerr << "Server: bind to " <<  aConfig.bind() << std::endl;
             m_Buffer.resize(sizeof(Header));
             set_timer();
             start();
@@ -143,6 +144,11 @@ namespace MQ::UDP
             while(!m_Sender.empty())
                 std::this_thread::sleep_for(0.1s);
             std::cerr << "Server: stopped" << std::endl;
+        }
+
+        ~Server()
+        {
+            wait();
         }
     };
 }

@@ -78,6 +78,7 @@ namespace MQ::UDP
         , m_Socket(aWorkQ.service(), aConfig.bind())
         , m_HelloTimer(aWorkQ.service())
         {
+            std::cerr << "Client: bind to " <<  aConfig.bind() << std::endl;
             m_Buffer.resize(MAX_BYTES);
             set_timer();
             start();

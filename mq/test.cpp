@@ -75,6 +75,8 @@ BOOST_AUTO_TEST_CASE(udp)
     Threads::WorkQ sAsio;
     sAsio.start(1, sGroup);
 
+    // test implementation, client and server ips must be provided
+    // 4567 - client port
     // 4568 - server port
     MQ::UDP::Config sClientConfig{"127.0.0.1", 4567, "127.0.0.1", 4568};
     MQ::UDP::Config sServerConfig{"127.0.0.1", 4568, "127.0.0.1", 4567};
