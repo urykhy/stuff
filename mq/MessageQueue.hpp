@@ -13,7 +13,7 @@ namespace MQ
         virtual void push(size_t, const std::string&, size_t) = 0;
     };
 
-    enum { MAX_BYTES = 65000 };
+    enum { MAX_BYTES = 65000, ALIVE_TIME = 5, };
 
     namespace aux
     {
@@ -74,7 +74,7 @@ namespace MQ
         // restore will cause double-send.
         // client should handle this
         //
-        // TODO: add queue size limit ?
+        // TODO: add queue size limit
         //       report queue size in bytes
         class Sender
         {
@@ -85,27 +85,65 @@ namespace MQ
             Group            m_Group;
             SenderTransport* m_Transport;
             size_t           m_Serial = 0;
+            time_t           m_AliveUntil = 0;
+            boost::asio::deadline_timer m_WriteTimer;
 
             using Queue = std::map<size_t, std::string>;
+            Queue m_Queue;
             Queue m_Emit;
 
-            void writeOut(std::string&& aBody)
+            bool alive() const { return m_AliveUntil >= time(nullptr); }
+
+            void queue(std::string&& aBody)
             {
                 Lock lk(m_Mutex);
                 const auto sSerial = ++m_Serial;
-                m_Emit[sSerial] = aBody;
+                m_Queue[sSerial] = std::move(aBody);
+                if (alive())
+                    writeOut();
+            }
+
+            void writeOut()
+            {   // call under mutex
+                if (m_Queue.empty())
+                    return;
+                auto sIt = m_Queue.begin();
+                const auto sSerial = sIt->first;
+                const auto sBody   = sIt->second;
+                m_Emit[sSerial] = sBody;
+                m_Queue.erase(sIt);
+
                 const size_t sMinSerial = m_Emit.begin()->first;
-                m_WorkQ.insert([sSerial, aBody, sMinSerial, this](){ m_Transport->push(sSerial, aBody, sMinSerial); });
+                m_WorkQ.insert([sSerial, sBody, sMinSerial, this](){ m_Transport->push(sSerial, sBody, sMinSerial); });
+            }
+
+            void write_proc()
+            {
+                if (alive())
+                {   // write only one task per step
+                    Lock lk(m_Mutex);
+                    writeOut();
+                }
+
+                set_timer();
+            }
+
+            void set_timer()
+            {
+                m_WriteTimer.expires_from_now(boost::posix_time::milliseconds(1));
+                m_WriteTimer.async_wait([this](auto error){ if (!error) write_proc(); });
             }
 
         public:
             Sender(Threads::WorkQ& aWorkQ, SenderTransport* aTransport)
             : m_WorkQ(aWorkQ)
-            , m_Group(aWorkQ.service(), [this](std::string&& aBody){ writeOut(std::move(aBody)); })
+            , m_Group(aWorkQ.service(), [this](std::string&& aBody){ queue(std::move(aBody)); })
             , m_Transport(aTransport)
+            , m_WriteTimer(aWorkQ.service())
             {
                 // silly start with `random` serial, to avoid repeating used values
                 m_Serial = time(nullptr) << 32;
+                set_timer();
             }
 
             void push(const std::string& aBody)
@@ -113,10 +151,16 @@ namespace MQ
                 m_Group.push(aBody);
             }
 
-            size_t size() const
+            void hello()
             {
                 Lock lk(m_Mutex);
-                return m_Emit.size();
+                m_AliveUntil = time(nullptr) + ALIVE_TIME;
+            }
+
+            void stop()
+            {
+                Lock lk(m_Mutex);
+                m_AliveUntil = 0;
             }
 
             void ack(size_t x)
@@ -146,6 +190,12 @@ namespace MQ
 
                 m_WorkQ.insert([x=*sIt, sMinSerial, this](){ m_Transport->push(x.first, x.second, sMinSerial); });
             }
+
+            bool empty() const
+            {
+                Lock lk(m_Mutex);
+                return m_Emit.empty() && m_Queue.empty();
+            }
         };
 
         // network transport must call push, and then send ack to server
@@ -162,11 +212,12 @@ namespace MQ
             Receiver(Handler aHandler) : m_Handler(aHandler) {}
 
             size_t size() const { return m_History.size(); }
+            bool empty() const { return m_History.empty(); }
 
             // clear history
             void clear(uint64_t aSerial)
             {
-                while (!m_History.empty() && *m_History.begin() < aSerial)
+                while (!m_History.empty() && (*m_History.begin() < aSerial || aSerial == 0))
                     m_History.erase(m_History.begin());
                 m_StartId = aSerial;
             }

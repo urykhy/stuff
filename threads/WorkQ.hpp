@@ -27,5 +27,9 @@ namespace Threads
         asio::io_service& service() {
             return io_service;
         }
+        ~WorkQ()
+        {
+            term();
+        }
     };
 }
