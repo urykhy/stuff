@@ -26,7 +26,6 @@ namespace MQ
             mutable std::mutex m_Mutex;
             typedef std::unique_lock<std::mutex> Lock;
 
-
             std::string                   m_Buffer;
             Handler                       m_Next;
             boost::asio::deadline_timer   m_WriteTimer;
@@ -65,6 +64,12 @@ namespace MQ
                     m_Buffer.clear();
                 }
                 m_Buffer.append(aBody);
+            }
+
+            bool empty() const
+            {
+                Lock lk(m_Mutex);
+                return m_Buffer.empty();
             }
         };
 
@@ -194,7 +199,7 @@ namespace MQ
             bool empty() const
             {
                 Lock lk(m_Mutex);
-                return m_Emit.empty() && m_Queue.empty();
+                return m_Emit.empty() and m_Queue.empty() and m_Group.empty();
             }
         };
 
@@ -218,8 +223,10 @@ namespace MQ
             void clear(uint64_t aSerial)
             {
                 while (!m_History.empty() && (*m_History.begin() < aSerial || aSerial == 0))
+                {
+                    m_StartId = std::max(m_StartId, *m_History.begin());
                     m_History.erase(m_History.begin());
-                m_StartId = aSerial;
+                }
             }
 
             // on query

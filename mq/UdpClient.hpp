@@ -29,7 +29,6 @@ namespace MQ::UDP
             const Header* sHeader = reinterpret_cast<const Header*>(m_Buffer.data());
             assert(sHeader->size + sizeof(Header) == aSize);
 
-            // FIXME: can out of order packets corrupt exit sequence ?
             // m_Remote.address().to_v4().to_uint(), m_Remote.port()
             try
             {

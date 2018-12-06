@@ -20,7 +20,6 @@ namespace MQ::UDP
 
         std::string m_Buffer;
         const std::hash<std::string> m_Hash{};
-        std::atomic_bool m_ClientStop{false};
 
         enum { RETRY_SEC = 1, EXPIRE_BY_TIME = 0, EXPIRE_BY_SERIAL = 1, };
 
@@ -51,7 +50,6 @@ namespace MQ::UDP
 
         void push(size_t aSerial, const std::string& aBody, size_t aMinSerial) override
         {
-            // FIXME: if m_ClientStop - send only retry packets.
             const Header sHeader{aMinSerial, aSerial, m_Hash(aBody), (uint16_t)aBody.size(), 0};
             std::array<asio::const_buffer, 2> sBuffer;
             sBuffer[0] = asio::buffer(&sHeader, sizeof(sHeader));
