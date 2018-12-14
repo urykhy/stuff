@@ -27,7 +27,7 @@ namespace Parser
     T Atof(boost::string_ref aString)
     {
         T sResult = 0;
-        T sOrder = 1;
+        int64_t sOrder = 1;
         bool sPoint = false;
 
         if (!aString.empty() and aString[0]=='-')
@@ -46,9 +46,9 @@ namespace Parser
                 throw NotNumber();
             sResult = sResult * 10 + x - '0';
             if (sPoint)
-                sOrder /= 10.0;
+                sOrder *= 10;
         }
 
-        return sResult * sOrder;
+        return sResult / T(sOrder);
     }
 }
