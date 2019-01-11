@@ -17,10 +17,10 @@ struct MyPerson
 BOOST_AUTO_TEST_SUITE(Protobuf)
 BOOST_AUTO_TEST_CASE(simple)
 {
-	GOOGLE_PROTOBUF_VERIFY_VERSION;
+    GOOGLE_PROTOBUF_VERIFY_VERSION;
 
-	tutorial::Person sPerson;
-	sPerson.set_email("foo@bar.com");
+    tutorial::Person sPerson;
+    sPerson.set_email("foo@bar.com");
     sPerson.set_name("Kevin");
     sPerson.set_id(0x01020304);
 
@@ -65,9 +65,9 @@ BOOST_AUTO_TEST_CASE(simple)
 BOOST_AUTO_TEST_CASE(sint)
 {
     // check signed integer decoder
-	GOOGLE_PROTOBUF_VERIFY_VERSION;
+    GOOGLE_PROTOBUF_VERIFY_VERSION;
 
-	tutorial::Person sPerson;
+    tutorial::Person sPerson;
     sPerson.set_name("dummy");
     sPerson.set_id(-123456);
 
@@ -81,9 +81,9 @@ BOOST_AUTO_TEST_CASE(sint)
 }
 /*BOOST_AUTO_TEST_CASE(person)
 {
-	GOOGLE_PROTOBUF_VERIFY_VERSION;
-	tutorial::Person sPerson;
-	sPerson.set_email("foo@bar.com");
+    GOOGLE_PROTOBUF_VERIFY_VERSION;
+    tutorial::Person sPerson;
+    sPerson.set_email("foo@bar.com");
     sPerson.set_name("Kevin");
     sPerson.set_id(0x01020304);
     auto phone = sPerson.add_phones();
