@@ -14,6 +14,7 @@ namespace Threads
                 asio::io_service::work work(io_service);
                 io_service.run();
             }, n);
+            tg.at_stop([this](){ term(); });
         }
         void insert(std::function<void(void)> f) {
             io_service.post(f);
