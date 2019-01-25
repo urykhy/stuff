@@ -1,12 +1,13 @@
 /*
  *
- * g++ test.cpp -I. -lboost_unit_test_framework
+ * g++ test.cpp -I. -lboost_unit_test_framework -lboost_system -lboost_filesystem
  */
 
 #define BOOST_TEST_DYN_LINK
 #define BOOST_TEST_MODULE Suites
 #include <boost/test/unit_test.hpp>
 #include <File.hpp>
+#include <List.hpp>
 
 BOOST_AUTO_TEST_SUITE(File)
 BOOST_AUTO_TEST_CASE(read)
@@ -23,5 +24,10 @@ BOOST_AUTO_TEST_CASE(read)
         }
         i++;
     });
+}
+BOOST_AUTO_TEST_CASE(list)
+{
+    auto sList = File::ReadDir(".", ".cpp");
+    BOOST_CHECK(sList == File::FileList{"./test.cpp"});
 }
 BOOST_AUTO_TEST_SUITE_END()
