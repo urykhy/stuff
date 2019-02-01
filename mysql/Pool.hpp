@@ -35,10 +35,10 @@ namespace Util
         {
             while (!m_List.empty())
             {
-                auto   i  = m_List.begin();
+                auto   i  = m_List.rbegin();    // pick element with max timestamp
                 time_t ts = i->first;
                 Ptr    x  = i->second;
-                m_List.erase(i);
+                m_List.erase((++i).base());
                 if (is_timedout(ts))
                     continue;
                 if (m_Check(x))
