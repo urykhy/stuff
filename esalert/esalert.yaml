@@ -1,0 +1,18 @@
+config:
+  server: cameron.vpn:9301
+  index:  logstash*
+  size:   50
+  state:  /var/tmp/esalert.state
+email:
+  from: esalert@dark
+  to: ury@dark
+  server: 127.0.0.1
+rules:
+  ssh:
+  - program: sshd
+  tor:
+  - program: Tor
+  upgrade:
+  - program: unattended-upgrade
+  - message: 'Packages that will be upgraded'
+  - regexp: 'Packages that will be upgraded: .*'

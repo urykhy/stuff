@@ -1,0 +1,4 @@
+
+simple log alert for ES
+* send email if have messages
+* store state in file
