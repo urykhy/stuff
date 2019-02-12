@@ -5,6 +5,7 @@
 #include <cassert>
 #include <functional>
 #include <string>
+#include <../unsorted/Raii.hpp>
 
 namespace Curl
 {
@@ -141,6 +142,9 @@ namespace Curl
 
             // set headers
             struct curl_slist *sList = NULL;
+            Util::Raii sCleanup([&sList](){
+                curl_slist_free_all(sList);
+            });
             for (auto& x : m_Params.headers)
             {
                 std::string sLine = x.name + ": " + x.value;
@@ -160,7 +164,6 @@ namespace Curl
                 setopt(CURLOPT_COOKIE, m_Params.cookie.c_str());
 
             auto rc = curl_easy_perform(m_Curl);
-            curl_slist_free_all(sList);
 
             if (rc != CURLE_OK)
                 throw Error(curl_easy_strerror(rc));
