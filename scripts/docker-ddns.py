@@ -67,7 +67,7 @@ def _inspect(cid):
     return [ Container(id_, name, state, ip_addrs) for name in _get_names(name, labels) ]
 
 def _update_ns(name, addr):
-    name = name.translate(None, '-')
+    name = name.replace('-', '')
     print "updating forward zone %s:%s ..." % (name, addr)
     update = dns.update.Update("docker", keyring=KEYRING, keyalgorithm=ALGORITHM)
     update.delete(name, "A")
