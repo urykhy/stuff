@@ -89,6 +89,7 @@ def _update_ns(name, addr):
         print "Failed: %s" % response
 
 def _rm_ns(name, addr):
+    name = name.replace('-', '')
     print "delete from forward zone %s:%s ..." % (name, addr)
     update = dns.update.Update("docker", keyring=KEYRING, keyalgorithm=ALGORITHM)
     update.delete(name, "A")
