@@ -51,7 +51,7 @@ make_server_cert "mail.dark"
 make_server_cert "wifi"
 make_server_cert "racoon"
 make_server_cert "vpn" "mserver"
-make_server_cert "kube"
+make_server_cert "kube" "k8s"
 
 function make_client_cert {
     USAGE=""
@@ -65,12 +65,14 @@ function make_client_cert {
         openssl rsa -in client-$1.key -out client-$1.key -passin pass:$MOBILE_PASS
         openssl pkcs12 -export -in client-$1.crt -inkey client-$1.key -certfile ca.crt -name client-$1 -out client-$1.p12 -passin pass:$MOBILE_PASS -passout pass:$MOBILE_PASS
         openssl x509 -text -in client-$1.crt > client-$1.txt
+        openssl rsa -in client-$1.key -pubout > client-$1.pub
     fi
 }
 make_client_cert "wifi"
 make_client_cert "racoon"
 make_client_cert "ldap"
 make_client_cert "vpn" "mclient"
+make_client_cert "kube"
 
 rm *.csr || true
 

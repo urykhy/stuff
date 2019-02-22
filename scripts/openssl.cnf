@@ -24,3 +24,6 @@ subjectAltName=DNS:nextcloud.elf.dark
 
 [ldap]
 subjectAltName=DNS:ldap.elf.dark
+
+[k8s]
+subjectAltName = IP:172.16.9.1
