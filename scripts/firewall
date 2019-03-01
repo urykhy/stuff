@@ -14,19 +14,22 @@ case "$1" in
             # create ipset rules for tor
             ipset create TOR hash:net
             ipset add TOR 195.82.146.0/24 # rutracker, web
-            ipset add TOR 46.21.250.43   # booktracker
-            ipset add TOR 5.79.86.208    # coollib
-            ipset add TOR 81.17.19.227   # flibusta
-            ipset add TOR 104.24.106.53  # kinozal
+            ipset add TOR 209.99.40.227   # booktracker
+            ipset add TOR 46.21.250.43    # booktracker
+            ipset add TOR 5.79.86.208     # coollib
+            ipset add TOR 81.17.19.227    # flibusta
+            ipset add TOR 104.24.106.53   # kinozal
             ipset add TOR 104.24.107.53
             ipset add TOR 185.191.239.203 # rutor
-            ipset add TOR 185.191.239.205 # rutor
+            ipset add TOR 46.148.17.250   # zerkalo-rutor.org
+            ipset add TOR 46.148.16.85    # free-rutor.org
+            ipset add TOR 87.236.16.100   # rutor.pro
             ipset add TOR 185.141.26.93   # tfile
-            ipset add TOR 188.42.196.32  # lurkmore.to
-            ipset add TOR 81.17.30.22    # nnm-club.me
-            ipset add TOR 217.12.204.113 # maxima-library.org
-            ipset add TOR 91.90.192.40   # mirknig.ws
-            ipset add TOR 80.82.77.83    # sci-hub.io
+            ipset add TOR 188.42.196.32   # lurkmore.to
+            ipset add TOR 81.17.30.22     # nnm-club.me
+            ipset add TOR 217.12.204.113  # maxima-library.org
+            ipset add TOR 91.90.192.40    # mirknig.ws
+            ipset add TOR 80.82.77.83     # sci-hub.io
             ipset add TOR 185.63.144.0/24 # www.slideshare.net
             ipset add TOR 185.63.145.0/24 # www.slideshare.net
             ipset add TOR 185.63.146.0/24 # www.slideshare.net
@@ -36,7 +39,8 @@ case "$1" in
             ipset add TOR 91.225.250.0/24 # ru.linkedin.com
             ipset add TOR 91.225.251.0/24 # ru.linkedin.com
             ipset add TOR 108.174.0.0/20  # linkedin.com
-            ipset add TOR 52.192.0.0/11   # amazon
+            ipset add TOR 104.31.78.144   # rutor
+            ipset add TOR 185.176.192.248 # rutor
 
             # privoxy
             ipset create PROXY hash:net
@@ -106,9 +110,12 @@ case "$1" in
             $ipt -t nat -A OUTPUT -m set --match-set TOR   dst -p tcp -m multiport --dports 80,443 -j DNAT --to-destination 127.0.0.1:9052 # tor
             #$ipt -t nat -A PREROUTING -i br0 -p tcp --dport 80 -j REDIRECT --to-ports 3128
 
+            #$ipt -t nat -A PREROUTING -i wlan1 -p tcp --dport 81 -j DNAT --to-destination 10.103.10.1:80 # nextcloud
+
             # masquerade on output interfaces
-            $ipt -t nat -A POSTROUTING -o eth0  -m set ! --match-set LOCALS dst -j MASQUERADE
-            $ipt -t nat -A POSTROUTING -o wlan1 -m set ! --match-set LOCALS dst -j MASQUERADE
+            #$ipt -t nat -A POSTROUTING -o eth0  -m set ! --match-set LOCALS dst -j MASQUERADE
+            #$ipt -t nat -A POSTROUTING -o wlan1 -m set ! --match-set LOCALS dst -j MASQUERADE
+            $ipt -t nat -A POSTROUTING -o wlan1 -j MASQUERADE
 
             # setup conntrack helpers (or only wifi/eth0?)
             $ipt -t raw -A OUTPUT     -p tcp --dport 21 -j CT --helper ftp
