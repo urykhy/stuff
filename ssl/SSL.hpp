@@ -26,11 +26,11 @@ namespace SSLxx
                 EVP_MD_CTX_destroy(sCtx);
         });
 
-		sCtx = EVP_MD_CTX_create();
+        sCtx = EVP_MD_CTX_create();
         if (sCtx == nullptr) throw Error("EVP_MD_CTX_create");
-		if (1 != EVP_DigestInit_ex(sCtx, aKind, NULL)) throw Error("EVP_DigestInit_ex");
-		if (1 != EVP_DigestUpdate(sCtx, aInput.data(), aInput.size())) throw Error("EVP_DigestUpdate");
-		if (1 != EVP_DigestFinal_ex(sCtx, (uint8_t*)sResult.data(), &sLen)) throw Error("EVP_DigestFinal_ex");
+        if (1 != EVP_DigestInit_ex(sCtx, aKind, NULL)) throw Error("EVP_DigestInit_ex");
+        if (1 != EVP_DigestUpdate(sCtx, aInput.data(), aInput.size())) throw Error("EVP_DigestUpdate");
+        if (1 != EVP_DigestFinal_ex(sCtx, (uint8_t*)sResult.data(), &sLen)) throw Error("EVP_DigestFinal_ex");
 
         assert(sLen == sResult.size());
 
