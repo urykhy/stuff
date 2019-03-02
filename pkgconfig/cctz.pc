@@ -1,0 +1,5 @@
+Name: CCTZ
+Description: computing dates, times and time zones
+Version: 2.2
+Libs: -lcctz
+Cflags: -I/usr/include/cctz

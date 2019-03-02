@@ -1,0 +1,5 @@
+Name: Boost Filesystem
+Description: Boost Filesystem Library
+Version: 1.67
+Libs: -lboost_filesystem
+Cflags:

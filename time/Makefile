@@ -1,10 +1,10 @@
-CCTZ_INC  = -I/usr/include/cctz
-CCTZ_LIB  = -lcctz
-BOOST_LIB  = -lboost_unit_test_framework
+X_INC      = $(shell PKG_CONFIG_PATH="../pkgconfig" pkg-config --cflags cctz)
+X_LIB      = $(shell PKG_CONFIG_PATH="../pkgconfig" pkg-config --libs   cctz)
+BOOST_LIB  = $(shell PKG_CONFIG_PATH="../pkgconfig" pkg-config --libs boost_unit_test_framework)
 STD_FLAGS  = -pthread -ggdb -std=c++14 -O3
 
-CXXFLAGS   = $(CCTZ_INC) $(STD_FLAGS) -I.
-LDFLAGS    = $(CCTZ_LIB) $(BOOST_LIB)
+CXXFLAGS   = $(X_INC) $(STD_FLAGS) -I.
+LDFLAGS    = $(X_LIB) $(BOOST_LIB)
 .PHONY: test clean
 
 a.out: test.cpp

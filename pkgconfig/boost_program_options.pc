@@ -1,0 +1,5 @@
+Name: Boost Program Options
+Description: Boost Program Options Library
+Version: 1.67
+Libs: -lboost_program_options
+Cflags:

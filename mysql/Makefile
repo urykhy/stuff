@@ -1,12 +1,10 @@
-MYSQL_INC  =  $(shell mariadb_config --include)
-MYSQL_LIB  =  $(shell mariadb_config --libs)
-CCTZ_INC   = -I/usr/include/cctz
-CCTZ_LIB   = -lcctz
-BOOST_LIB  = -lboost_filesystem -lboost_system -lboost_unit_test_framework
+X_INC      = $(shell PKG_CONFIG_PATH="../pkgconfig" pkg-config --cflags cctz mariadb)
+X_LIB      = $(shell PKG_CONFIG_PATH="../pkgconfig" pkg-config --libs   cctz mariadb)
+BOOST_LIB  = $(shell PKG_CONFIG_PATH="../pkgconfig" pkg-config --libs   boost_unit_test_framework boost_filesystem boost_system)
 STD_FLAGS  = -pthread -ggdb -std=c++14 -O3
 
-CXXFLAGS   = $(MYSQL_INC) $(CCTZ_INC) $(STD_FLAGS) -I. -I../threads/
-LDFLAGS    = $(MYSQL_LIB) $(CCTZ_LIB) $(BOOST_LIB)
+CXXFLAGS   = $(X_INC) $(STD_FLAGS) -I. -I../threads/
+LDFLAGS    = $(X_LIB) $(BOOST_LIB)
 .PHONY: test clean
 
 a.out: test.cpp

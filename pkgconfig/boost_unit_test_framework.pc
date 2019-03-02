@@ -1,0 +1,5 @@
+Name: boost_unit_test_framework
+Description: Boost Unit Test Framework
+Version: 1.67
+Libs: -lboost_unit_test_framework
+Cflags:

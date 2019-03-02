@@ -1,0 +1,5 @@
+Name: Boost System
+Description: Boost System Library
+Version: 1.67
+Libs: -lboost_system
+Cflags:

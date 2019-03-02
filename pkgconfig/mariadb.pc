@@ -1,0 +1,5 @@
+Name: MariaDB
+Description: MariaDB database connector
+Version: 5.5.1
+Libs: -L/usr/lib/x86_64-linux-gnu -lmariadb
+Cflags: -I/usr/include/mariadb -I/usr/include/mariadb/mysql

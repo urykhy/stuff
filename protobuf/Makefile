@@ -1,11 +1,10 @@
 PROTOBUF_INC   = $(shell pkg-config --cflags protobuf)
-PROTOBUF_LIB   = $(shell pkg-config --libs protobuf)
-PROTOC = protoc
-PROTOCFLAGS = --cpp_out=.
-BENCHMARK_LIB  = -lbenchmark
-
-BOOST_LIB  = -lboost_system -lboost_unit_test_framework
-STD_FLAGS  = -ggdb -std=c++14 -O3
+PROTOBUF_LIB   = $(shell pkg-config --libs   protobuf)
+PROTOC         = protoc
+PROTOCFLAGS    = --cpp_out=.
+BENCHMARK_LIB  = $(shell PKG_CONFIG_PATH="../pkgconfig" pkg-config --libs benchmark)
+BOOST_LIB      = $(shell PKG_CONFIG_PATH="../pkgconfig" pkg-config --libs boost_unit_test_framework boost_system)
+STD_FLAGS      = -ggdb -std=c++14 -O3
 
 CXXFLAGS   = $(PROTOBUF_INC) $(STD_FLAGS) -I.
 LDFLAGS    = $(PROTOBUF_LIB) $(BOOST_LIB)

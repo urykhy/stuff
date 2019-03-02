@@ -1,10 +1,10 @@
-SSL_INC  =  $(shell pkg-config --cflags openssl)
-SSL_LIB  =  $(shell pkg-config --libs openssl)
-BOOST_LIB  = -lboost_unit_test_framework
+X_INC      = $(shell pkg-config --cflags openssl)
+X_LIB      = $(shell PKG_CONFIG_PATH="../pkgconfig" pkg-config --libs openssl)
+BOOST_LIB  = $(shell PKG_CONFIG_PATH="../pkgconfig" pkg-config --libs boost_unit_test_framework)
 STD_FLAGS  = -pthread -ggdb -std=c++14 -O3
 
-CXXFLAGS   = $(SSL_INC) $(STD_FLAGS) -I.
-LDFLAGS    = $(SSL_LIB) $(BOOST_LIB)
+CXXFLAGS   = $(X_INC) $(STD_FLAGS) -I.
+LDFLAGS    = $(X_LIB) $(BOOST_LIB)
 .PHONY: test clean
 
 a.out: test.cpp

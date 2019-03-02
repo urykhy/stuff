@@ -1,0 +1,5 @@
+Name: Boost IO streams
+Description: Boost IO streams Library
+Version: 1.67
+Libs: -lboost_iostreams
+Cflags:

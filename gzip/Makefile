@@ -1,10 +1,10 @@
-A_INC  =  $(shell pkg-config --cflags liblzma liblz4 libzstd)
-A_LIB  =  $(shell pkg-config --libs   liblzma liblz4 libzstd)
-BOOST_LIB  = -lboost_unit_test_framework -lboost_iostreams
+X_INC      = $(shell pkg-config --cflags liblzma liblz4 libzstd)
+X_LIB      = $(shell PKG_CONFIG_PATH="../pkgconfig" pkg-config --libs liblzma liblz4 libzstd)
+BOOST_LIB  = $(shell PKG_CONFIG_PATH="../pkgconfig" pkg-config --libs boost_unit_test_framework boost_iostreams)
 STD_FLAGS  = -pthread -ggdb -std=c++14 -O3
 
-CXXFLAGS   = $(A_INC) $(STD_FLAGS) -I.
-LDFLAGS    = $(A_LIB) $(BOOST_LIB)
+CXXFLAGS   = $(X_INC) $(STD_FLAGS) -I.
+LDFLAGS    = $(X_LIB) $(BOOST_LIB)
 .PHONY: test clean
 
 a.out: test.cpp __static.cpp
