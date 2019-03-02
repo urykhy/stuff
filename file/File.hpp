@@ -30,4 +30,15 @@ namespace File
         }
     }
 
+    inline std::string get_filename(const std::string& str)
+    {
+        size_t found = str.find_last_of("/");
+        return str.substr(found + 1);
+    }
+
+    inline std::string get_basename(const std::string& str)
+    {
+        size_t found = str.find_last_of("/");
+        return str.substr(0, found);
+    }
 }
