@@ -35,5 +35,6 @@ BOOST_AUTO_TEST_CASE(name)
     const std::string sPath="/usr/bin/ls";
     BOOST_CHECK_EQUAL(File::get_filename(sPath), "ls");
     BOOST_CHECK_EQUAL(File::get_basename(sPath), "/usr/bin");
+    BOOST_CHECK_EQUAL(File::get_extension("test.gif"), "gif");
 }
 BOOST_AUTO_TEST_SUITE_END()
