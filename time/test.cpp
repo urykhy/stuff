@@ -9,6 +9,7 @@
 #include <boost/test/unit_test.hpp>
 
 #include <Time.hpp>
+#include <Meter.hpp>
 
 BOOST_AUTO_TEST_SUITE(Time)
 BOOST_AUTO_TEST_CASE(simple)
@@ -31,5 +32,11 @@ BOOST_AUTO_TEST_CASE(period)
 
     BOOST_CHECK_EQUAL(p.round(t.to_time(7700)), t.to_time(7200));
     BOOST_CHECK_EQUAL(p.serial(t.to_time(7700)), 12);
+}
+BOOST_AUTO_TEST_CASE(meter)
+{
+    Time::Meter sMeter;
+    sleep(1);
+    BOOST_CHECK_CLOSE(sMeter.get().to_double(), 1, 0.1); // 0.1%
 }
 BOOST_AUTO_TEST_SUITE_END()
