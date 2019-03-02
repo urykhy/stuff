@@ -3,7 +3,7 @@ A_LIB  =  $(shell pkg-config --libs   liblzma liblz4 libzstd)
 BOOST_LIB  = -lboost_unit_test_framework -lboost_iostreams
 STD_FLAGS  = -pthread -ggdb -std=c++14 -O3
 
-CXXFLAGS   = $(A_INC) $(STD_FLAGS) -I. -I../file/
+CXXFLAGS   = $(A_INC) $(STD_FLAGS) -I.
 LDFLAGS    = $(A_LIB) $(BOOST_LIB)
 .PHONY: test clean
 
@@ -23,3 +23,4 @@ __static.cpp:
 	echo "test stream" | xz    > test.xz  && xxd -i test.xz  >> $@ && rm test.xz
 	echo "test stream" | lz4   > test.lz4 && xxd -i test.lz4 >> $@ && rm test.lz4
 	echo "test stream" | zstd  > test.zst && xxd -i test.zst >> $@ && rm test.zst
+	echo "test stream" | gzip  > concat.gz && echo "other line" | gzip >> concat.gz && xxd -i concat.gz >> $@ && rm concat.gz
