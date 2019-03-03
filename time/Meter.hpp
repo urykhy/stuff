@@ -2,6 +2,7 @@
 #include <stddef.h>
 #include <sys/time.h>
 #include <cmath>
+#include <chrono>
 
 namespace Time
 {
@@ -62,11 +63,25 @@ namespace Time
 
     inline time_val get_time() { return time_val::now(); }
 
+    // old style meter
     class Meter
     {
         const time_val m_Start;
     public:
         Meter() : m_Start(get_time()) { }
         time_val get() const { return get_time() - m_Start; }
+    };
+
+    // new style, with <chrono>
+    class XMeter
+    {
+        std::chrono::high_resolution_clock::time_point start = std::chrono::high_resolution_clock::now();
+    public:
+
+        std::chrono::duration<unsigned, std::nano> duration() const
+        {
+            auto stop = std::chrono::high_resolution_clock::now();
+            return std::chrono::duration_cast<std::chrono::nanoseconds>( stop - start );
+        }
     };
 }

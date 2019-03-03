@@ -1,7 +1,7 @@
 #pragma once
 #include <cmath>
 #include <iostream>
-#include <Group.hpp>
+#include <threads/Group.hpp>
 
 namespace Threads
 {

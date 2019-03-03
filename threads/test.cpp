@@ -8,7 +8,7 @@
 #include <Collect.hpp>
 #include <WorkQ.hpp>
 
-// g++ test.cpp -I. -lboost_system -lboost_unit_test_framework -pthread
+// g++ test.cpp -I. -I.. -lboost_system -lboost_unit_test_framework -pthread
 
 BOOST_AUTO_TEST_SUITE(Threads)
 BOOST_AUTO_TEST_CASE(pipeline)

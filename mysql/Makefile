@@ -3,7 +3,7 @@ X_LIB      = $(shell PKG_CONFIG_PATH="../pkgconfig" pkg-config --libs   cctz mar
 BOOST_LIB  = $(shell PKG_CONFIG_PATH="../pkgconfig" pkg-config --libs   boost_unit_test_framework boost_filesystem boost_system)
 STD_FLAGS  = -pthread -ggdb -std=c++14 -O3
 
-CXXFLAGS   = $(X_INC) $(STD_FLAGS) -I. -I../threads/
+CXXFLAGS   = $(X_INC) $(STD_FLAGS) -I. -I..
 LDFLAGS    = $(X_LIB) $(BOOST_LIB)
 .PHONY: test clean
 

@@ -9,7 +9,7 @@
 #include <Quote.hpp>
 #include <Format.hpp>
 
-#include <TimeMeter.hpp>
+#include <time/Meter.hpp>
 #include <iostream>
 #include <cassert>
 
@@ -32,7 +32,7 @@ BOOST_AUTO_TEST_CASE(simple)
     MySQL::Connection c(cfg);
     std::cout << "connected" << std::endl;
     std::list<Entry> sData;
-    Util::TimeMeter m1;
+    Time::XMeter m1;
     c.Query("select emp_no, salary, from_date, to_date from salaries");
     c.Use([&sData](const MySQL::Row& aRow){
         sData.push_back(Entry{aRow.as_int(0), aRow.as_int(1), aRow.as_str(2), aRow.as_str(3)});
