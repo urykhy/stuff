@@ -5,7 +5,7 @@
 
 namespace Threads
 {
-    void sleep(float f)
+    inline void sleep(float f)
     {
         const struct timespec sleep_time{
             time_t(std::floor(f)),
