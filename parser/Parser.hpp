@@ -22,7 +22,7 @@ namespace Parse
     //
     // parse csv format with quotes
     //
-    // F must return std::string instance to collect characters
+    // F must return std::string pointer to collect characters
     //
     // supported 2 format:
     //   quotes + double quotes.
