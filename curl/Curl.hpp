@@ -49,7 +49,7 @@ namespace Curl
             setopt(CURLOPT_UPLOAD, 1);
             setopt(CURLOPT_INFILESIZE_LARGE, aData.size());
             setopt(CURLOPT_READDATA, this);
-            setopt(CURLOPT_READFUNCTION, &read_proc);
+            setopt(CURLOPT_READFUNCTION, &put_handler);
             m_UploadData = &aData;
             return query(aUrl);
         }
@@ -107,7 +107,7 @@ namespace Curl
             return (*sHandler)(aPtr, aSize*aBlock);
         }
 
-        static size_t handler(void* aPtr, size_t aSize, size_t aBlock, void* aUser)
+        static size_t buf_handler(void* aPtr, size_t aSize, size_t aBlock, void* aUser)
         {
             std::string* sBuffer = reinterpret_cast<std::string*>(aUser);
             sBuffer->append((const char*)aPtr, aSize*aBlock);
@@ -116,7 +116,7 @@ namespace Curl
 
         // Returning 0 will signal end-of-file to the library and cause it to stop the current transfer.
         // Your function must return the actual number of bytes that it stored in the data area pointed at by the pointer buffer.
-        static size_t read_proc(char *buffer, size_t size, size_t nitems, void *aUser)
+        static size_t put_handler(char *buffer, size_t size, size_t nitems, void *aUser)
         {
             Client* self= reinterpret_cast<Client*>(aUser);
             if (self->m_UploadOffset == self->m_UploadData->size())
@@ -150,7 +150,7 @@ namespace Curl
             setopt(CURLOPT_URL, aUrl.c_str());
             if (!aOwnBuffer)
             {
-                setopt(CURLOPT_WRITEFUNCTION, &handler);
+                setopt(CURLOPT_WRITEFUNCTION, &buf_handler);
                 setopt(CURLOPT_WRITEDATA, reinterpret_cast<void*>(&m_Buffer));
             }
             setopt(CURLOPT_FILETIME, 1);
