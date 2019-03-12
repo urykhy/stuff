@@ -32,45 +32,8 @@ namespace Curl
             std::list<Header> headers;
         };
 
-    private:
-        const Params& m_Params;
-        CURL *m_Curl;
-        std::string m_Buffer;
+        using RecvHandler = std::function<size_t (void*, size_t)>;
 
-        const std::string* m_UploadData = nullptr;
-        size_t m_UploadOffset =  0;
-
-        typedef std::function<size_t (void*, size_t)> HandlerT;
-        static size_t handler(void* aPtr, size_t aSize, size_t aBlock, void* aUser)
-        {
-            std::string* sBuffer = reinterpret_cast<std::string*>(aUser);
-            sBuffer->append((const char*)aPtr, aSize*aBlock);
-            return aSize*aBlock;
-        }
-
-        // Returning 0 will signal end-of-file to the library and cause it to stop the current transfer.
-        // Your function must return the actual number of bytes that it stored in the data area pointed at by the pointer buffer.
-        static size_t read_proc(char *buffer, size_t size, size_t nitems, void *aUser)
-        {
-            Client* self= reinterpret_cast<Client*>(aUser);
-            if (self->m_UploadOffset == self->m_UploadData->size())
-                return 0;
-            if (self->m_UploadOffset > self->m_UploadData->size())
-                return CURL_READFUNC_ABORT;
-            size_t sAvail = std::min(size * nitems, self->m_UploadData->size() - self->m_UploadOffset);
-            memcpy(buffer, self->m_UploadData->c_str() + self->m_UploadOffset, sAvail);
-            self->m_UploadOffset += sAvail;
-            return sAvail;
-        }
-
-        int get_http_code()
-        {
-            long sRes = 0;
-            curl_easy_getinfo(m_Curl, CURLINFO_RESPONSE_CODE, &sRes);
-            return sRes;
-        }
-
-    public:
         Client(const Params& aParams) : m_Params(aParams) { m_Curl = curl_easy_init(); assert(m_Curl); }
         ~Client() { curl_easy_cleanup(m_Curl); }
 
@@ -108,6 +71,20 @@ namespace Curl
             }
             return query(aUrl);
         }
+        int GET(const std::string& aUrl, RecvHandler aHandler, time_t aIMS = 0)
+        {
+            clear();
+            if (aIMS > 0)
+            {
+                setopt(CURLOPT_TIMECONDITION, CURL_TIMECOND_IFMODSINCE);
+                setopt(CURLOPT_TIMEVALUE, aIMS);
+            }
+
+            void* sUser = reinterpret_cast<void*>(&aHandler);
+            setopt(CURLOPT_WRITEFUNCTION, stream_handler);
+            setopt(CURLOPT_WRITEDATA, sUser);
+            return query(aUrl, true).first;
+        }
 
         time_t get_mtime()
         {
@@ -117,6 +94,49 @@ namespace Curl
         }
 
     protected:
+        const Params& m_Params;
+        CURL *m_Curl;
+        std::string m_Buffer;
+
+        const std::string* m_UploadData = nullptr;
+        size_t m_UploadOffset =  0;
+
+        static size_t stream_handler(void* aPtr, size_t aSize, size_t aBlock, void* aUser)
+        {
+            RecvHandler* sHandler = reinterpret_cast<RecvHandler*>(aUser);
+            return (*sHandler)(aPtr, aSize*aBlock);
+        }
+
+        static size_t handler(void* aPtr, size_t aSize, size_t aBlock, void* aUser)
+        {
+            std::string* sBuffer = reinterpret_cast<std::string*>(aUser);
+            sBuffer->append((const char*)aPtr, aSize*aBlock);
+            return aSize*aBlock;
+        }
+
+        // Returning 0 will signal end-of-file to the library and cause it to stop the current transfer.
+        // Your function must return the actual number of bytes that it stored in the data area pointed at by the pointer buffer.
+        static size_t read_proc(char *buffer, size_t size, size_t nitems, void *aUser)
+        {
+            Client* self= reinterpret_cast<Client*>(aUser);
+            if (self->m_UploadOffset == self->m_UploadData->size())
+                return 0;
+            if (self->m_UploadOffset > self->m_UploadData->size())
+                return CURL_READFUNC_ABORT;
+            size_t sAvail = std::min(size * nitems, self->m_UploadData->size() - self->m_UploadOffset);
+            memcpy(buffer, self->m_UploadData->c_str() + self->m_UploadOffset, sAvail);
+            self->m_UploadOffset += sAvail;
+            return sAvail;
+        }
+
+        int get_http_code()
+        {
+            long sRes = 0;
+            curl_easy_getinfo(m_Curl, CURLINFO_RESPONSE_CODE, &sRes);
+            return sRes;
+        }
+
+
         void clear()
         {
             curl_easy_reset(m_Curl);
@@ -124,12 +144,15 @@ namespace Curl
             m_UploadData = nullptr;
         }
 
-        Result query(const std::string& aUrl)
+        Result query(const std::string& aUrl, bool aOwnBuffer = false)
         {
             m_Buffer.clear();
             setopt(CURLOPT_URL, aUrl.c_str());
-            setopt(CURLOPT_WRITEFUNCTION, &handler);
-            setopt(CURLOPT_WRITEDATA, reinterpret_cast<void*>(&m_Buffer));
+            if (!aOwnBuffer)
+            {
+                setopt(CURLOPT_WRITEFUNCTION, &handler);
+                setopt(CURLOPT_WRITEDATA, reinterpret_cast<void*>(&m_Buffer));
+            }
             setopt(CURLOPT_FILETIME, 1);
             setopt(CURLOPT_NOSIGNAL, 1);
             setopt(CURLOPT_FOLLOWLOCATION, 1);

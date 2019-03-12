@@ -48,4 +48,16 @@ BOOST_AUTO_TEST_CASE(Methods)
     BOOST_CHECK_EQUAL(sResult.second, "OK");
 
 }
+BOOST_AUTO_TEST_CASE(Stream)
+{
+    Curl::Client::Params sParams;
+    Curl::Client sClient(sParams);
+    std::string sResult;
+    int sCode = sClient.GET("http://127.0.0.1:8080/hello", [&sResult](void* aPtr, size_t aSize) -> size_t {
+        sResult.append((char*)aPtr, aSize);
+        return aSize;
+    });
+    BOOST_CHECK_EQUAL(sCode, 200);
+    BOOST_CHECK_EQUAL(sResult, "Hello World!");
+}
 BOOST_AUTO_TEST_SUITE_END()
