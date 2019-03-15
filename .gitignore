@@ -34,8 +34,7 @@ Testing
 bin
 cmake_install.cmake
 
-# protobuf tmp
 rpc.pb.*
 *.beam
 erl_crash.dump
-
+build

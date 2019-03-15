@@ -51,7 +51,7 @@ case "$1" in
         done
 
         # mark from iptables
-		$filter parent 1: prio 3 handle 0xa fw flowid 1:102     # long downloads
+		#$filter parent 1: prio 3 handle 0xa fw flowid 1:102     # long downloads
 		$filter parent 1: prio 3 handle 0xb fw flowid 1:101     # skype
 		$filter parent 1: prio 3 handle 0xc fw flowid 1:100     # dnscrypt
 

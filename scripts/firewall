@@ -41,6 +41,7 @@ case "$1" in
             ipset add TOR 108.174.0.0/20  # linkedin.com
             ipset add TOR 104.31.78.144   # rutor
             ipset add TOR 185.176.192.248 # rutor
+            ipset add TOR 91.132.60.14    # rutor
 
             # privoxy
             ipset create PROXY hash:net
@@ -114,8 +115,8 @@ case "$1" in
 
             # masquerade on output interfaces
             #$ipt -t nat -A POSTROUTING -o eth0  -m set ! --match-set LOCALS dst -j MASQUERADE
-            #$ipt -t nat -A POSTROUTING -o wlan1 -m set ! --match-set LOCALS dst -j MASQUERADE
-            $ipt -t nat -A POSTROUTING -o wlan1 -j MASQUERADE
+            $ipt -t nat -A POSTROUTING -o wlan1 -m set ! --match-set LOCALS dst -j MASQUERADE
+            #$ipt -t nat -A POSTROUTING -o wlan1 -j MASQUERADE
 
             # setup conntrack helpers (or only wifi/eth0?)
             $ipt -t raw -A OUTPUT     -p tcp --dport 21 -j CT --helper ftp

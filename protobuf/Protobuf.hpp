@@ -126,7 +126,7 @@ namespace Protobuf
 
         void skip(const FieldInfo& aField)
         {
-            int sSize = aField.decodeSize();
+            size_t sSize = aField.decodeSize();
             if (sSize == 4 || sSize == 8)
             {
                 m_Buffer.remove_prefix(sSize);
