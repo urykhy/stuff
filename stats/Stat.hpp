@@ -76,20 +76,35 @@ namespace Stat
 
 #ifdef STAT_ENABLE_TAGS
 
-    template <typename T, typename = std::enable_if_t<std::is_same<Stat::Count, typename T::S>::value>>
-    void set(size_t v) { T::m_Element->set(v); }
-    template <typename T, typename = std::enable_if_t<std::is_same<Stat::Count, typename T::S>::value>>
-    void update(size_t v) { T::m_Element->set(v); }
+    template<class T> struct dependent_false : std::false_type {};
 
-    template <typename T, typename = std::enable_if_t<std::is_same<Stat::Time, typename T::S>::value>>
-    void set(double v) { T::m_Element->set(v); }
-    template <typename T, typename = std::enable_if_t<std::is_same<Stat::Time, typename T::S>::value>>
-    void update(double v) { T::m_Element->set(v); }
-
-    template <typename T, typename = std::enable_if_t<std::is_same<Stat::Bool, typename T::S>::value>>
-    void set() { T::m_Element->set(); }
-    template <typename T, typename = std::enable_if_t<std::is_same<Stat::Bool, typename T::S>::value>>
-    void clear() { T::m_Element->clear(); }
+    template <typename T>
+    void set(size_t v)
+    {
+        if constexpr (std::is_same_v<Stat::Count, typename T::S>
+                   or std::is_same_v<Stat::Time, typename T::S>
+                   or std::is_same_v<Stat::Bool, typename T::S>)
+            T::m_Element->set(v);
+        else
+            static_assert(dependent_false<T>::value);
+    }
+    template <typename T>
+    void update(size_t v)
+    {
+        if constexpr (std::is_same_v<Stat::Count, typename T::S>
+                   or std::is_same_v<Stat::Time, typename T::S>)
+            T::m_Element->update(v);
+        else
+            static_assert(dependent_false<T>::value);
+    }
+    template <typename T>
+    void clear()
+    {
+        if constexpr (std::is_same_v<Stat::Bool, typename T::S>)
+            T::m_Element->clear();
+        else
+            static_assert(dependent_false<T>::value);
+    }
 
 #define STAT_DECLARE_TAG(element, tag_name)                     \
     struct tag_name {                                           \

@@ -3,7 +3,7 @@
 .SUFFIXES:
 MAKEFLAGS += -r
 
-CXXFLAGS  = -std=c++14 -I. -O0 -ggdb -pedantic -W -Wall -pthread
+CXXFLAGS  = -std=c++17 -I. -O0 -ggdb -pedantic -W -Wall -pthread
 LDFLAGS   = -pthread -lboost_unit_test_framework
 GENERATED = $(patsubst %.yml,%.hpp,$(wildcard *.yml))
 TARGETS   = $(patsubst %.cpp,%,$(wildcard test*.cpp))
