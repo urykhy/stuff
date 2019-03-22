@@ -5,6 +5,7 @@ protoc    = find_program('protoc', required : true)
 protobuf  = dependency('protobuf', required : true)
 benchmark = dependency('benchmark', required : true)
 boost     = dependency('boost', modules : ['unit_test_framework', 'system'])
+threads   = dependency('threads')
 
 generator = generator(protoc, \
   output    : ['@BASENAME@.pb.cc', '@BASENAME@.pb.h'],
