@@ -26,4 +26,15 @@ BOOST_AUTO_TEST_CASE(encrypt_aes_gcm)
     auto sDecrypt = Decrypt(sResult, sCfg);
     BOOST_CHECK_EQUAL(sDecrypt, sMessage);
 }
+BOOST_AUTO_TEST_CASE(hmac)
+{
+    using namespace SSLxx::HMAC;
+
+    const std::string sData = "qwerty";
+    const Key sKey("secret");
+
+    const std::string sTmp = Sign(sData, sKey, EVP_sha256());
+    BOOST_CHECK(Verify(sData, sTmp, sKey, EVP_sha256()));
+    BOOST_CHECK_EQUAL(Verify(sData + "x", sTmp, sKey, EVP_sha256()), false);
+}
 BOOST_AUTO_TEST_SUITE_END()

@@ -16,9 +16,9 @@ namespace SSLxx
     // aKind is a EVP_sha256() for example
     inline std::string Digest(const std::string& aInput, const EVP_MD* aKind)
     {
+        unsigned int sLen = EVP_MD_size(aKind);
         std::string sResult;
-        sResult.resize(EVP_MD_size(aKind));
-        unsigned int sLen = 0;
+        sResult.resize(sLen);
 
         EVP_MD_CTX* sCtx = nullptr;
         Util::Raii sCleanup([&sCtx](){
@@ -139,4 +139,51 @@ namespace GCM
         return sResult;
     }
 } // GCM
+
+namespace HMAC
+{
+    class Key
+    {
+        EVP_PKEY *m_Key = nullptr;
+    public:
+        Key(const std::string& aKey) : m_Key(EVP_PKEY_new_mac_key(EVP_PKEY_HMAC, NULL, (const uint8_t*)aKey.data(), aKey.size()))
+        {
+            if (m_Key == nullptr)
+                throw Error("EVP_PKEY_new_mac_key");
+        }
+
+        ~Key() { EVP_PKEY_free(m_Key); }
+        operator EVP_PKEY* () const { return m_Key; }
+    };
+
+    // EVP_sha256()
+    inline std::string Sign(const std::string& aInput, const Key& aKey, const EVP_MD* aKind)
+    {
+        size_t sLen = EVP_MD_size(aKind);
+        std::string sResult;
+        sResult.resize(sLen);
+
+        EVP_MD_CTX* sCtx = nullptr;
+        Util::Raii sCleanup([&sCtx](){ if (sCtx != nullptr) EVP_MD_CTX_destroy(sCtx); });
+        sCtx = EVP_MD_CTX_create();
+        if (sCtx == nullptr) throw Error("EVP_MD_CTX_create");
+
+        if (1 != EVP_DigestInit_ex(sCtx, aKind, NULL)) throw Error("EVP_DigestInit_ex");
+        if (1 != EVP_DigestSignInit(sCtx, NULL, aKind, NULL, aKey)) throw Error("EVP_DigestSignInit");
+        if (1 != EVP_DigestSignUpdate(sCtx, aInput.data(), aInput.size())) throw Error("EVP_DigestSignUpdate");
+        if (1 != EVP_DigestSignFinal(sCtx, (uint8_t*)sResult.data(), &sLen)) throw Error("EVP_DigestSignFinal");
+
+        assert(sLen == sResult.size());
+
+        return sResult;
+    }
+
+    bool Verify(const std::string& aInput, const std::string& aHash, const Key& aKey, const EVP_MD* aKind)
+    {
+        const std::string sHash = Sign(aInput, aKey, aKind);
+        assert(sHash.size() == aHash.size());
+        return 0 == CRYPTO_memcmp(sHash.data(), aHash.data(), aHash.size());
+    }
+} // HMAC
+
 }
