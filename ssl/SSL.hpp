@@ -42,6 +42,18 @@ namespace SSLxx
         return Parser::to_hex(Digest(aInput, aKind));
     }
 
+    inline uint64_t DigestHash(const std::string& aInput, const EVP_MD* aKind)
+    {
+        const auto sData = Digest(aInput, aKind);
+        const char* sPtr = sData.data() + sData.size() - sizeof(uint64_t);
+        return *reinterpret_cast<const uint64_t*>(sPtr);
+    }
+
+    inline bool DigestNth(const std::string& aInput, const EVP_MD* aKind, uint64_t aPart)
+    {
+        return DigestHash(aInput, aKind) % aPart == 0;
+    }
+
     inline std::string Scrypt(const std::string& aPass, const std::string& aSalt, size_t aSize)
     {
         std::string sResult(aSize, ' ');
