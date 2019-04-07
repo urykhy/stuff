@@ -2,8 +2,8 @@
 #include <map>
 #include <string>
 
-namespace Cache {
-
+namespace Container 
+{
     // http://www.codinginlondon.com/2009/05/cheap-ioc-in-native-c.html
 
     class IoC
