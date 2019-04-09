@@ -1,6 +1,6 @@
 /*
  *
- * g++ test.cpp -I. -lboost_unit_test_framework -lboost_system -lboost_filesystem
+ * g++ test.cpp -I. -I.. -lboost_unit_test_framework -lboost_system -lboost_filesystem
  */
 
 #define BOOST_TEST_DYN_LINK
@@ -36,5 +36,10 @@ BOOST_AUTO_TEST_CASE(name)
     BOOST_CHECK_EQUAL(File::get_filename(sPath), "ls");
     BOOST_CHECK_EQUAL(File::get_basename(sPath), "/usr/bin");
     BOOST_CHECK_EQUAL(File::get_extension("test.gif"), "gif");
+}
+BOOST_AUTO_TEST_CASE(glob)
+{
+    auto sList = File::Glob("./*.cpp");
+    BOOST_CHECK(sList == File::FileList{"./test.cpp"});
 }
 BOOST_AUTO_TEST_SUITE_END()

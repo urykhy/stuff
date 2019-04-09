@@ -1,7 +1,9 @@
 #pragma once
 
+#include <glob.h>
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/filesystem.hpp>
+#include <unsorted/Raii.hpp>
 
 namespace File
 {
@@ -27,6 +29,21 @@ namespace File
             if (boost::algorithm::ends_with(sName, aExt))
                 sResult.push_back(sName);
         }
+
+        return sResult;
+    }
+
+    FileList Glob(const std::string& aPattern)
+    {
+        FileList sResult;
+        glob_t sGlob;
+        Util::Raii sCleanup([&sGlob](){ globfree(&sGlob); });
+
+        if ( 0 != glob(aPattern.c_str(), GLOB_ERR | GLOB_MARK | GLOB_TILDE_CHECK, nullptr, &sGlob))
+            throw std::runtime_error("File::Glob failed");
+
+        for (int i = 0; i < sGlob.gl_pathc; i++)
+            sResult.push_back(sGlob.gl_pathv[i]);
 
         return sResult;
     }
