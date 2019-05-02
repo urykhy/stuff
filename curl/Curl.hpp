@@ -64,22 +64,13 @@ namespace Curl
         Result GET(const std::string& aUrl, time_t aIMS = 0)
         {
             clear();
-            if (aIMS > 0)
-            {
-                setopt(CURLOPT_TIMECONDITION, CURL_TIMECOND_IFMODSINCE);
-                setopt(CURLOPT_TIMEVALUE, aIMS);
-            }
+            set_ims(aIMS);
             return query(aUrl);
         }
         int GET(const std::string& aUrl, RecvHandler aHandler, time_t aIMS = 0)
         {
             clear();
-            if (aIMS > 0)
-            {
-                setopt(CURLOPT_TIMECONDITION, CURL_TIMECOND_IFMODSINCE);
-                setopt(CURLOPT_TIMEVALUE, aIMS);
-            }
-
+            set_ims(aIMS);
             void* sUser = reinterpret_cast<void*>(&aHandler);
             setopt(CURLOPT_WRITEFUNCTION, stream_handler);
             setopt(CURLOPT_WRITEDATA, sUser);
@@ -100,6 +91,14 @@ namespace Curl
 
         const std::string* m_UploadData = nullptr;
         size_t m_UploadOffset =  0;
+
+        void set_ims(time_t aIMS) {
+            if (aIMS > 0)
+            {
+                setopt(CURLOPT_TIMECONDITION, CURL_TIMECOND_IFMODSINCE);
+                setopt(CURLOPT_TIMEVALUE, aIMS);
+            }
+        }
 
         static size_t stream_handler(void* aPtr, size_t aSize, size_t aBlock, void* aUser)
         {
