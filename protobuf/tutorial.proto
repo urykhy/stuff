@@ -24,3 +24,9 @@ message Person {
 message AddressBook {
   repeated Person people = 1;
 }
+
+message xtest {
+    optional fixed32 i32 = 1; // fixed
+    optional sint32  s32 = 2; // zigzag
+    optional float   f32 = 3; // fixed, float32
+}

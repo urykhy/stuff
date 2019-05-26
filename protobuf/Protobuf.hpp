@@ -1,6 +1,7 @@
 #pragma once
 
 #include <boost/utility/string_ref.hpp>
+#include <cstring>
 #include <stdexcept>
 #include <string>
 
@@ -92,9 +93,6 @@ namespace Protobuf
             return FieldInfo(readByte());
         }
 
-        // ZigZag not supported (sint32/64 in schema)
-        // fixed width not supported (fixed64, sfixed64, double, fixed32, sfixed32, float)
-
         template<class T>
         T readVarInt()
         {
@@ -148,18 +146,52 @@ namespace Protobuf
             m_Buffer.remove_prefix(sSize);
         }
 
+        // from wire_format_lite.h, unsigned to signed
+        template<class T> typename std::make_signed<T>::type ZigZagDecode(T n) { return (n >> 1) ^ -static_cast<typename std::make_signed<T>::type>(n & 1); }
+
+        template<class T>
+        void readFixed(T& aDest)
+        {
+            if (sizeof(T) > m_Buffer.size())
+                throw BadInput();
+            memcpy(&aDest, m_Buffer.data(), sizeof(T));
+            m_Buffer.remove_prefix(sizeof(T));
+        }
+
     public:
 
         Walker(const Buffer& aBuffer)
         : m_Buffer(aBuffer)
         { }
 
+
+        enum IntType {
+            NORMAL = 0, // standard variable-length encoding
+            FIXED,      // fixed/sfixed
+            ZIGZAG,     // sint
+        };
+
         // get destination in argument
         template<class T>
         typename std::enable_if<
-            std::is_arithmetic<T>::value, void
+            std::is_floating_point<T>::value, void
         >::type
-        read(T& aDest) { aDest = readVarInt<T>(); }
+        read(T& aDest) {
+            readFixed(aDest);
+        }
+
+        template<class T>
+        typename std::enable_if<
+            std::is_integral<T>::value, void
+        >::type
+        read(T& aDest, IntType mode = NORMAL) {
+            switch (mode)
+            {
+            case NORMAL: aDest = readVarInt<T>(); break;
+            case FIXED: readFixed(aDest); break;
+            case ZIGZAG: aDest = readVarInt<T>(); aDest = ZigZagDecode(aDest); break;
+            }
+        }
 
         template<class T>
         typename std::enable_if<

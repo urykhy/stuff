@@ -79,6 +79,28 @@ BOOST_AUTO_TEST_CASE(sint)
     const auto sTag1 = sWalker.readTag(); BOOST_CHECK_EQUAL(1, sTag1.id); sWalker.skip(sTag1);
     const auto sTag2 = sWalker.readTag(); BOOST_CHECK_EQUAL(2, sTag2.id); BOOST_CHECK_EQUAL(sPerson.id(), sWalker.readVarInt<int64_t>());
 }
+BOOST_AUTO_TEST_CASE(xdecode)
+{
+    GOOGLE_PROTOBUF_VERIFY_VERSION;
+
+    tutorial::xtest sMessage;
+    sMessage.set_i32(123);  // fixed
+    sMessage.set_s32(-45);  // zz
+    sMessage.set_f32(-4.6); // fixed float
+
+    std::string sBuf;
+    sMessage.SerializeToString(&sBuf);
+
+    Protobuf::Buffer sInput(sBuf);
+    Protobuf::Walker sWalker(sInput);
+
+    uint32_t i32 = 0;
+    int32_t  s32 = 0;
+    float    f32 = 0;
+    const auto sTag1 = sWalker.readTag(); BOOST_CHECK_EQUAL(1, sTag1.id); sWalker.read(i32, Protobuf::Walker::FIXED); BOOST_CHECK_EQUAL(sMessage.i32(), i32);
+    const auto sTag2 = sWalker.readTag(); BOOST_CHECK_EQUAL(2, sTag2.id); sWalker.read(s32, Protobuf::Walker::ZIGZAG); BOOST_CHECK_EQUAL(sMessage.s32(), s32);
+    const auto sTag3 = sWalker.readTag(); BOOST_CHECK_EQUAL(3, sTag3.id); sWalker.read(f32); BOOST_CHECK_EQUAL(sMessage.f32(), f32);
+}
 /*BOOST_AUTO_TEST_CASE(person)
 {
     GOOGLE_PROTOBUF_VERIFY_VERSION;
