@@ -1,0 +1,5 @@
+Name: boost_coroutine
+Description: Boost Coroutines
+Version: 1.70
+Libs: -L/home/ury/tmp/boost1.70/lib -lboost_coroutine -lboost_chrono -lboost_context -lboost_thread
+Cflags: -I/home/ury/tmp/boost1.70/include
