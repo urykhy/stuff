@@ -113,7 +113,8 @@ for container in client.containers():
     for rec in _inspect(container['Id']):
         if rec.running:
             for addr in rec.addrs:
-                _update_ns(rec.name, addr)
+                if len(addr) > 0:
+                    _update_ns(rec.name, addr)
 
 for raw in events:
     evt = json.loads(raw)
@@ -126,7 +127,8 @@ for raw in events:
             for rec in _inspect(cid):
                 for addr in rec.addrs:
                     for addr in rec.addrs:
-                        _update_ns(rec.name, addr)
+                        if len(addr) > 0:
+                            _update_ns(rec.name, addr)
         if status == 'kill':
             for rec in _inspect(cid):
                 for addr in rec.addrs:
