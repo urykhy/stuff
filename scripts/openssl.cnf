@@ -26,4 +26,7 @@ subjectAltName=DNS:nextcloud.elf.dark
 subjectAltName=DNS:ldap.elf.dark
 
 [k8s]
-subjectAltName = IP:172.16.9.1
+subjectAltName = IP:172.16.9.3, IP:172.16.9.1, DNS:kubernetes, DNS:master.kubernets.docker
+
+[unbound]
+subjectAltName = IP:5.2.77.146

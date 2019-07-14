@@ -52,6 +52,7 @@ make_server_cert "wifi"
 make_server_cert "racoon"
 make_server_cert "vpn" "mserver"
 make_server_cert "kube" "k8s"
+make_server_cert "unbound" "unbound"
 
 function make_client_cert {
     USAGE=""
