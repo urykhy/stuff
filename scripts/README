@@ -9,4 +9,3 @@
 * zram           - script to create compressed swap and tmp folders in ram
 * make_deb.py    - script to make debian package from yaml description
 * network-namespace.sh - script to start vpn for only one app
-* backuper       - backup folders with restic,rsync,rclone,tar.
