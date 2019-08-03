@@ -4,6 +4,7 @@
 #include <sstream>
 #include <list>
 #include <List.hpp>
+#include <Float.hpp>
 
 #if 0
 g++ test-format.cpp -std=c++14 -I . -lboost_unit_test_framework
@@ -20,5 +21,11 @@ BOOST_AUTO_TEST_CASE(list)
     a.str("");
     Format::List(a, list, [](int x ) -> std::string { return std::to_string(x*x); });
     BOOST_CHECK_EQUAL(a.str(), "1, 4, 9");
+}
+BOOST_AUTO_TEST_CASE(float_precision)
+{
+    BOOST_CHECK_EQUAL("123.46", Format::with_precision(123.4567890, 2));
+    BOOST_CHECK_EQUAL("123.00", Format::with_precision(123, 2));
+    BOOST_CHECK_EQUAL("0.12", Format::with_precision(0.123456, 2));
 }
 BOOST_AUTO_TEST_SUITE_END()
