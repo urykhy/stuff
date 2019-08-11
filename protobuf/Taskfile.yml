@@ -1,0 +1,41 @@
+version:  '2'
+
+vars:
+  CFLAGS: "-ggdb -std=c++14 -O3 -I."
+  PROTO: "`pkg-config --cflags --libs protobuf`"
+  BOOST: "`PKG_CONFIG_PATH='../pkgconfig' pkg-config --libs boost_unit_test_framework boost_system`"
+  BENCH: "`PKG_CONFIG_PATH='../pkgconfig' pkg-config --libs benchmark`"
+
+tasks:
+  proto:
+    desc: generate protobuf stub
+    cmds:
+      - protoc --cpp_out=. tutorial.proto
+    sources:
+      - tutorial.proto
+    generates:
+      - tutorial.pb.cc
+      - tutorial.pb.h
+    silent: true
+  test:
+    desc: build test
+    cmds:
+      - task: proto
+      - g++ test.cpp tutorial.pb.cc -o a.out {{.CFLAGS}} {{.PROTO}} {{.BOOST}}
+      - ./a.out
+    sources:
+      - test.cpp
+      - tutorial.pb.cc
+    generates:
+      - a.out
+  benchmark:
+    desc: build benchmark
+    cmds:
+      - task: proto
+      - g++ benchmark.cpp tutorial.pb.cc -o b.out {{.CFLAGS}} {{.PROTO}} {{.BOOST}} {{.BENCH}}
+      - ./b.out
+    sources:
+      - benchmark.cpp
+      - tutorial.pb.cc
+    generates:
+      - b.aout
