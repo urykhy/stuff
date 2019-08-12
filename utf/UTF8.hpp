@@ -40,7 +40,7 @@ namespace UTF8
             if (c <= 0x7F) m_Char = c;
             else if (c <= 0xDF) m_Char = c & 0x1F;
             else if (c <= 0xEF) m_Char = c & 0x0F;
-            else if (c <= 0xF4) m_Char = c & 0x07;
+            else if (c <= 0xF7) m_Char = c & 0x07;
             //std::cout << "init char is " << std::hex << m_Char << " ( from " << (unsigned)(unsigned char)cs << ")" << std::endl;
         }
 
@@ -83,19 +83,18 @@ namespace UTF8
             }
         }
 
-        bool done() const
-        {
-            return m_XSize == 0;
-        }
+        bool done() const { return m_XSize == 0; }
+        uint32_t sym() const { return m_Char; }
     };
 
-    inline void Validate(const std::string aStr)
+    inline uint32_t Validate(const std::string& aStr)
     {
         CharDecoder sDecoder;
         for (const char a : aStr)
             sDecoder.push_back(a);
         if (!sDecoder.done())
             throw BadCharacter();
+        return sDecoder.sym();
     }
 }
 
