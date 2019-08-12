@@ -40,7 +40,7 @@ namespace UTF8
             if (c <= 0x7F) m_Char = c;
             else if (c <= 0xDF) m_Char = c & 0x1F;
             else if (c <= 0xEF) m_Char = c & 0x0F;
-            else if (c <= 0xF4) m_Char = c & 0x08;
+            else if (c <= 0xF4) m_Char = c & 0x07;
             //std::cout << "init char is " << std::hex << m_Char << " ( from " << (unsigned)(unsigned char)cs << ")" << std::endl;
         }
 
