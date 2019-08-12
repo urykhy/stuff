@@ -2,11 +2,11 @@
 
 NAME=protonvpn
 
-__already_active=`ip netns | grep $NAME | wc -l`
+__already_active=`sudo ip netns exec $NAME ip a show tun0 | grep tun0 | grep ',UP,' | wc -l`
 if [ "$__already_active" -eq "0" ]; then
     zenity --notification --text "start proton vpn ..."
     sudo ~/bin/network-namespace.sh
-    for i in {1..5}
+    for i in {1..10}
     do
         sleep 1;
         __is_up=`sudo ip netns exec $NAME ip a show tun0 | grep tun0 | grep ',UP,' | wc -l`
@@ -19,4 +19,4 @@ if [ "$__already_active" -eq "0" ]; then
         exit
     fi
 fi
-sudo ip netns exec $NAME su ury -c "firefox --no-remote --profile ~/.mozilla/firefox/i4dng3ed.yandex"
+sudo ip netns exec $NAME su ury -c "MOZ_WEBRENDER=1 firefox --no-remote --profile ~/.mozilla/firefox/i4dng3ed.yandex"
