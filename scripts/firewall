@@ -100,6 +100,7 @@ case "$1" in
             # syncthing and torrents and i2p
             $ipt -A INPUT -p udp -m multiport --dports 21027,6771,6881 -j ACCEPT
             $ipt -A INPUT -p tcp -m multiport --dports 22000,6771,6881,61089 -j ACCEPT
+            #$ipt -A INPUT -p tcp -m multiport --dports 9001,9030 -j ACCEPT # tor
             # drop others
             $ipt -A INPUT -j $NFLOG --nflog-prefix "in"
             $ipt -A INPUT -j REJECT
