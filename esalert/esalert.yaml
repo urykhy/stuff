@@ -5,7 +5,7 @@ config:
   state:  /var/tmp/esalert.state
 email:
   from: esalert@dark
-  to: ury@dark
+  to: esalert@dark
   server: 127.0.0.1
 rules:
   ssh:
