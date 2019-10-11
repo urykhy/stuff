@@ -4,7 +4,7 @@
 #include <mutex>
 #include <set>
 #include <queue>
-#include <Group.hpp>
+#include "Group.hpp"
 
 namespace Threads
 {
@@ -62,6 +62,17 @@ namespace Threads
         {
             Lock lk(m_Mutex);
             return m_List.empty();
+        }
+
+        bool get(Node& aItem)
+        {
+            Lock lk(m_Mutex);
+            if (m_List.empty())
+                return false;
+            auto sItem = m_List.top();
+            m_List.pop();
+            aItem = std::move(sItem);
+            return true;
         }
 
         bool wait(Node& aItem, std::function<bool(Node&)> aTest = [](Node&) -> bool { return true; })

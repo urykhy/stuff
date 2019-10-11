@@ -4,13 +4,16 @@
 
 #include <cassert>
 #include <functional>
+#include <list>
 #include <string>
 #include <../unsorted/Raii.hpp>
 
 namespace Curl
 {
+    struct Multi;
     struct Client
     {
+        friend struct Multi;
         using Error = std::runtime_error;
 
         // http code, response
@@ -34,8 +37,25 @@ namespace Curl
 
         using RecvHandler = std::function<size_t (void*, size_t)>;
 
-        Client(const Params& aParams) : m_Params(aParams) { m_Curl = curl_easy_init(); assert(m_Curl); }
-        ~Client() { curl_easy_cleanup(m_Curl); }
+        Client(const Params& aParams) : m_Params(aParams) {
+            m_Curl = curl_easy_init();
+            if (m_Curl == nullptr) {
+                throw Error("Curl: fail to create easy handle");
+            }
+        }
+        ~Client() {
+            if (m_Multi)
+                curl_multi_remove_handle(m_Multi, m_Curl);
+            curl_easy_cleanup(m_Curl);
+        }
+
+        static void GlobalInit()
+        {
+            int res = curl_global_init(CURL_GLOBAL_ALL);
+            if (res != CURLE_OK) {
+                throw Error("Curl: global init failed");
+            }
+        }
 
         Result DELETE(const std::string& aUrl)
         {
@@ -87,6 +107,7 @@ namespace Curl
     protected:
         const Params& m_Params;
         CURL *m_Curl;
+        CURLM* m_Multi = nullptr;
         std::string m_Buffer;
 
         const std::string* m_UploadData = nullptr;
@@ -134,7 +155,6 @@ namespace Curl
             curl_easy_getinfo(m_Curl, CURLINFO_RESPONSE_CODE, &sRes);
             return sRes;
         }
-
 
         void clear()
         {
@@ -185,6 +205,14 @@ namespace Curl
             if (!m_Params.cookie.empty())
                 setopt(CURLOPT_COOKIE, m_Params.cookie.c_str());
 
+            if (m_Multi)
+            {
+                int res = curl_multi_add_handle(m_Multi, m_Curl);
+                if (res != CURLE_OK)
+                    throw Error("Curl: fail to start multi call");
+                return Result(100, "");
+            }
+
             auto rc = curl_easy_perform(m_Curl);
 
             if (rc != CURLE_OK)
@@ -207,6 +235,12 @@ namespace Curl
         void setopt(CURLoption aOption, Ts ... aVal)
         {
             curl_easy_setopt(m_Curl, aOption, aVal...);
+        }
+
+        // support multi handle, used from Multi
+        void assign(CURLM* aMulti)
+        {
+            m_Multi = aMulti;
         }
     };
 }
