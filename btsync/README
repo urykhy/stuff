@@ -1,0 +1,8 @@
+use torrent to delivery files.
+
+producer:
+    watch for files in source directory
+    create torrent and publish to tracker
+client:
+    watch for torrent files in bt directory
+    download data

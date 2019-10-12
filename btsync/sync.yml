@@ -1,0 +1,11 @@
+producer:
+  source: /home/ury/tmp/btsync/source
+  bt: /home/ury/tmp/btsync/bt
+  announce: udp://tracker.torrent.eu.org:451/announce
+  comment: btsync test
+  listen: "0.0.0.0:16881"
+
+client:
+  bt: /home/ury/tmp/btsync/bt
+  dest: /home/ury/tmp/btsync/dest
+  listen: "0.0.0.0:16891"
