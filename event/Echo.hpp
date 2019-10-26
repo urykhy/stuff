@@ -1,6 +1,6 @@
 #pragma once
 
-namespace Echo
+namespace Event::Echo
 {
     // echo server and client
     class Client : boost::asio::coroutine, public std::enable_shared_from_this<Client>
@@ -17,7 +17,6 @@ namespace Echo
         {}
 
         void start() {
-            m_Socket.set_option(tcp::no_delay(true));
             operator()();
         }
 
@@ -79,4 +78,4 @@ namespace Echo
         }
 #include <boost/asio/unyield.hpp>
     };
-} // namespace Echo
+} // namespace Event::Echo

@@ -25,7 +25,7 @@ namespace Event
         : m_Loop(aLoop)
         , m_Socket(aLoop)
         , m_Timer(aLoop)
-        { ;; }
+        { }
 
         void start(const tcp::endpoint& aAddr, unsigned aTimeoutMs, Handler aHandler)
         {
@@ -35,7 +35,10 @@ namespace Event
                 p->m_Timer.cancel();
                 std::promise<tcp::socket&> sPromise;
                 if (!error)
+                {
                     sPromise.set_value(p->m_Socket);
+                    p->m_Socket.set_option(tcp::no_delay(true));
+                }
                 else
                     sPromise.set_exception(std::make_exception_ptr(Error(error.message())));
                 aHandler(sPromise.get_future());

@@ -42,6 +42,7 @@ namespace Event {
                 {
                     m_Socket = std::make_shared<tcp::socket>(m_Loop);
                     yield m_Acceptor->async_accept(*m_Socket, [p=shared_from_this()](auto error){ p->operator()(error); });
+                    m_Socket->set_option(tcp::no_delay(true));
                     m_Handler(std::move(m_Socket));
                 };
             }
