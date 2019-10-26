@@ -1,5 +1,0 @@
-Name: boost_unit_test_framework
-Description: Boost Unit Test Framework
-Version: 1.70
-Libs: -L/home/ury/tmp/boost1.70/lib -lboost_unit_test_framework
-Cflags: -I/home/ury/tmp/boost1.70/include
