@@ -67,7 +67,7 @@ def _inspect(cid):
     return [ Container(id_, name, state, ip_addrs) for name in _get_names(name, labels) ]
 
 def _update_ns(name, addr):
-    name = name.replace('-', '')
+    #name = name.replace('-', '')
     print "updating forward zone %s:%s ..." % (name, addr)
     update = dns.update.Update("docker", keyring=KEYRING, keyalgorithm=ALGORITHM)
     update.delete(name, "A")
@@ -89,7 +89,7 @@ def _update_ns(name, addr):
         print "Failed: %s" % response
 
 def _rm_ns(name, addr):
-    name = name.replace('-', '')
+    #name = name.replace('-', '') # names with - is better
     print "delete from forward zone %s:%s ..." % (name, addr)
     update = dns.update.Update("docker", keyring=KEYRING, keyalgorithm=ALGORITHM)
     update.delete(name, "A")
