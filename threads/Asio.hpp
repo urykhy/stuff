@@ -5,7 +5,7 @@
 namespace Threads
 {
     namespace asio = boost::asio;
-    class WorkQ
+    class Asio
     {
         asio::io_service io_service;
     public:
@@ -28,7 +28,7 @@ namespace Threads
         asio::io_service& service() {
             return io_service;
         }
-        ~WorkQ()
+        ~Asio()
         {
             term();
         }

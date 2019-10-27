@@ -1,0 +1,13 @@
+syntax = "proto2";
+
+package RPC;
+
+message Request {
+    optional bytes name = 1;
+    optional bytes args = 2;
+}
+
+message Response {
+    optional bytes result = 1;
+    optional bytes error  = 2;
+}

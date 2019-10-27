@@ -6,7 +6,7 @@
 #include "Client.hpp"
 #include "Echo.hpp"
 #include "Framed.hpp"
-#include <threads/WorkQ.hpp>
+#include <threads/Asio.hpp>
 
 class Message
 {
@@ -31,14 +31,14 @@ public:
 
 private:
     const_buffer  header_buffer() const { return boost::asio::buffer((const void*)&size, sizeof(size)); }
-    const_buffer  body_buffer()   const { return boost::asio::buffer((const void*)&data[0], size); }
+    const_buffer  body_buffer()   const { return boost::asio::buffer((const void*)&data[0], data.size()); }
 };
 
 BOOST_AUTO_TEST_SUITE(Event)
 BOOST_AUTO_TEST_CASE(echo)
 {
     Threads::Group sGroup;
-    Threads::WorkQ sLoop;
+    Threads::Asio  sLoop;
     sLoop.start(1, sGroup);
 
     auto sServer = std::make_shared<Event::Server>(sLoop.service());
@@ -68,7 +68,7 @@ BOOST_AUTO_TEST_CASE(echo)
 BOOST_AUTO_TEST_CASE(framed)
 {
     Threads::Group sGroup;
-    Threads::WorkQ sLoop;
+    Threads::Asio  sLoop;
     sLoop.start(1, sGroup);
 
     auto sServer = std::make_shared<Event::Server>(sLoop.service());
