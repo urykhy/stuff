@@ -30,6 +30,7 @@ namespace RPC
                 sResponse.SerializeToString(&sResult);
                 return sResult;
             }
+            sResponse.set_serial(sRequest.serial());
             const auto sIt = m_Lib.find(sRequest.name());
             if (sIt == m_Lib.end())
             {
@@ -49,9 +50,10 @@ namespace RPC
             return sResult;
         }
 
-        static std::string formatCall(const std::string& aName, const std::string& aArgs)
+        static std::string formatCall(uint64_t aSerial, const std::string& aName, const std::string& aArgs)
         {
             RPC::Request sRequest;
+            sRequest.set_serial(aSerial);
             sRequest.set_name(aName);
             sRequest.set_args(aArgs);
             std::string sBuf;
@@ -59,7 +61,7 @@ namespace RPC
             return sBuf;
         }
 
-        static void parseResponse(std::future<std::string>& aResult, std::promise<std::string>& aPromise)
+        static uint64_t parseResponse(std::future<std::string>& aResult, std::promise<std::string>& aPromise)
         {
             try
             {
@@ -67,23 +69,25 @@ namespace RPC
                 if (!sResponse.ParseFromString(aResult.get()))
                 {
                     aPromise.set_exception(std::make_exception_ptr("protobuf parsing error"));
-                    return;
+                    return 0;
                 }
                 if (sResponse.has_error())
                     aPromise.set_exception(std::make_exception_ptr(std::runtime_error(sResponse.error())));
                 else
                     aPromise.set_value(sResponse.result());
+                return sResponse.serial();
             }
             catch(const std::exception& e)
             {
                 aPromise.set_exception(std::current_exception());
             }
+            return 0;
         }
 
 #ifdef BOOST_CHECK_EQUAL
         RPC::Response debug_call(const std::string& aName, const std::string& aArgs)
         {
-            const std::string sCall = formatCall(aName, aArgs);
+            const std::string sCall = formatCall(0, aName, aArgs);
             const std::string sTmp = call(sCall);
             RPC::Response sResponse;
             sResponse.ParseFromString(sTmp);

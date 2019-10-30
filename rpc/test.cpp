@@ -24,12 +24,18 @@ BOOST_AUTO_TEST_CASE(simple)
     constexpr uint16_t PORT = 1234;
     using namespace std::chrono_literals;
 
+    std::atomic_uint sCount{0};
     Threads::Group sGroup;
     Threads::Asio  sLoop;
     sLoop.start(1, sGroup);
 
     RPC::Server sServer(sLoop.service(), PORT);
-    sServer.insert("foo",[](auto& s){ return s+"bar"; });
+    sServer.insert("foo",[](auto& s){
+        using namespace std::chrono_literals;
+        if (s == "with delay")
+            std::this_thread::sleep_for(150ms);
+        return s+"bar";
+    });
 
     const auto sAddr = boost::asio::ip::tcp::endpoint(boost::asio::ip::address::from_string("127.0.0.1"), PORT);
     RPC::Client sClient(sLoop.service(), sAddr);
@@ -38,10 +44,12 @@ BOOST_AUTO_TEST_CASE(simple)
     std::this_thread::sleep_for(200ms);
 
     // make calls, callback will be called in asio thread
-    sClient.call("foo","bar",[](std::future<std::string>&& aResult){
+    sClient.call("foo","bar",[&sCount](std::future<std::string>&& aResult){
+        sCount++;
         BOOST_CHECK_EQUAL(aResult.get(), "barbar");
     });
-    sClient.call("bar","xxx",[](std::future<std::string>&& aResult){
+    sClient.call("bar","xxx",[&sCount](std::future<std::string>&& aResult){
+        sCount++;
         try {
             aResult.get();
             BOOST_CHECK_MESSAGE(false, "got result, but exception expected");
@@ -49,8 +57,18 @@ BOOST_AUTO_TEST_CASE(simple)
             BOOST_CHECK_EQUAL(e.what(), "method not found");
         }
     });
+    sClient.call("foo","with delay",[&sCount](std::future<std::string>&& aResult){
+        sCount++;
+        try {
+            aResult.get();
+            BOOST_CHECK_MESSAGE(false, "got result, but exception expected");
+        } catch (const std::exception& e) {
+            BOOST_CHECK_EQUAL(e.what(), "timeout");
+        }
+    });
 
-    std::this_thread::sleep_for(100ms);
+    std::this_thread::sleep_for(200ms);
     sGroup.wait();
+    BOOST_CHECK_EQUAL(sCount, 3);
 }
 BOOST_AUTO_TEST_SUITE_END()

@@ -4,7 +4,9 @@
 #include <event/Client.hpp>
 #include <event/Server.hpp>
 #include <event/Framed.hpp>
+
 #include "Library.hpp"
+#include "ReplyWaiter.hpp"
 
 namespace RPC
 {
@@ -49,11 +51,12 @@ namespace RPC
         std::shared_ptr<Event::Client> m_Client;
         std::shared_ptr<Transport> m_Transport;
 
-        // server handle calls one by one, so we can store handlers in a list
-        std::list<Handler> m_Queue; // FIXME: timeouts
+        ReplyWaiter m_Queue;
+        std::atomic<uint64_t> m_Serial{1};
 
     public:
         Client(boost::asio::io_service& aLoop, const tcp::endpoint& aAddr)
+        : m_Queue(aLoop)
         {
             m_Client = std::make_shared<Event::Client>(aLoop);
             m_Client->start(aAddr, CONNECT_TIMEOUT, [this](std::future<tcp::socket&> aSocket)
@@ -61,19 +64,19 @@ namespace RPC
                 auto& sSocket = aSocket.get(); // FIXME: handle exception
                 m_Transport = std::make_shared<Transport>(sSocket, [this](std::future<std::string>&& aResult){
                     std::promise<std::string> sPromise;
-                    Library::parseResponse(aResult, sPromise);
-                    assert(!m_Queue.empty());
-                    m_Queue.front()(sPromise.get_future());
-                    m_Queue.pop_front();
+                    auto sSerial = Library::parseResponse(aResult, sPromise);
+                    if (sSerial > 0)
+                        m_Queue.call(sSerial, sPromise.get_future());
                 });
                 m_Transport->start();
             });
         }
 
-        void call(const std::string& aName, const std::string& aArgs, Handler aHandler)
+        void call(const std::string& aName, const std::string& aArgs, Handler aHandler, unsigned aTimeoutMs = 100)
         {
-            m_Queue.push_back(aHandler);    // FIXME: locking
-            m_Transport->call(Library::formatCall(aName, aArgs));
+            const uint64_t sSerial = m_Serial++;
+            m_Queue.insert(sSerial, aTimeoutMs, aHandler);
+            m_Transport->call(Library::formatCall(sSerial, aName, aArgs));
         }
     };
 
