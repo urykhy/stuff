@@ -64,7 +64,7 @@ namespace Threads
             return m_List.empty();
         }
 
-        bool get(Node& aItem)
+        bool try_get(Node& aItem)
         {
             Lock lk(m_Mutex);
             if (m_List.empty())

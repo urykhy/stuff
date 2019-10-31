@@ -127,7 +127,7 @@ namespace Curl
             while (activeCount() < m_Params.max_connections and !m_Waiting.idle())
             {
                 Request sNew;
-                if (m_Waiting.get(sNew))
+                if (m_Waiting.try_get(sNew))
                     startRequest(sNew.url, std::move(sNew.callback));
             }
         }
