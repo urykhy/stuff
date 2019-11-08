@@ -41,6 +41,8 @@ namespace Util
             m_Offset += aSize;
         }
         bool empty() const { return m_Data.empty(); }
+
+        boost::string_ref rest() { return substring(m_Data.size() - m_Offset); }
     };
 
     class omemstream

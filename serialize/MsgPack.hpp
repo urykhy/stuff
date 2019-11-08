@@ -30,7 +30,7 @@ namespace MsgPack
 
         PACK_STR8   = 0xd9,
         PACK_STR16  = 0xda,
-        PACK_STR32  = 0xdd,
+        PACK_STR32  = 0xdb,
     }; // https://github.com/msgpack/msgpack/blob/master/spec.md
 
     inline void mp_store_u8(omemstream& aStream, uint8_t aValue)   { aStream.put(aValue); }
@@ -129,7 +129,7 @@ namespace MsgPack
         }
     }
 
-    inline void write_str(omemstream& aStream, const boost::string_ref& aString)
+    inline void write_string(omemstream& aStream, const std::string& aString)
     {
         auto aStringSize = aString.size();
         if (aStringSize <= 0x1f) {
@@ -147,7 +147,7 @@ namespace MsgPack
         aStream.write(aString.data(), aStringSize);
     }
 
-    inline void read_string(imemstream& aStream, boost::string_ref& aString)
+    inline void read_string(imemstream& aStream, std::string& aString)
     {
         uint32_t sStringSize = 0;
         uint8_t sCode = mp_load_u8(aStream);
@@ -159,7 +159,8 @@ namespace MsgPack
             if (sCode < FIXSTR || sCode >= NIL) throw BadFormat();
             sStringSize = sCode & 0x1f;
         }
-        aString = aStream.substring(sStringSize);
+        const auto sString = aStream.substring(sStringSize);
+        aString.assign(sString.data(), sString.size());
     }
 
     template<class T>
