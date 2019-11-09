@@ -9,6 +9,7 @@
 
 #include "Message.hpp"
 #include "Protocol.hpp"
+#include "Auth.hpp"
 
 //#include <parser/Hex.hpp>
 
@@ -28,18 +29,11 @@ namespace tnt17
 
         std::shared_ptr<Event::Client> m_Client;
         std::shared_ptr<Transport> m_Transport;
+        std::shared_ptr<Auth> m_Auth;
 
         RPC::ReplyWaiter m_Queue;
         std::atomic<uint64_t> m_Serial{1};
         const int m_SpaceID;
-
-        struct TntGreetings
-        {
-            char version[64];
-            char salt[44];
-            char dummy[20];
-        } __attribute__((packed));
-        TntGreetings m_Greetings;
 
         void xcall (Handler& aHandler, std::future<std::string>&& aReply)
         {
@@ -96,16 +90,14 @@ namespace tnt17
             m_Client->start(aAddr, CONNECT_TIMEOUT, [this](std::future<tcp::socket&> aSocket)
             {
                 auto& sSocket = aSocket.get(); // FIXME: handle exception
-
-                // read greeting
-                // FIXME: async
-                asio::read(sSocket, asio::buffer(&m_Greetings, sizeof(m_Greetings)), boost::asio::transfer_exactly(sizeof(m_Greetings)));
-                //BOOST_TEST_MESSAGE("greeting from " << boost::string_ref(m_Greetings.version, 64));
-
-                m_Transport = std::make_shared<Transport>(sSocket, [this](std::future<std::string>&& aResult){
-                    callback(std::move(aResult));
+                m_Auth = std::make_shared<Auth>(sSocket, [this, &sSocket](boost::system::error_code ec){
+                    // FIXME: handle error
+                    m_Transport = std::make_shared<Transport>(sSocket, [this, &sSocket](std::future<std::string>&& aResult){
+                        callback(std::move(aResult));
+                    });
+                    m_Transport->start();
                 });
-                m_Transport->start();
+                m_Auth->start();
             });
         }
 
