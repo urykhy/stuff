@@ -3,12 +3,16 @@
 #include <boost/test/unit_test.hpp>
 #include <stdlib.h>
 #include <iostream>
-#include <Pipeline.hpp>
-#include <Periodic.hpp> // for sleep
-#include <Collect.hpp>
-#include <WorkQ.hpp>
+#include <chrono>
+
+#include "Pipeline.hpp"
+#include "Periodic.hpp" // for sleep
+#include "Collect.hpp"
+#include "Asio.hpp"
+#include "WaitGroup.hpp"
 
 // g++ test.cpp -I. -I.. -lboost_system -lboost_unit_test_framework -pthread
+using namespace std::chrono_literals;
 
 BOOST_AUTO_TEST_SUITE(Threads)
 BOOST_AUTO_TEST_CASE(pipeline)
@@ -65,7 +69,7 @@ BOOST_AUTO_TEST_CASE(delay)
 BOOST_AUTO_TEST_CASE(collect)
 {
     Threads::Group tg;
-    Threads::WorkQ q;
+    Threads::Asio q;
     q.start(1, tg);
     Threads::Collect c(q.service(), [](std::string&& a){
         BOOST_CHECK_EQUAL(a, "123asdiop");
@@ -80,5 +84,24 @@ BOOST_AUTO_TEST_CASE(collect)
     while (!c.empty())
         Threads::sleep(0.1);
     tg.wait();
+}
+BOOST_AUTO_TEST_CASE(wg)
+{
+    Threads::Group tg;
+    Threads::Asio q;
+    q.start(1, tg);
+
+    int counter = 0;
+    Threads::WaitGroup wg(10);
+    for (int i = 0; i < 10; i++)
+    {
+        q.insert([&wg, &counter](){
+            counter++;
+            std::this_thread::sleep_for(50ms);
+            wg.release();
+        });
+    }
+    wg.wait();
+    BOOST_CHECK_EQUAL(counter, 10);
 }
 BOOST_AUTO_TEST_SUITE_END()
