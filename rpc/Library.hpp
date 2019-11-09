@@ -68,7 +68,7 @@ namespace RPC
                 RPC::Response sResponse;
                 if (!sResponse.ParseFromString(aResult.get()))
                 {
-                    aPromise.set_exception(std::make_exception_ptr("protobuf parsing error"));
+                    aPromise.set_exception(std::make_exception_ptr(std::runtime_error("protobuf parsing error")));
                     return 0;
                 }
                 if (sResponse.has_error())
