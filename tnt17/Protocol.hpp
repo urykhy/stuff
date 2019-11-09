@@ -64,8 +64,8 @@ namespace tnt17
         CODE_CALL   = 0xa
     };
 
-    template<class P>
-    void formatHeader(P& aStream, int aCode, int aSync)
+    template<class S>
+    void formatHeader(S& aStream, int aCode, int aSync)
     {
         using namespace MsgPack;
         write_map_size(aStream, 2);

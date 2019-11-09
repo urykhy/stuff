@@ -63,6 +63,14 @@ BOOST_AUTO_TEST_CASE(simple)
             }
         }
     });
+    sClient.select(0 /*index*/, 1 /*key*/ ,[](std::future<std::vector<DataEntry>>&& aResult){
+        try {
+            const auto sResult = aResult.get();
+        } catch (const std::exception& e) {
+            BOOST_CHECK_EQUAL(e.what(), "network error: Transport endpoint is not connected");
+        }
+    });
+
     sClient.start();
     sWait.wait();
 

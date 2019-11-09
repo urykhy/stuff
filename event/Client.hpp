@@ -49,7 +49,10 @@ namespace Event
             });
         }
 
-        void stop() { m_Socket.close(); }
+        void stop() {
+            m_Socket.shutdown(boost::asio::ip::tcp::socket::shutdown_both);
+            m_Socket.close();
+        }
         bool is_open() const { return m_Socket.is_open(); }
     };
 

@@ -15,13 +15,13 @@ namespace tnt17
         Handler      m_Handler;
         boost::asio::deadline_timer m_Timer;
 
-        struct TntGreetings
+        struct Greetings
         {
             char version[64];
             char salt[44];
             char dummy[20];
         } __attribute__((packed));
-        TntGreetings m_Greetings;
+        Greetings m_Greetings;
 
         // boost::system::errc::make_error_code(boost::system::errc::permission_denied)
         // but it's a RemoteError, not NetworkError

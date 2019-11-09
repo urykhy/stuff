@@ -130,12 +130,19 @@ namespace tnt17
             });
         }
 
-        void stop() { m_Client->stop(); }
-        bool is_open() const { return m_Client->is_open(); }
+        void stop() { if (is_open()) m_Client->stop(); }
+        bool is_open() const { return m_Client and m_Client->is_open(); }
 
         template<class K>
-        void select(const int aIndex, const K& aKey, Handler aHandler, unsigned aTimeoutMs = 100)
+        void select(const int aIndex, const K& aKey, Handler aHandler, unsigned aTimeoutMs = 1000)
         {
+            if (!is_open()) {
+                std::promise<std::vector<T>> sPromise;
+                sPromise.set_exception(std::make_exception_ptr(Event::NetworkError(boost::system::errc::make_error_code(boost::system::errc::not_connected))));
+                aHandler(sPromise.get_future());
+                return;
+            }
+
             const uint64_t sSerial = m_Serial++;
             m_Queue.insert(sSerial, aTimeoutMs, [this, aHandler](std::future<std::string>&& aReply) mutable {
                 xcall(aHandler, std::move(aReply));
