@@ -21,7 +21,6 @@ namespace tnt17
         using Notify = std::function<void(std::exception_ptr)>;
         using Result = std::vector<T>;
         using Handler = std::function<void(std::future<Result>&&)>;
-        using Error = std::runtime_error;
 
     private:
         static constexpr unsigned CONNECT_TIMEOUT = 100;
@@ -37,37 +36,51 @@ namespace tnt17
         std::atomic<uint64_t> m_Serial{1};
         const tcp::endpoint m_Addr;
         const int m_SpaceID;
+        const Notify m_Notify;
 
-        void xcall (Handler& aHandler, std::future<std::string>&& aReply)
+        void xcall(Handler& aHandler, std::future<std::string>&& aReply)
         {
-            // got data chunk, parse it
-            const std::string sData = aReply.get(); // FIXME: exception possible
-            //BOOST_TEST_MESSAGE("user data is " << Parser::to_hex(sData));
-            imemstream sStream(sData);
-
-            const uint32_t sCount = MsgPack::read_array_size(sStream);   // FIXME: catch parsing errors and report to aHandler
-            std::vector<T> sResult;
-            sResult.resize(sCount);
-            for (auto& x : sResult)
-                x.parse(sStream);
-
             std::promise<std::vector<T>> sPromise;
-            sPromise.set_value(sResult);
+
+            try {
+                const std::string sData = aReply.get();
+                imemstream sStream(sData);
+                const uint32_t sCount = MsgPack::read_array_size(sStream);
+                std::vector<T> sResult{sCount};
+                for (auto& x : sResult)
+                    x.parse(sStream);
+                sPromise.set_value(sResult);
+            } catch (const std::exception& e) {
+                sPromise.set_exception(std::make_exception_ptr(Event::ProtocolError(e.what())));
+            }
+
             aHandler(sPromise.get_future());
         }
 
-        void callback(std::string& aResultStr)
+        void callback(std::future<std::string>&& aResult)
         {
-            //BOOST_TEST_MESSAGE("tnt reply is " << Parser::to_hex(sResultStr));
-            imemstream sStream(aResultStr);
+            std::string sResultStr;
+            try {
+                sResultStr = aResult.get();
+            } catch (...) {
+                // must be network error
+                // FIXME: call m_Queue.error to mark all requests as failed
+                stop();
+                m_Notify(std::current_exception());
+                return;
+            }
 
-            // parse header and report if error. pass unparsed data chunk if ok
             Header sHeader;
-            sHeader.parse(sStream);
-            //BOOST_TEST_MESSAGE("tnt header is " << sHeader.code << "/" << sHeader.sync << "/" << sHeader.schema_id);
-
             Reply sReply;
-            sReply.parse(sStream);
+            imemstream sStream(sResultStr);
+
+            try {
+                sHeader.parse(sStream);
+                sReply.parse(sStream);
+            } catch (const std::exception& e) {
+                m_Notify(std::make_exception_ptr(Event::ProtocolError(e.what())));
+                return;
+            }
 
             std::promise<std::string> sPromise;
             if (sReply.ok) {
@@ -75,51 +88,44 @@ namespace tnt17
                 std::string sRestStr(sRest.begin(), sRest.end());
                 sPromise.set_value(sRestStr);
             } else {
-                sPromise.set_exception(std::make_exception_ptr(std::runtime_error(sReply.error)));
+                sPromise.set_exception(std::make_exception_ptr(Event::RemoteError(sReply.error)));
             }
+
             m_Queue.call(sHeader.sync, sPromise.get_future());
         }
 
     public:
-        Client(boost::asio::io_service& aLoop, const tcp::endpoint& aAddr, int aSpaceID)
+        Client(boost::asio::io_service& aLoop, const tcp::endpoint& aAddr, int aSpaceID, Notify aNotify)
         : m_Loop(aLoop)
         , m_Queue(aLoop)
         , m_Addr(aAddr)
         , m_SpaceID(aSpaceID)
+        , m_Notify(aNotify)
         { }
 
-        void start(Notify aNotify)
+        void start()
         {
             m_Client = std::make_shared<Event::Client>(m_Loop);
-            m_Client->start(m_Addr, CONNECT_TIMEOUT, [this, aNotify](std::future<tcp::socket&> aSocket)
+            m_Client->start(m_Addr, CONNECT_TIMEOUT, [this](std::future<tcp::socket&> aSocket)
             {
                 try {
                     auto& sSocket = aSocket.get();
-                    m_Auth = std::make_shared<Auth>(sSocket, [this, &sSocket, aNotify](boost::system::error_code ec){
+                    m_Auth = std::make_shared<Auth>(sSocket, [this, &sSocket](boost::system::error_code ec){
                         if (ec) {
                             stop();
-                            aNotify(std::make_exception_ptr(Error(ec.message())));
+                            m_Notify(std::make_exception_ptr(Event::NetworkError(ec)));
                             return;
                         }
-                        m_Transport = std::make_shared<Transport>(sSocket, [this, &sSocket, aNotify](std::future<std::string>&& aResult){
-                            std::string sResultStr;
-                            try {
-                                sResultStr = aResult.get();
-                            } catch (...) {
-                                // FIXME: on network error - call m_Queue.error to mark all requests as failed
-                                stop();
-                                aNotify(std::current_exception());
-                                return;
-                            }
-                            callback(sResultStr);
+                        m_Transport = std::make_shared<Transport>(sSocket, [this, &sSocket](std::future<std::string>&& aResult){
+                            callback(std::move(aResult));
                         });
                         m_Transport->start();
-                        aNotify(nullptr);   // connected ok
+                        m_Notify(nullptr);   // connected ok
                     });
                     m_Auth->start();
                 } catch (...) {
                     stop();
-                    aNotify(std::current_exception());
+                    m_Notify(std::current_exception());
                 }
             });
         }

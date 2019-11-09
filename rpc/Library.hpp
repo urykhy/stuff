@@ -68,11 +68,11 @@ namespace RPC
                 RPC::Response sResponse;
                 if (!sResponse.ParseFromString(aResult.get()))
                 {
-                    aPromise.set_exception(std::make_exception_ptr(std::runtime_error("protobuf parsing error")));
+                    aPromise.set_exception(std::make_exception_ptr(Event::ProtocolError("cant parse protobuf")));
                     return 0;
                 }
                 if (sResponse.has_error())
-                    aPromise.set_exception(std::make_exception_ptr(std::runtime_error(sResponse.error())));
+                    aPromise.set_exception(std::make_exception_ptr(Event::RemoteError(sResponse.error())));
                 else
                     aPromise.set_value(sResponse.result());
                 return sResponse.serial();

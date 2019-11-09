@@ -41,7 +41,6 @@ namespace RPC
     {
         using Result = std::string;
         using Handler = std::function<void(std::future<std::string>&&)>;
-        using Error = std::runtime_error;
 
     private:
         static constexpr unsigned CONNECT_TIMEOUT = 100;

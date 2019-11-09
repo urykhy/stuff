@@ -51,8 +51,7 @@ BOOST_AUTO_TEST_CASE(simple)
 
     Threads::WaitGroup sWait(1);
     const auto sAddr = boost::asio::ip::tcp::endpoint(boost::asio::ip::address::from_string("127.0.0.1"), 2090);
-    tnt17::Client<DataEntry> sClient(sLoop.service(), sAddr, 512 /*space id*/);
-    sClient.start([&sWait](std::exception_ptr aPtr){
+    tnt17::Client<DataEntry> sClient(sLoop.service(), sAddr, 512 /*space id*/, [&sWait](std::exception_ptr aPtr){
         sWait.release();
         if (nullptr == aPtr) {
             BOOST_TEST_MESSAGE("connected");
@@ -64,6 +63,7 @@ BOOST_AUTO_TEST_CASE(simple)
             }
         }
     });
+    sClient.start();
     sWait.wait();
 
     if (!sClient.is_open()) {

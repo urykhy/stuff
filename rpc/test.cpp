@@ -54,7 +54,7 @@ BOOST_AUTO_TEST_CASE(simple)
             aResult.get();
             BOOST_CHECK_MESSAGE(false, "got result, but exception expected");
         } catch (const std::exception& e) {
-            BOOST_CHECK_EQUAL(e.what(), "method not found");
+            BOOST_CHECK_EQUAL(e.what(), "remote error: method not found");
         }
     });
     sClient.call("foo","with delay",[&sCount](std::future<std::string>&& aResult){
@@ -63,7 +63,7 @@ BOOST_AUTO_TEST_CASE(simple)
             aResult.get();
             BOOST_CHECK_MESSAGE(false, "got result, but exception expected");
         } catch (const std::exception& e) {
-            BOOST_CHECK_EQUAL(e.what(), "timeout");
+            BOOST_CHECK_EQUAL(e.what(), "remote error: timeout");
         }
     });
 

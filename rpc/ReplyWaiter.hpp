@@ -13,7 +13,6 @@ namespace RPC
     struct ReplyWaiter
     {
         using Handler = std::function<void(std::future<std::string>&&)>;
-        using Error = std::runtime_error;
 
     private:
         const unsigned TIMEOUT_MS=1;
@@ -42,7 +41,7 @@ namespace RPC
                     m_Timer.get_io_service().post([sHandler = sIt->second]()
                     {
                         std::promise<std::string> sPromise;
-                        sPromise.set_exception(std::make_exception_ptr(Error("timeout")));
+                        sPromise.set_exception(std::make_exception_ptr(Event::RemoteError("timeout")));
                         sHandler(sPromise.get_future());
                     });
                     m_Waiters.erase(sIt);

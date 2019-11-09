@@ -2,11 +2,10 @@
 #define BOOST_TEST_MODULE Suites
 #include <boost/test/unit_test.hpp>
 
-#include "Server.hpp"
-#include "Client.hpp"
-#include "Echo.hpp"
-#include "Framed.hpp"
 #include <threads/Asio.hpp>
+#include "Framed.hpp"
+#include "Echo.hpp"
+
 
 class Message
 {

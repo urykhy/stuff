@@ -23,6 +23,8 @@ namespace tnt17
         } __attribute__((packed));
         TntGreetings m_Greetings;
 
+        // boost::system::errc::make_error_code(boost::system::errc::permission_denied)
+        // but it's a RemoteError, not NetworkError
         void timeout_func()
         {
             xcall(boost::system::errc::make_error_code(boost::system::errc::timed_out));

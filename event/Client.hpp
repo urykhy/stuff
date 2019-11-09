@@ -2,6 +2,7 @@
 
 #include <boost/asio.hpp>
 #include <boost/asio/coroutine.hpp>
+#include "Error.hpp"
 
 namespace Event
 {
@@ -12,7 +13,6 @@ namespace Event
     public:
         using Result = std::promise<tcp::socket&>;
         using Handler = std::function<void(std::future<tcp::socket&>)>;
-        using Error = std::runtime_error;
 
     private:
         boost::asio::io_service& m_Loop;
@@ -30,7 +30,7 @@ namespace Event
         void start(const tcp::endpoint& aAddr, unsigned aTimeoutMs, Handler aHandler)
         {
             m_Timer.expires_from_now(boost::posix_time::millisec(aTimeoutMs));
-            m_Socket.async_connect(aAddr, [p=this->shared_from_this(), aHandler](auto error)
+            m_Socket.async_connect(aAddr, [p=this->shared_from_this(), aHandler](boost::system::error_code error)
             {
                 p->m_Timer.cancel();
                 std::promise<tcp::socket&> sPromise;
@@ -40,7 +40,7 @@ namespace Event
                     p->m_Socket.set_option(tcp::no_delay(true));
                 }
                 else
-                    sPromise.set_exception(std::make_exception_ptr(Error(error.message())));
+                    sPromise.set_exception(std::make_exception_ptr(NetworkError(error)));
                 aHandler(sPromise.get_future());
             });
             m_Timer.async_wait([p=this->shared_from_this()](boost::system::error_code ec){

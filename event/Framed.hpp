@@ -1,13 +1,16 @@
 #pragma once
 
+#include "Client.hpp"
+#include "Server.hpp"
+
 namespace Event::Framed
 {
     // framed server and client
     // FIXME: must use 1 threaded WorkQ, no locks/strand around queues
     template<class Message>
-    struct Client : public std::enable_shared_from_this<Client<Message>>
+    class Client : public std::enable_shared_from_this<Client<Message>>
     {
-        using Error = std::runtime_error;
+    public:
         using Response = std::promise<std::string>;
         using Handler = std::function<void(std::future<std::string>&&)>;
 
@@ -96,15 +99,16 @@ namespace Event::Framed
         void callback(boost::system::error_code ec)
         {
             std::promise<std::string> sPromise;
-            sPromise.set_exception(std::make_exception_ptr(Error(ec.message())));
+            sPromise.set_exception(std::make_exception_ptr(NetworkError(ec)));
             m_Handler(sPromise.get_future());
             m_Queue.clear();
         }
     };
 
     template<class Message>
-    struct Server : boost::asio::coroutine, public std::enable_shared_from_this<Server<Message>>
+    class Server : boost::asio::coroutine, public std::enable_shared_from_this<Server<Message>>
     {
+    public:
         using Handler = std::function<std::string(std::string&)>;
 
     private:

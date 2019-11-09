@@ -7,7 +7,11 @@ namespace tnt17
     using omemstream = MsgPack::omemstream;
     using imemstream = MsgPack::imemstream;
 
-    struct ProtocolError : std::runtime_error { ProtocolError() : std::runtime_error("tnt17 protocol error") {} };
+    inline void assertProto(bool aFlag)
+    {
+        if (!aFlag)
+            throw Event::ProtocolError("bad msgpack message");
+    }
 
     struct Header
     {
@@ -19,10 +23,10 @@ namespace tnt17
         {
             using namespace MsgPack;
             int tmp = 0;
-            tmp = read_map_size(aStream); assert(tmp == 3);
-            read_uint(aStream, tmp); assert (tmp == 0); read_uint(aStream, code);
-            read_uint(aStream, tmp); assert (tmp == 1); read_uint(aStream, sync);
-            read_uint(aStream, tmp); assert (tmp == 5); read_uint(aStream, schema_id);
+            tmp = read_map_size(aStream); assertProto(tmp == 3);
+            read_uint(aStream, tmp); assertProto(tmp == 0); read_uint(aStream, code);
+            read_uint(aStream, tmp); assertProto(tmp == 1); read_uint(aStream, sync);
+            read_uint(aStream, tmp); assertProto(tmp == 5); read_uint(aStream, schema_id);
         }
     };
 
@@ -40,14 +44,14 @@ namespace tnt17
                 ok = true;
                 return;
             }
-            assert(tmp == 1);
+            assertProto(tmp == 1);
             read_uint(aStream, tmp);
             if (tmp == 0x31)
                 read_string(aStream, error);
             else if (tmp == 0x30)
                 ok = true;
             else
-                throw ProtocolError();
+                assertProto(false);
         }
     };
 
