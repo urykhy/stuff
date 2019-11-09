@@ -116,7 +116,7 @@ namespace tnt17
                             m_Notify(std::make_exception_ptr(Event::NetworkError(ec)));
                             return;
                         }
-                        m_Transport = std::make_shared<Transport>(sSocket, [this, &sSocket](std::future<std::string>&& aResult){
+                        m_Transport = std::make_shared<Transport>(sSocket, [this](std::future<std::string>&& aResult){
                             callback(std::move(aResult));
                         });
                         m_Transport->start();
@@ -130,7 +130,7 @@ namespace tnt17
             });
         }
 
-        void stop() { if (is_open()) m_Client->stop(); }
+        void stop() { m_Client->stop(); }
         bool is_open() const { return m_Client and m_Client->is_open(); }
 
         template<class K>

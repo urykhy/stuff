@@ -20,7 +20,6 @@ namespace Event
         boost::asio::deadline_timer m_Timer;
 
     public:
-
         Client(boost::asio::io_service& aLoop)
         : m_Loop(aLoop)
         , m_Socket(aLoop)
@@ -50,8 +49,13 @@ namespace Event
         }
 
         void stop() {
-            m_Socket.shutdown(boost::asio::ip::tcp::socket::shutdown_both);
-            m_Socket.close();
+            // call close operation from asio thread only to avoid race
+            m_Socket.get_io_service().post([p=this->shared_from_this()](){
+                if (!p->is_open())
+                    return;
+                p->m_Socket.shutdown(boost::asio::ip::tcp::socket::shutdown_both);
+                p->m_Socket.close();
+            });
         }
         bool is_open() const { return m_Socket.is_open(); }
     };
