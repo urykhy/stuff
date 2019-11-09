@@ -1,4 +1,4 @@
-project('msgpack', 'cpp', version : '0.1')
+project('serialize', 'cpp', version : '0.1')
 
 includes = include_directories('..')
 add_project_arguments('-ggdb', '-O3', '-std=c++14', language: 'cpp')

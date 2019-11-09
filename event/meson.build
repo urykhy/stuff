@@ -1,4 +1,4 @@
-project('protobuf', 'cpp', version : '0.1')
+project('event', 'cpp', version : '0.1')
 
 includes = include_directories('..')
 add_project_arguments('-ggdb', '-O0', '-std=c++14', language: 'cpp')
