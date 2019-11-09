@@ -15,6 +15,14 @@ namespace Threads {
         : m_Wait(aInitial)
         { }
 
+        void reset(size_t aNew)
+        {
+            Lock lk(m_Mutex);
+            m_Wait = aNew;
+            if (m_Wait == 0)
+                m_Cond.notify_all();
+        }
+
         void release() {
             Lock lk(m_Mutex);
             if (m_Wait > 0)

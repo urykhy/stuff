@@ -49,9 +49,8 @@ namespace Event
             });
         }
 
-        bool isOpen() const {
-            return m_Socket.is_open();
-        }
+        void stop() { m_Socket.close(); }
+        bool is_open() const { return m_Socket.is_open(); }
     };
 
 } // namespace Event

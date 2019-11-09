@@ -1,13 +1,14 @@
 #define BOOST_TEST_DYN_LINK
 #define BOOST_TEST_MODULE Suites
 #include <boost/test/unit_test.hpp>
-#include <chrono>
 
 #include <threads/Asio.hpp>
 #include <threads/Group.hpp>
+#include <threads/WaitGroup.hpp>
 #include <serialize/MsgPack.hpp>
 #include "Client.hpp"
 
+#include <chrono>
 using namespace std::chrono_literals;
 
 struct DataEntry {
@@ -44,24 +45,54 @@ struct DataEntry {
 BOOST_AUTO_TEST_SUITE(TNT17)
 BOOST_AUTO_TEST_CASE(simple)
 {
-    Threads::Group sGroup;
     Threads::Asio  sLoop;
+    Threads::Group sGroup;
     sLoop.start(1, sGroup);
 
+    Threads::WaitGroup sWait(1);
     const auto sAddr = boost::asio::ip::tcp::endpoint(boost::asio::ip::address::from_string("127.0.0.1"), 2090);
     tnt17::Client<DataEntry> sClient(sLoop.service(), sAddr, 512 /*space id*/);
+    sClient.start([&sWait](std::exception_ptr aPtr){
+        sWait.release();
+        if (nullptr == aPtr) {
+            BOOST_TEST_MESSAGE("connected");
+        } else {
+            try {
+                std::rethrow_exception(aPtr);
+            } catch (const std::exception& e) {
+                BOOST_TEST_MESSAGE("no connection: " << e.what());
+            }
+        }
+    });
+    sWait.wait();
 
-    std::this_thread::sleep_for(200ms);
+    if (!sClient.is_open()) {
+        BOOST_TEST_MESSAGE("no connection: exiting");
+        sGroup.wait();
+        return;
+    }
 
     // make calls, callback will be called in asio thread
-    sClient.select(0 /*index*/, 1 /*key*/ ,[](std::future<std::vector<DataEntry>>&& aResult){
+    sWait.reset(2);
+    sClient.select(0 /*index*/, 1 /*key*/ ,[&sWait](std::future<std::vector<DataEntry>>&& aResult){
         const auto sResult = aResult.get();
-        BOOST_CHECK_EQUAL(sResult.size(), 1);
+        BOOST_REQUIRE_EQUAL(sResult.size(), 1);
         BOOST_CHECK_EQUAL(sResult[0].pk, 1);
         BOOST_CHECK_EQUAL(sResult[0].value, "Roxette");
+        sWait.release();
+    });
+    sClient.select(1 /*index*/, "NightWish" /*key*/ ,[&sWait](std::future<std::vector<DataEntry>>&& aResult){
+        const auto sResult = aResult.get();
+        BOOST_REQUIRE_EQUAL(sResult.size(), 2);
+        BOOST_CHECK_EQUAL(sResult[0].value, "NightWish");
+        BOOST_CHECK_EQUAL(sResult[1].value, "NightWish");
+        sWait.release();
     });
 
+    sWait.wait();
+    sClient.stop();
     std::this_thread::sleep_for(200ms);
+
     sGroup.wait();
 }
 BOOST_AUTO_TEST_SUITE_END()

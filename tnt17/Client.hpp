@@ -18,6 +18,7 @@ namespace tnt17
     template<class T>
     struct Client
     {
+        using Notify = std::function<void(std::exception_ptr)>;
         using Result = std::vector<T>;
         using Handler = std::function<void(std::future<Result>&&)>;
         using Error = std::runtime_error;
@@ -31,8 +32,10 @@ namespace tnt17
         std::shared_ptr<Transport> m_Transport;
         std::shared_ptr<Auth> m_Auth;
 
+        boost::asio::io_service& m_Loop;
         RPC::ReplyWaiter m_Queue;
         std::atomic<uint64_t> m_Serial{1};
+        const tcp::endpoint m_Addr;
         const int m_SpaceID;
 
         void xcall (Handler& aHandler, std::future<std::string>&& aReply)
@@ -53,13 +56,10 @@ namespace tnt17
             aHandler(sPromise.get_future());
         }
 
-        void callback(std::future<std::string>&& aResult)
+        void callback(std::string& aResultStr)
         {
-            std::promise<std::string> sPromise;
-
-            const std::string sData = aResult.get(); // FIXME: exception possible
-            //BOOST_TEST_MESSAGE("tnt reply is " << Parser::to_hex(sData));
-            imemstream sStream(sData);
+            //BOOST_TEST_MESSAGE("tnt reply is " << Parser::to_hex(sResultStr));
+            imemstream sStream(aResultStr);
 
             // parse header and report if error. pass unparsed data chunk if ok
             Header sHeader;
@@ -69,6 +69,7 @@ namespace tnt17
             Reply sReply;
             sReply.parse(sStream);
 
+            std::promise<std::string> sPromise;
             if (sReply.ok) {
                 const auto sRest = sStream.rest();
                 std::string sRestStr(sRest.begin(), sRest.end());
@@ -76,30 +77,55 @@ namespace tnt17
             } else {
                 sPromise.set_exception(std::make_exception_ptr(std::runtime_error(sReply.error)));
             }
-
             m_Queue.call(sHeader.sync, sPromise.get_future());
-
         }
 
     public:
         Client(boost::asio::io_service& aLoop, const tcp::endpoint& aAddr, int aSpaceID)
-        : m_Queue(aLoop)
+        : m_Loop(aLoop)
+        , m_Queue(aLoop)
+        , m_Addr(aAddr)
         , m_SpaceID(aSpaceID)
+        { }
+
+        void start(Notify aNotify)
         {
-            m_Client = std::make_shared<Event::Client>(aLoop);
-            m_Client->start(aAddr, CONNECT_TIMEOUT, [this](std::future<tcp::socket&> aSocket)
+            m_Client = std::make_shared<Event::Client>(m_Loop);
+            m_Client->start(m_Addr, CONNECT_TIMEOUT, [this, aNotify](std::future<tcp::socket&> aSocket)
             {
-                auto& sSocket = aSocket.get(); // FIXME: handle exception
-                m_Auth = std::make_shared<Auth>(sSocket, [this, &sSocket](boost::system::error_code ec){
-                    // FIXME: handle error
-                    m_Transport = std::make_shared<Transport>(sSocket, [this, &sSocket](std::future<std::string>&& aResult){
-                        callback(std::move(aResult));
+                try {
+                    auto& sSocket = aSocket.get();
+                    m_Auth = std::make_shared<Auth>(sSocket, [this, &sSocket, aNotify](boost::system::error_code ec){
+                        if (ec) {
+                            stop();
+                            aNotify(std::make_exception_ptr(Error(ec.message())));
+                            return;
+                        }
+                        m_Transport = std::make_shared<Transport>(sSocket, [this, &sSocket, aNotify](std::future<std::string>&& aResult){
+                            std::string sResultStr;
+                            try {
+                                sResultStr = aResult.get();
+                            } catch (...) {
+                                // FIXME: on network error - call m_Queue.error to mark all requests as failed
+                                stop();
+                                aNotify(std::current_exception());
+                                return;
+                            }
+                            callback(sResultStr);
+                        });
+                        m_Transport->start();
+                        aNotify(nullptr);   // connected ok
                     });
-                    m_Transport->start();
-                });
-                m_Auth->start();
+                    m_Auth->start();
+                } catch (...) {
+                    stop();
+                    aNotify(std::current_exception());
+                }
             });
         }
+
+        void stop() { m_Client->stop(); }
+        bool is_open() const { return m_Client->is_open(); }
 
         template<class K>
         void select(const int aIndex, const K& aKey, Handler aHandler, unsigned aTimeoutMs = 100)
