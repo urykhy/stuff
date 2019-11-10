@@ -75,6 +75,7 @@ BOOST_AUTO_TEST_CASE(simple)
 
     sClient.start();
     sWait.wait();
+    BOOST_REQUIRE(sClient.is_open());
 
     if (!sClient.is_open()) {
         BOOST_TEST_MESSAGE("no connection: exiting");
@@ -102,7 +103,7 @@ BOOST_AUTO_TEST_CASE(simple)
 
     sWait.wait();
     sClient.stop();
-    std::this_thread::sleep_for(200ms);
+    //std::this_thread::sleep_for(200ms);
 
     sGroup.wait();
 }

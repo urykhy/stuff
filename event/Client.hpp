@@ -53,7 +53,8 @@ namespace Event
             m_Socket.get_io_service().post([p=this->shared_from_this()](){
                 if (!p->is_open())
                     return;
-                p->m_Socket.shutdown(boost::asio::ip::tcp::socket::shutdown_both);
+                boost::system::error_code ec;   // ignore shutdown error
+                p->m_Socket.shutdown(boost::asio::ip::tcp::socket::shutdown_both, ec);
                 p->m_Socket.close();
             });
         }

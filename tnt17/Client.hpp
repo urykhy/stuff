@@ -37,6 +37,7 @@ namespace tnt17
         const tcp::endpoint m_Addr;
         const int m_SpaceID;
         const Notify m_Notify;
+        std::atomic_bool m_Connected{false};
 
         void xcall(Handler& aHandler, std::future<std::string>&& aReply)
         {
@@ -65,8 +66,7 @@ namespace tnt17
             } catch (...) {
                 // must be network error
                 // FIXME: call m_Queue.error to mark all requests as failed
-                stop();
-                m_Notify(std::current_exception());
+                notify(std::current_exception());
                 return;
             }
 
@@ -78,6 +78,7 @@ namespace tnt17
                 sHeader.parse(sStream);
                 sReply.parse(sStream);
             } catch (const std::exception& e) {
+                // protocol error, no need to close connection, just notify
                 m_Notify(std::make_exception_ptr(Event::ProtocolError(e.what())));
                 return;
             }
@@ -92,6 +93,15 @@ namespace tnt17
             }
 
             m_Queue.call(sHeader.sync, sPromise.get_future());
+        }
+
+        void notify(std::exception_ptr aPtr)
+        {
+            if (aPtr == nullptr)
+                m_Connected = true;
+            else
+                stop();
+            m_Notify(aPtr);
         }
 
     public:
@@ -112,26 +122,24 @@ namespace tnt17
                     auto& sSocket = aSocket.get();
                     m_Auth = std::make_shared<Auth>(sSocket, [this, &sSocket](boost::system::error_code ec){
                         if (ec) {
-                            stop();
-                            m_Notify(std::make_exception_ptr(Event::NetworkError(ec)));
+                            notify(std::make_exception_ptr(Event::NetworkError(ec)));
                             return;
                         }
                         m_Transport = std::make_shared<Transport>(sSocket, [this](std::future<std::string>&& aResult){
                             callback(std::move(aResult));
                         });
                         m_Transport->start();
-                        m_Notify(nullptr);   // connected ok
+                        notify(nullptr);   // connected ok
                     });
                     m_Auth->start();
                 } catch (...) {
-                    stop();
-                    m_Notify(std::current_exception());
+                    notify(std::current_exception());
                 }
             });
         }
 
-        void stop() { m_Client->stop(); }
-        bool is_open() const { return m_Client and m_Client->is_open(); }
+        void stop() { m_Connected = false; m_Client->stop(); }
+        bool is_open() const { return m_Connected; }
 
         template<class K>
         void select(const IndexSpec& aIndex, const K& aKey, Handler aHandler, unsigned aTimeoutMs = 1000)
