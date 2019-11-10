@@ -11,12 +11,10 @@
 #include "Protocol.hpp"
 #include "Auth.hpp"
 
-//#include <parser/Hex.hpp>
-
 namespace tnt17
 {
     template<class T>
-    struct Client
+    struct Client : public std::enable_shared_from_this<Client<T>>
     {
         using Notify = std::function<void(std::exception_ptr)>;
         using Result = std::vector<T>;
@@ -101,7 +99,8 @@ namespace tnt17
             else
             {
                 stop();
-                m_Queue->network_error(aPtr);
+                if (m_Queue)
+                    m_Queue->network_error(aPtr);
             }
             m_Notify(aPtr);
         }
@@ -118,21 +117,21 @@ namespace tnt17
         void start()
         {
             m_Client = std::make_shared<Event::Client>(m_Loop);
-            m_Client->start(m_Addr, CONNECT_TIMEOUT, [this](std::future<tcp::socket&> aSocket)
+            m_Client->start(m_Addr, CONNECT_TIMEOUT, [this, p=this->shared_from_this()](std::future<tcp::socket&> aSocket)
             {
                 try {
                     auto& sSocket = aSocket.get();
-                    m_Auth = std::make_shared<Auth>(sSocket, [this, &sSocket](boost::system::error_code ec){
+                    m_Auth = std::make_shared<Auth>(sSocket, [this, p, &sSocket](boost::system::error_code ec){
                         if (ec) {
                             notify(std::make_exception_ptr(Event::NetworkError(ec)));
                             return;
                         }
-                        m_Transport = std::make_shared<Transport>(sSocket, [this](std::future<std::string>&& aResult){
-                            callback(std::move(aResult));
+                        m_Transport = std::make_shared<Transport>(sSocket, [p](std::future<std::string>&& aResult){
+                            p->callback(std::move(aResult));
                         });
                         m_Transport->start();
                         m_Queue->start();
-                        notify(nullptr);   // connected ok
+                        notify(nullptr);   // connection established
                     });
                     m_Auth->start();
                 } catch (...) {
@@ -144,8 +143,9 @@ namespace tnt17
         void stop()
         {
             m_Connected = false;
-            if (m_Client) m_Client->stop();
-            if (m_Queue)  m_Queue->stop();
+            if (m_Client)    { m_Client->stop(); m_Client.reset();}
+            if (m_Queue)     { m_Queue->stop();  m_Queue.reset(); }
+            if (m_Transport) { m_Transport.reset(); }
         }
 
         bool is_open() const { return m_Connected; }
@@ -161,8 +161,8 @@ namespace tnt17
             }
 
             const uint64_t sSerial = m_Serial++;
-            m_Queue->insert(sSerial, aTimeoutMs, [this, aHandler](std::future<std::string>&& aReply) mutable {
-                xcall(aHandler, std::move(aReply));
+            m_Queue->insert(sSerial, aTimeoutMs, [p=this->shared_from_this(), aHandler](std::future<std::string>&& aReply) mutable {
+                p->xcall(aHandler, std::move(aReply));
             });
 
             MsgPack::binary sBuffer;

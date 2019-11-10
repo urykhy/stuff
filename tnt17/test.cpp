@@ -53,7 +53,8 @@ BOOST_AUTO_TEST_CASE(simple)
 
     Threads::WaitGroup sWait(1);
     const auto sAddr = boost::asio::ip::tcp::endpoint(boost::asio::ip::address::from_string("127.0.0.1"), 2090);
-    tnt17::Client<DataEntry> sClient(sLoop.service(), sAddr, 512 /*space id*/, [&sWait](std::exception_ptr aPtr){
+    using C = tnt17::Client<DataEntry>;
+    auto sClient = std::make_shared<C>(sLoop.service(), sAddr, 512 /*space id*/, [&sWait](std::exception_ptr aPtr){
         sWait.release();
         if (nullptr == aPtr) {
             BOOST_TEST_MESSAGE("connected");
@@ -65,7 +66,7 @@ BOOST_AUTO_TEST_CASE(simple)
             }
         }
     });
-    sClient.select(sIndex, 1 /*key*/ ,[](std::future<std::vector<DataEntry>>&& aResult){
+    sClient->select(sIndex, 1 /*key*/ ,[](std::future<std::vector<DataEntry>>&& aResult){
         try {
             const auto sResult = aResult.get();
         } catch (const std::exception& e) {
@@ -73,11 +74,11 @@ BOOST_AUTO_TEST_CASE(simple)
         }
     });
 
-    sClient.start();
+    sClient->start();
     sWait.wait();
-    BOOST_REQUIRE(sClient.is_open());
+    BOOST_REQUIRE(sClient->is_open());
 
-    if (!sClient.is_open()) {
+    if (!sClient->is_open()) {
         BOOST_TEST_MESSAGE("no connection: exiting");
         sGroup.wait();
         return;
@@ -85,7 +86,7 @@ BOOST_AUTO_TEST_CASE(simple)
 
     // make calls, callback will be called in asio thread
     sWait.reset(2);
-    sClient.select(sIndex, 1 /*key*/ ,[&sWait](std::future<std::vector<DataEntry>>&& aResult){
+    sClient->select(sIndex, 1 /*key*/ ,[&sWait](std::future<std::vector<DataEntry>>&& aResult){
         const auto sResult = aResult.get();
         BOOST_REQUIRE_EQUAL(sResult.size(), 1);
         BOOST_CHECK_EQUAL(sResult[0].pk, 1);
@@ -93,7 +94,7 @@ BOOST_AUTO_TEST_CASE(simple)
         sWait.release();
     });
 
-    sClient.select(tnt17::IndexSpec().set_id(1), "NightWish" /*key*/ ,[&sWait](std::future<std::vector<DataEntry>>&& aResult){
+    sClient->select(tnt17::IndexSpec().set_id(1), "NightWish" /*key*/ ,[&sWait](std::future<std::vector<DataEntry>>&& aResult){
         const auto sResult = aResult.get();
         BOOST_REQUIRE_EQUAL(sResult.size(), 2);
         BOOST_CHECK_EQUAL(sResult[0].value, "NightWish");
@@ -102,7 +103,7 @@ BOOST_AUTO_TEST_CASE(simple)
     });
 
     sWait.wait();
-    sClient.stop();
+    sClient->stop();
     //std::this_thread::sleep_for(200ms);
 
     sGroup.wait();
