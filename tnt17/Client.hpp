@@ -32,7 +32,7 @@ namespace tnt17
         std::shared_ptr<Auth> m_Auth;
 
         boost::asio::io_service& m_Loop;
-        RPC::ReplyWaiter m_Queue;
+        std::shared_ptr<RPC::ReplyWaiter> m_Queue;
         std::atomic<uint64_t> m_Serial{1};
         const tcp::endpoint m_Addr;
         const int m_SpaceID;
@@ -65,7 +65,6 @@ namespace tnt17
                 sResultStr = aResult.get();
             } catch (...) {
                 // must be network error
-                // FIXME: call m_Queue.error to mark all requests as failed
                 notify(std::current_exception());
                 return;
             }
@@ -92,7 +91,7 @@ namespace tnt17
                 sPromise.set_exception(std::make_exception_ptr(Event::RemoteError(sReply.error)));
             }
 
-            m_Queue.call(sHeader.sync, sPromise.get_future());
+            m_Queue->call(sHeader.sync, sPromise.get_future());
         }
 
         void notify(std::exception_ptr aPtr)
@@ -100,14 +99,17 @@ namespace tnt17
             if (aPtr == nullptr)
                 m_Connected = true;
             else
+            {
                 stop();
+                m_Queue->network_error(aPtr);
+            }
             m_Notify(aPtr);
         }
 
     public:
         Client(boost::asio::io_service& aLoop, const tcp::endpoint& aAddr, int aSpaceID, Notify aNotify)
         : m_Loop(aLoop)
-        , m_Queue(aLoop)
+        , m_Queue(std::make_shared<RPC::ReplyWaiter>(aLoop))
         , m_Addr(aAddr)
         , m_SpaceID(aSpaceID)
         , m_Notify(aNotify)
@@ -129,6 +131,7 @@ namespace tnt17
                             callback(std::move(aResult));
                         });
                         m_Transport->start();
+                        m_Queue->start();
                         notify(nullptr);   // connected ok
                     });
                     m_Auth->start();
@@ -138,7 +141,13 @@ namespace tnt17
             });
         }
 
-        void stop() { m_Connected = false; m_Client->stop(); }
+        void stop()
+        {
+            m_Connected = false;
+            if (m_Client) m_Client->stop();
+            if (m_Queue)  m_Queue->stop();
+        }
+
         bool is_open() const { return m_Connected; }
 
         template<class K>
@@ -152,7 +161,7 @@ namespace tnt17
             }
 
             const uint64_t sSerial = m_Serial++;
-            m_Queue.insert(sSerial, aTimeoutMs, [this, aHandler](std::future<std::string>&& aReply) mutable {
+            m_Queue->insert(sSerial, aTimeoutMs, [this, aHandler](std::future<std::string>&& aReply) mutable {
                 xcall(aHandler, std::move(aReply));
             });
 

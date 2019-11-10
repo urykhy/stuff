@@ -50,12 +50,12 @@ namespace RPC
         std::shared_ptr<Event::Client> m_Client;
         std::shared_ptr<Transport> m_Transport;
 
-        ReplyWaiter m_Queue;
+        std::shared_ptr<ReplyWaiter> m_Queue;
         std::atomic<uint64_t> m_Serial{1};
 
     public:
         Client(boost::asio::io_service& aLoop, const tcp::endpoint& aAddr)
-        : m_Queue(aLoop)
+        : m_Queue(std::make_shared<ReplyWaiter>(aLoop))
         {
             m_Client = std::make_shared<Event::Client>(aLoop);
             m_Client->start(aAddr, CONNECT_TIMEOUT, [this](std::future<tcp::socket&> aSocket)
@@ -65,18 +65,21 @@ namespace RPC
                     std::promise<std::string> sPromise;
                     auto sSerial = Library::parseResponse(aResult, sPromise);
                     if (sSerial > 0)
-                        m_Queue.call(sSerial, sPromise.get_future());
+                        m_Queue->call(sSerial, sPromise.get_future());
                 });
                 m_Transport->start();
+                m_Queue->start();
             });
         }
 
         void call(const std::string& aName, const std::string& aArgs, Handler aHandler, unsigned aTimeoutMs = 100)
         {
             const uint64_t sSerial = m_Serial++;
-            m_Queue.insert(sSerial, aTimeoutMs, aHandler);
+            m_Queue->insert(sSerial, aTimeoutMs, aHandler);
             m_Transport->call(Library::formatCall(sSerial, aName, aArgs));
         }
+
+        void stop() { if (m_Queue) m_Queue->stop(); }
     };
 
     class Server

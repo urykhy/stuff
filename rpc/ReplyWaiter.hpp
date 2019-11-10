@@ -10,7 +10,7 @@
 
 namespace RPC
 {
-    struct ReplyWaiter
+    struct ReplyWaiter : public std::enable_shared_from_this<ReplyWaiter>
     {
         using Handler = std::function<void(std::future<std::string>&&)>;
 
@@ -21,11 +21,14 @@ namespace RPC
         std::map<uint64_t, Handler> m_Waiters;          // serial to handler
         std::multimap<uint64_t, uint64_t> m_Timeouts;   // timeout to serial
         boost::asio::deadline_timer m_Timer;
+        std::atomic_bool m_Running{true};
 
         void setup_timer()
         {
+            if (!m_Running)
+                return;
             m_Timer.expires_from_now(boost::posix_time::millisec(TIMEOUT_MS));
-            m_Timer.async_wait([this](auto error){ if (!error) this->timeout_func(); });
+            m_Timer.async_wait([p=this->shared_from_this()](auto error){ if (!error) p->timeout_func(); });
         }
 
         void timeout_func()
@@ -53,12 +56,27 @@ namespace RPC
             setup_timer();
         }
 
+        void on_network_error(std::exception_ptr aPtr)
+        {
+            Lock sLock(m_Mutex);
+            for (auto& x : m_Waiters)
+            {
+                auto& sHandler = x.second;
+                std::promise<std::string> sPromise;
+                sPromise.set_exception(aPtr);
+                sHandler(sPromise.get_future());
+            }
+            m_Timeouts.clear();
+            m_Waiters.clear();
+        }
+
     public:
         ReplyWaiter(boost::asio::io_service& aLoop)
         : m_Timer(aLoop)
-        {
-            setup_timer();
-        }
+        { }
+
+        void start() { m_Running = true; setup_timer(); }
+        void stop() { m_Running = false; }
 
         void insert(uint64_t aSerial, unsigned aTimeoutMs, Handler aHandler)
         {
@@ -83,6 +101,10 @@ namespace RPC
             return true;
         }
 
-        // FIXME: add method to call all handlers with error
+        void network_error(std::exception_ptr aPtr) {
+            m_Timer.get_io_service().post([p=this->shared_from_this(), aPtr](){
+                p->on_network_error(aPtr);
+            });
+        }
     };
 } // namespace RPC
