@@ -73,18 +73,32 @@ namespace tnt17
         write_uint(aStream, 1);    write_uint(aStream, aSync);
     }
 
+    struct IndexSpec
+    {
+        unsigned id       = 0;
+        unsigned limit    = 255;
+        unsigned offset   = 0;
+        unsigned iterator = 0;
+
+        IndexSpec& set_id      (unsigned x) { id       = x; return *this; }
+        IndexSpec& set_limit   (unsigned x) { limit    = x; return *this; }
+        IndexSpec& set_offset  (unsigned x) { offset   = x; return *this; }
+        IndexSpec& set_iterator(unsigned x) { iterator = x; return *this; }
+    };
+
     template<class S>
-    void formatSelectBody(S& aStream, int aSpaceId, int aIndexId)
+    void formatSelectBody(S& aStream, int aSpaceId, const IndexSpec& aIndex)
     {
         using namespace MsgPack;
         write_map_size(aStream, 6);
         write_uint(aStream, 0x10);    write_uint(aStream, aSpaceId);
-        write_uint(aStream, 0x11);    write_uint(aStream, aIndexId);
-        write_uint(aStream, 0x12);    write_uint(aStream, 255); // limit
-        write_uint(aStream, 0x13);    write_uint(aStream, 0);   // offset
-        write_uint(aStream, 0x14);    write_uint(aStream, 0);   // iterator
+        write_uint(aStream, 0x11);    write_uint(aStream, aIndex.id);
+        write_uint(aStream, 0x12);    write_uint(aStream, aIndex.limit);
+        write_uint(aStream, 0x13);    write_uint(aStream, aIndex.offset);
+        write_uint(aStream, 0x14);    write_uint(aStream, aIndex.iterator);
         write_uint(aStream, 0x20);    write_array_size(aStream, 1);
     }
+
 #if 0
     template<class P, class V>
     void formatInsertBody(P& aStream, int aSpaceId, const V& aValue)

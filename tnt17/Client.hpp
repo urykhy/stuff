@@ -134,7 +134,7 @@ namespace tnt17
         bool is_open() const { return m_Client and m_Client->is_open(); }
 
         template<class K>
-        void select(const int aIndex, const K& aKey, Handler aHandler, unsigned aTimeoutMs = 1000)
+        void select(const IndexSpec& aIndex, const K& aKey, Handler aHandler, unsigned aTimeoutMs = 1000)
         {
             if (!is_open()) {
                 std::promise<std::vector<T>> sPromise;

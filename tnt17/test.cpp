@@ -49,6 +49,8 @@ BOOST_AUTO_TEST_CASE(simple)
     Threads::Group sGroup;
     sLoop.start(1, sGroup);
 
+    tnt17::IndexSpec sIndex;
+
     Threads::WaitGroup sWait(1);
     const auto sAddr = boost::asio::ip::tcp::endpoint(boost::asio::ip::address::from_string("127.0.0.1"), 2090);
     tnt17::Client<DataEntry> sClient(sLoop.service(), sAddr, 512 /*space id*/, [&sWait](std::exception_ptr aPtr){
@@ -63,7 +65,7 @@ BOOST_AUTO_TEST_CASE(simple)
             }
         }
     });
-    sClient.select(0 /*index*/, 1 /*key*/ ,[](std::future<std::vector<DataEntry>>&& aResult){
+    sClient.select(sIndex, 1 /*key*/ ,[](std::future<std::vector<DataEntry>>&& aResult){
         try {
             const auto sResult = aResult.get();
         } catch (const std::exception& e) {
@@ -82,14 +84,15 @@ BOOST_AUTO_TEST_CASE(simple)
 
     // make calls, callback will be called in asio thread
     sWait.reset(2);
-    sClient.select(0 /*index*/, 1 /*key*/ ,[&sWait](std::future<std::vector<DataEntry>>&& aResult){
+    sClient.select(sIndex, 1 /*key*/ ,[&sWait](std::future<std::vector<DataEntry>>&& aResult){
         const auto sResult = aResult.get();
         BOOST_REQUIRE_EQUAL(sResult.size(), 1);
         BOOST_CHECK_EQUAL(sResult[0].pk, 1);
         BOOST_CHECK_EQUAL(sResult[0].value, "Roxette");
         sWait.release();
     });
-    sClient.select(1 /*index*/, "NightWish" /*key*/ ,[&sWait](std::future<std::vector<DataEntry>>&& aResult){
+
+    sClient.select(tnt17::IndexSpec().set_id(1), "NightWish" /*key*/ ,[&sWait](std::future<std::vector<DataEntry>>&& aResult){
         const auto sResult = aResult.get();
         BOOST_REQUIRE_EQUAL(sResult.size(), 2);
         BOOST_CHECK_EQUAL(sResult[0].value, "NightWish");
