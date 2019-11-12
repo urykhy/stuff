@@ -37,7 +37,7 @@ namespace RPC
         const_buffer  body_buffer()   const { return boost::asio::buffer((const void*)&data[0], data.size()); }
     };
 
-    struct Client
+    struct Client : public std::enable_shared_from_this<Client>
     {
         using Result = std::string;
         using Handler = std::function<void(std::future<std::string>&&)>;
@@ -50,18 +50,25 @@ namespace RPC
         std::shared_ptr<Event::Client> m_Client;
         std::shared_ptr<Transport> m_Transport;
 
+        boost::asio::io_service& m_Loop;
         std::shared_ptr<ReplyWaiter> m_Queue;
+        const tcp::endpoint m_Addr;
         std::atomic<uint64_t> m_Serial{1};
 
     public:
         Client(boost::asio::io_service& aLoop, const tcp::endpoint& aAddr)
-        : m_Queue(std::make_shared<ReplyWaiter>(aLoop))
+        : m_Loop(aLoop)
+        , m_Queue(std::make_shared<ReplyWaiter>(aLoop))
+        , m_Addr(aAddr)
+        {}
+
+        void start()
         {
-            m_Client = std::make_shared<Event::Client>(aLoop);
-            m_Client->start(aAddr, CONNECT_TIMEOUT, [this](std::future<tcp::socket&> aSocket)
+            m_Client = std::make_shared<Event::Client>(m_Loop);
+            m_Client->start(m_Addr, CONNECT_TIMEOUT, [this, p=this->shared_from_this()](std::future<tcp::socket&> aSocket)
             {
                 auto& sSocket = aSocket.get(); // FIXME: handle exception
-                m_Transport = std::make_shared<Transport>(sSocket, [this](std::future<std::string>&& aResult){
+                m_Transport = std::make_shared<Transport>(sSocket, [this, p](std::future<std::string>&& aResult){
                     std::promise<std::string> sPromise;
                     auto sSerial = Library::parseResponse(aResult, sPromise);
                     if (sSerial > 0)
@@ -82,20 +89,28 @@ namespace RPC
         void stop() { if (m_Queue) m_Queue->stop(); }
     };
 
-    class Server
+    class Server : public std::enable_shared_from_this<Server>
     {
         using tcp = boost::asio::ip::tcp;
         using Transport = Event::Framed::Server<Message>;
+        boost::asio::io_service& m_Loop;
+        const uint16_t m_Port;
+
         std::shared_ptr<Event::Server> m_Server;
         Library m_Library;
 
     public:
         Server(boost::asio::io_service& aLoop, uint16_t aPort)
+        : m_Loop(aLoop)
+        , m_Port(aPort)
+        { }
+
+        void start()
         {
-            m_Server = std::make_shared<Event::Server>(aLoop);
-            m_Server->start(aPort, [this](std::shared_ptr<tcp::socket>&& aSocket)
+            m_Server = std::make_shared<Event::Server>(m_Loop);
+            m_Server->start(m_Port, [this, p=this->shared_from_this()](std::shared_ptr<tcp::socket>&& aSocket)
             {
-                auto sTmp = std::make_shared<Transport>(std::move(aSocket), [this](std::string& arg) -> std::string {
+                auto sTmp = std::make_shared<Transport>(std::move(aSocket), [this, p](std::string& arg) -> std::string {
                     return m_Library.call(arg);
                 });
                 sTmp->start();
@@ -106,6 +121,10 @@ namespace RPC
         {
             // FIXME: locking
             m_Library.insert(aName, aHandler);
+        }
+
+        void stop() {
+            if (m_Server) m_Server->stop();
         }
     };
 

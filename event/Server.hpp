@@ -4,6 +4,7 @@
 #include <boost/asio/coroutine.hpp>
 
 namespace Event {
+
     class Server : boost::asio::coroutine, public std::enable_shared_from_this<Server>
     {
     public:
@@ -29,6 +30,10 @@ namespace Event {
             m_Acceptor = std::make_shared<tcp::acceptor>(m_Loop, aAddr);
 
             operator()();   // launch coroutine
+        }
+
+        void stop() {
+            if (m_Acceptor) m_Acceptor->close();
         }
 
 #include <boost/asio/yield.hpp>

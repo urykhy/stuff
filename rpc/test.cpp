@@ -29,26 +29,28 @@ BOOST_AUTO_TEST_CASE(simple)
     Threads::Asio  sLoop;
     sLoop.start(1, sGroup);
 
-    RPC::Server sServer(sLoop.service(), PORT);
-    sServer.insert("foo",[](auto& s){
+    auto sServer = std::make_shared<RPC::Server>(sLoop.service(), PORT);
+    sServer->insert("foo",[](auto& s){
         using namespace std::chrono_literals;
         if (s == "with delay")
             std::this_thread::sleep_for(150ms);
         return s+"bar";
     });
+    sServer->start();
 
     const auto sAddr = boost::asio::ip::tcp::endpoint(boost::asio::ip::address::from_string("127.0.0.1"), PORT);
-    RPC::Client sClient(sLoop.service(), sAddr);
+    auto sClient = std::make_shared<RPC::Client>(sLoop.service(), sAddr);
+    sClient->start();
 
     // wait to get connection
     std::this_thread::sleep_for(200ms);
 
     // make calls, callback will be called in asio thread
-    sClient.call("foo","bar",[&sCount](std::future<std::string>&& aResult){
+    sClient->call("foo","bar",[&sCount](std::future<std::string>&& aResult){
         sCount++;
         BOOST_CHECK_EQUAL(aResult.get(), "barbar");
     });
-    sClient.call("bar","xxx",[&sCount](std::future<std::string>&& aResult){
+    sClient->call("bar","xxx",[&sCount](std::future<std::string>&& aResult){
         sCount++;
         try {
             aResult.get();
@@ -57,7 +59,7 @@ BOOST_AUTO_TEST_CASE(simple)
             BOOST_CHECK_EQUAL(e.what(), "remote error: method not found");
         }
     });
-    sClient.call("foo","with delay",[&sCount](std::future<std::string>&& aResult){
+    sClient->call("foo","with delay",[&sCount](std::future<std::string>&& aResult){
         sCount++;
         try {
             aResult.get();
