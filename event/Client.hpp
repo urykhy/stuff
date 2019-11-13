@@ -18,29 +18,35 @@ namespace Event
         boost::asio::io_service& m_Loop;
         tcp::socket              m_Socket;
         boost::asio::deadline_timer m_Timer;
+        const tcp::endpoint& m_Addr;
+        const unsigned m_TimeoutMs;
+        Handler m_Handler;
 
     public:
-        Client(boost::asio::io_service& aLoop)
+        Client(boost::asio::io_service& aLoop, const tcp::endpoint& aAddr, unsigned aTimeoutMs, Handler aHandler)
         : m_Loop(aLoop)
         , m_Socket(aLoop)
         , m_Timer(aLoop)
+        , m_Addr(aAddr)
+        , m_TimeoutMs(aTimeoutMs)
+        , m_Handler(aHandler)
         { }
 
-        void start(const tcp::endpoint& aAddr, unsigned aTimeoutMs, Handler aHandler)
+        void start()
         {
-            m_Timer.expires_from_now(boost::posix_time::millisec(aTimeoutMs));
-            m_Socket.async_connect(aAddr, [p=this->shared_from_this(), aHandler](boost::system::error_code error)
+            m_Timer.expires_from_now(boost::posix_time::millisec(m_TimeoutMs));
+            m_Socket.async_connect(m_Addr, [this, p=this->shared_from_this()](boost::system::error_code error)
             {
-                p->m_Timer.cancel();
+                m_Timer.cancel();
                 std::promise<tcp::socket&> sPromise;
                 if (!error)
                 {
-                    sPromise.set_value(p->m_Socket);
-                    p->m_Socket.set_option(tcp::no_delay(true));
+                    sPromise.set_value(m_Socket);
+                    m_Socket.set_option(tcp::no_delay(true));
                 }
                 else
                     sPromise.set_exception(std::make_exception_ptr(NetworkError(error)));
-                aHandler(sPromise.get_future());
+                m_Handler(sPromise.get_future());
             });
             m_Timer.async_wait([p=this->shared_from_this()](boost::system::error_code ec){
                 if (!ec)

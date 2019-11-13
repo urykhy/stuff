@@ -15,20 +15,21 @@ namespace Event {
         boost::asio::io_service& m_Loop;
         std::shared_ptr<tcp::acceptor> m_Acceptor;
         Handler m_Handler;
+        const uint16_t m_Port;
         std::shared_ptr<tcp::socket> m_Socket;
 
     public:
 
-        Server(boost::asio::io_service& aLoop)
+        Server(boost::asio::io_service& aLoop, uint16_t aPort, Handler aHandler)
         : m_Loop(aLoop)
+        , m_Handler(aHandler)
+        , m_Port(aPort)
         { }
 
-        void start(uint16_t aPort, Handler aHandler)
+        void start()
         {
-            m_Handler = aHandler;
-            boost::asio::ip::tcp::endpoint aAddr(boost::asio::ip::tcp::v4(), aPort);
+            boost::asio::ip::tcp::endpoint aAddr(boost::asio::ip::tcp::v4(), m_Port);
             m_Acceptor = std::make_shared<tcp::acceptor>(m_Loop, aAddr);
-
             operator()();   // launch coroutine
         }
 

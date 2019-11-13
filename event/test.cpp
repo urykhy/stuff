@@ -40,16 +40,15 @@ BOOST_AUTO_TEST_CASE(echo)
     Threads::Asio  sLoop;
     sLoop.start(1, sGroup);
 
-    auto sServer = std::make_shared<Event::Server>(sLoop.service());
-    sServer->start(1234, [](std::shared_ptr<boost::asio::ip::tcp::socket>&& aSocket)
+    auto sServer = std::make_shared<Event::Server>(sLoop.service(), 1234, [](std::shared_ptr<boost::asio::ip::tcp::socket>&& aSocket)
     {
         BOOST_CHECK_MESSAGE(true, "connection from " << aSocket->remote_endpoint());
         auto sTmp = std::make_shared<Event::Echo::Server>(std::move(aSocket));
         sTmp->start();
     });
+    sServer->start();
 
-    auto sClient = std::make_shared<Event::Client>(sLoop.service());
-    sClient->start(boost::asio::ip::tcp::endpoint(boost::asio::ip::address::from_string("127.0.0.1"), 1234), 100, [](std::future<boost::asio::ip::tcp::socket&> aSocket)
+    auto sClient = std::make_shared<Event::Client>(sLoop.service(), boost::asio::ip::tcp::endpoint(boost::asio::ip::address::from_string("127.0.0.1"), 1234), 100, [](std::future<boost::asio::ip::tcp::socket&> aSocket)
     {
         try {
             auto& sSocket = aSocket.get();
@@ -60,6 +59,7 @@ BOOST_AUTO_TEST_CASE(echo)
             BOOST_CHECK_MESSAGE(false, "fail to connect: " << e.what());
         }
     });
+    sClient->start();
 
     sleep (1);
     sGroup.wait();
@@ -70,8 +70,7 @@ BOOST_AUTO_TEST_CASE(framed)
     Threads::Asio  sLoop;
     sLoop.start(1, sGroup);
 
-    auto sServer = std::make_shared<Event::Server>(sLoop.service());
-    sServer->start(1234, [](std::shared_ptr<boost::asio::ip::tcp::socket>&& aSocket)
+    auto sServer = std::make_shared<Event::Server>(sLoop.service(), 1234, [](std::shared_ptr<boost::asio::ip::tcp::socket>&& aSocket)
     {
         BOOST_CHECK_MESSAGE(true, "connection from " << aSocket->remote_endpoint());
         auto sTmp = std::make_shared<Event::Framed::Server<Message>>(std::move(aSocket), [](std::string& arg) -> std::string {
@@ -82,10 +81,10 @@ BOOST_AUTO_TEST_CASE(framed)
         });
         sTmp->start();
     });
+    sServer->start();
 
     int sClientCalls = 0;
-    auto sClient = std::make_shared<Event::Client>(sLoop.service());
-    sClient->start(boost::asio::ip::tcp::endpoint(boost::asio::ip::address::from_string("127.0.0.1"), 1234), 100, [&sClientCalls](std::future<boost::asio::ip::tcp::socket&> aSocket)
+    auto sClient = std::make_shared<Event::Client>(sLoop.service(), boost::asio::ip::tcp::endpoint(boost::asio::ip::address::from_string("127.0.0.1"), 1234), 100, [&sClientCalls](std::future<boost::asio::ip::tcp::socket&> aSocket)
     {
         try {
             auto& sSocket = aSocket.get();
@@ -105,6 +104,7 @@ BOOST_AUTO_TEST_CASE(framed)
             BOOST_CHECK_MESSAGE(false, "fail to connect: " << e.what());
         }
     });
+    sClient->start();
 
     sleep (1);
     sGroup.wait();
