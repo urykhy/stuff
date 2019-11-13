@@ -22,10 +22,11 @@ namespace RPC
         std::multimap<uint64_t, uint64_t> m_Timeouts;   // timeout to serial
         boost::asio::deadline_timer m_Timer;
         std::atomic_bool m_Running{true};
+        std::atomic_bool m_Disconnected{false};
 
         void setup_timer()
         {
-            if (!m_Running)
+            if (!m_Running and m_Waiters.empty())
                 return;
             m_Timer.expires_from_now(boost::posix_time::millisec(TIMEOUT_MS));
             m_Timer.async_wait([p=this->shared_from_this()](auto error){ if (!error) p->timeout_func(); });
@@ -33,25 +34,29 @@ namespace RPC
 
         void timeout_func()
         {
-            Lock sLock(m_Mutex);
-
-            auto sNow = Time::get_time().to_ms();
-            for (auto it = m_Timeouts.begin(); it != m_Timeouts.end() && it->first < sNow;)
+            if (m_Disconnected)
             {
-                auto sIt = m_Waiters.find(it->second);
-                if (sIt != m_Waiters.end())
+                on_network_error(std::make_exception_ptr(Event::NetworkError(boost::system::errc::make_error_code(boost::system::errc::not_connected))));
+            } else {
+                Lock sLock(m_Mutex);
+
+                auto sNow = Time::get_time().to_ms();
+                for (auto it = m_Timeouts.begin(); it != m_Timeouts.end() && it->first < sNow;)
                 {
-                    m_Timer.get_io_service().post([sHandler = sIt->second]()
+                    auto sIt = m_Waiters.find(it->second);
+                    if (sIt != m_Waiters.end())
                     {
-                        std::promise<std::string> sPromise;
-                        sPromise.set_exception(std::make_exception_ptr(Event::RemoteError("timeout")));
-                        sHandler(sPromise.get_future());
-                    });
-                    m_Waiters.erase(sIt);
+                        m_Timer.get_io_service().post([sHandler = sIt->second]()
+                        {
+                            std::promise<std::string> sPromise;
+                            sPromise.set_exception(std::make_exception_ptr(Event::RemoteError("timeout")));
+                            sHandler(sPromise.get_future());
+                        });
+                        m_Waiters.erase(sIt);
+                    }
+                    it = m_Timeouts.erase(it);
                 }
-                it = m_Timeouts.erase(it);
             }
-            sLock.unlock();
 
             setup_timer();
         }
@@ -68,6 +73,7 @@ namespace RPC
             }
             m_Timeouts.clear();
             m_Waiters.clear();
+            m_Disconnected = true;
         }
 
     public:

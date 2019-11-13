@@ -43,7 +43,6 @@ namespace RPC
         using Handler = std::function<void(std::future<std::string>&&)>;
 
     private:
-        static constexpr unsigned CONNECT_TIMEOUT = 100;
         using tcp = boost::asio::ip::tcp;
         using Transport= Event::Framed::Client<Message>;
 
@@ -64,8 +63,8 @@ namespace RPC
 
         void start()
         {
-            m_Client = std::make_shared<Event::Client>(m_Loop);
-            m_Client->start(m_Addr, CONNECT_TIMEOUT, [this, p=this->shared_from_this()](std::future<tcp::socket&> aSocket)
+            static const unsigned CONNECT_TIMEOUT = 100; // ms
+            m_Client = std::make_shared<Event::Client>(m_Loop, m_Addr, CONNECT_TIMEOUT, [this, p=this->shared_from_this()](std::future<tcp::socket&> aSocket)
             {
                 auto& sSocket = aSocket.get(); // FIXME: handle exception
                 m_Transport = std::make_shared<Transport>(sSocket, [this, p](std::future<std::string>&& aResult){
@@ -77,6 +76,7 @@ namespace RPC
                 m_Transport->start();
                 m_Queue->start();
             });
+            m_Client->start();
         }
 
         void call(const std::string& aName, const std::string& aArgs, Handler aHandler, unsigned aTimeoutMs = 100)
@@ -107,14 +107,14 @@ namespace RPC
 
         void start()
         {
-            m_Server = std::make_shared<Event::Server>(m_Loop);
-            m_Server->start(m_Port, [this, p=this->shared_from_this()](std::shared_ptr<tcp::socket>&& aSocket)
+            m_Server = std::make_shared<Event::Server>(m_Loop, m_Port, [this, p=this->shared_from_this()](std::shared_ptr<tcp::socket>&& aSocket)
             {
                 auto sTmp = std::make_shared<Transport>(std::move(aSocket), [this, p](std::string& arg) -> std::string {
                     return m_Library.call(arg);
                 });
                 sTmp->start();
             });
+            m_Server->start();
         }
 
         void insert(const std::string& aName, Library::Handler aHandler)
