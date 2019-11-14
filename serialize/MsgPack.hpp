@@ -1,12 +1,12 @@
 #pragma once
-#include "Buffer.hpp"
+#include <container/Stream.hpp>
 #include <list>
 
 namespace MsgPack
 {
-    using binary = Util::binary;
-    using omemstream = Util::omemstream;
-    using imemstream = Util::imemstream;
+    using binary = Container::binary;
+    using omemstream = Container::omemstream;
+    using imemstream = Container::imemstream;
 
     struct BadFormat : std::runtime_error { BadFormat() : std::runtime_error("Bad msgpack format") {} };
 

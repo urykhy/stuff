@@ -5,8 +5,8 @@
 #include <vector>
 #include <boost/lockfree/spsc_queue.hpp>
 
-namespace container {
-
+namespace Container
+{
     template<class T>
     class Queue {
         std::vector<T> m_Data;

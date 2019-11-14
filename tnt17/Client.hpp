@@ -19,9 +19,8 @@ namespace tnt17
         using Notify = std::function<void(std::exception_ptr)>;
         using Result = std::vector<T>;
         using Handler = std::function<void(std::future<Result>&&)>;
-
     private:
-        static constexpr unsigned CONNECT_TIMEOUT = 100;
+
         using tcp = boost::asio::ip::tcp;
         using Transport= Event::Framed::Client<Message>;
 
@@ -116,8 +115,8 @@ namespace tnt17
 
         void start()
         {
-            m_Client = std::make_shared<Event::Client>(m_Loop);
-            m_Client->start(m_Addr, CONNECT_TIMEOUT, [this, p=this->shared_from_this()](std::future<tcp::socket&> aSocket)
+            constexpr unsigned CONNECT_TIMEOUT = 100;
+            m_Client = std::make_shared<Event::Client>(m_Loop, m_Addr, CONNECT_TIMEOUT, [this, p=this->shared_from_this()](std::future<tcp::socket&> aSocket)
             {
                 try {
                     auto& sSocket = aSocket.get();
@@ -138,6 +137,7 @@ namespace tnt17
                     notify(std::current_exception());
                 }
             });
+            m_Client->start();
         }
 
         void stop()

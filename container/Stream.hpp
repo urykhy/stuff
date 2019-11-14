@@ -5,7 +5,7 @@
 #include <string>
 #include <boost/utility/string_ref.hpp>
 
-namespace Util
+namespace Container
 {
     typedef std::string binary;
 

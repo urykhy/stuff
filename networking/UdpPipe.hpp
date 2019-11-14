@@ -37,7 +37,7 @@ namespace Udp
 
         using Handler = std::function<void(Item& t)>;
         Socket m_Socket;
-        container::Queue<Item> m_Queue;  // FIXME: not thread safe
+        Container::Queue<Item> m_Queue;  // FIXME: not thread safe
         Handler m_Handler;
         std::atomic_bool m_Running{true};
 
