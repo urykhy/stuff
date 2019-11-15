@@ -45,8 +45,8 @@ namespace Threads
 
         void start(Group& aGroup, int aCount)
         {
-            m_Worker.start(aGroup, [](Task&) -> bool { return true; }, aCount);
-            m_Join.start(aGroup, [this](Task& t) {
+            m_Worker.start(aGroup, aCount);
+            m_Join.start(aGroup, 1, [this](Task& t) {
                 //BOOST_TEST_MESSAGE("check order " << t.serial << " vs " << m_NextJoin);
                 return t.serial == m_NextJoin;
             });

@@ -49,7 +49,7 @@ namespace Threads
         void insert(T& t) { q.insert(Node{t, stages.begin(), serial++}); }
 
         void start(Group& tg, unsigned count = 1) {
-            q.start(tg, [](Node&){ return true; }, count);
+            q.start(tg, count);
         }
         bool idle() const { return q.idle(); }
     };

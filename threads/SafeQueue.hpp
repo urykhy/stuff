@@ -21,6 +21,7 @@ namespace Threads
     };
 
     // NOTE: size is not limited
+    // fast exit only: do not wait for all tasks to complete
     template<class Node, class Q = ListWrapper<Node>>
     class SafeQueue
     {
@@ -102,6 +103,7 @@ namespace Threads
         }
     };
 
+    // just a queue and thread to process tasks
     template<class T, class Q = ListWrapper<T>>
     class SafeQueueThread
     {
@@ -111,7 +113,7 @@ namespace Threads
         template<class F> SafeQueueThread(F aHandler)
         : m_Handler(aHandler) { }
 
-        void start(Group& aGroup, std::function<bool(T&)> aCheck = [](T&) -> bool { return true; }, unsigned count = 1)
+        void start(Group& aGroup, unsigned count = 1, std::function<bool(T&)> aCheck = [](T&) -> bool { return true; })
         {
             aGroup.start([this, aCheck]() {
                 while (!m_Queue.exiting())
@@ -128,6 +130,7 @@ namespace Threads
         bool idle() const           { return m_Queue.idle(); }
     };
 
+    // queue to process tasks at specific moments
     template<class T>
     class DelayQueueThread
     {
@@ -150,9 +153,9 @@ namespace Threads
 
         void start(Group& aGroup, unsigned count = 1)
         {
-            m_Queue.start(aGroup, [this](auto& x) -> bool {
+            m_Queue.start(aGroup, count, [this](auto& x) -> bool {
                 return x.moment < ::time(nullptr);
-            }, count);
+            });
         }
 
         void insert(time_t ts, const T& aItem) { m_Queue.insert({ts + ::time(nullptr), aItem}); }
