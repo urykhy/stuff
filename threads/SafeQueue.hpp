@@ -75,7 +75,7 @@ namespace Threads
             return true;
         }
 
-        bool wait(Node& aItem, std::function<bool(Node&)> aTest = [](Node&) -> bool { return true; })
+        bool wait(Node& aItem, std::function<bool(const Node&)> aTest = [](const Node&) -> bool { return true; })
         {
             Lock lk(m_Mutex);
 
@@ -84,9 +84,9 @@ namespace Threads
 
             if (!m_List.empty())
             {
-                auto sItem = m_List.top();
-                if (aTest(sItem))
+                if (aTest(m_List.top()))
                 {
+                    auto sItem = m_List.top();
                     m_List.pop();
                     if (!m_List.empty())
                         wakeup_one();   // cond var can miss wakeups, so we try to wakeup next thread from here
@@ -113,7 +113,7 @@ namespace Threads
         template<class F> SafeQueueThread(F aHandler)
         : m_Handler(aHandler) { }
 
-        void start(Group& aGroup, unsigned count = 1, std::function<bool(T&)> aCheck = [](T&) -> bool { return true; })
+        void start(Group& aGroup, unsigned count = 1, std::function<bool(const T&)> aCheck = [](const T&) -> bool { return true; })
         {
             aGroup.start([this, aCheck]() {
                 while (!m_Queue.exiting())
@@ -153,7 +153,7 @@ namespace Threads
 
         void start(Group& aGroup, unsigned count = 1)
         {
-            m_Queue.start(aGroup, count, [this](auto& x) -> bool {
+            m_Queue.start(aGroup, count, [this](const auto& x) -> bool {
                 return x.moment < ::time(nullptr);
             });
         }
