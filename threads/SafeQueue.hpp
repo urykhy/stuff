@@ -82,24 +82,21 @@ namespace Threads
             if (m_List.empty())
                 wait_for(lk);
 
-            if (!m_List.empty())
-            {
-                if (aTest(m_List.top()))
-                {
-                    auto sItem = m_List.top();
-                    m_List.pop();
-                    if (!m_List.empty())
-                        wakeup_one();   // cond var can miss wakeups, so we try to wakeup next thread from here
-                    lk.unlock();
-                    aItem = std::move(sItem);
-                    return true;
-                } else {
-                    // have some data, but we can't consume it yet. so pause a bit
-                    wait_for(lk);
-                }
+            if (m_List.empty())
+                return false;
+
+            if (!aTest(m_List.top()))
+            {   // have some data, but we can't consume it yet. so pause a bit
+                wait_for(lk);
+                return false;
             }
 
-            return false;
+            auto sItem = m_List.top();
+            m_List.pop();
+            if (!m_List.empty())
+                wakeup_one();   // cond var can miss wakeups, so we try to wakeup next thread from here
+            aItem = std::move(sItem);
+            return true;
         }
     };
 
@@ -161,5 +158,4 @@ namespace Threads
         void insert(time_t ts, const T& aItem) { m_Queue.insert({ts + ::time(nullptr), aItem}); }
         bool idle() const                      { return m_Queue.idle(); }
     };
-
 }
