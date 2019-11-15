@@ -29,14 +29,13 @@ namespace Threads
         Q          m_List;
         std::condition_variable m_Cond;
         bool       m_Stop = false;
-        const bool m_FastExit;
 
         void wakeup_one() { m_Cond.notify_one(); }
         void wakeup_all() { m_Cond.notify_all(); }
         void wait_for(Lock& aLock) { m_Cond.wait_for(aLock, std::chrono::milliseconds(500)); }
 
     public:
-        SafeQueue(bool aFastExit = true) : m_FastExit(aFastExit) { }
+        SafeQueue() {}
 
         void stop()
         {
@@ -55,7 +54,7 @@ namespace Threads
         bool exiting() const
         {
             Lock lk(m_Mutex);
-            return m_FastExit ? (bool)m_Stop : (m_Stop and m_List.empty());
+            return m_Stop;
         }
 
         bool idle() const
@@ -109,8 +108,8 @@ namespace Threads
         const std::function<void(T& t)> m_Handler;
         SafeQueue<T, Q> m_Queue;
     public:
-        template<class F> SafeQueueThread(F aHandler, bool aFastExit = true)
-        : m_Handler(aHandler), m_Queue(aFastExit) { }
+        template<class F> SafeQueueThread(F aHandler)
+        : m_Handler(aHandler) { }
 
         void start(Group& aGroup, std::function<bool(T&)> aCheck = [](T&) -> bool { return true; }, unsigned count = 1)
         {
