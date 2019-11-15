@@ -10,6 +10,7 @@
 #include "Collect.hpp"
 #include "Asio.hpp"
 #include "WaitGroup.hpp"
+#include "OrderedWorker.hpp"
 
 // g++ test.cpp -I. -I.. -lboost_system -lboost_unit_test_framework -pthread
 using namespace std::chrono_literals;
@@ -103,5 +104,29 @@ BOOST_AUTO_TEST_CASE(wg)
     }
     wg.wait();
     BOOST_CHECK_EQUAL(counter, 10);
+}
+BOOST_AUTO_TEST_CASE(sw)
+{
+    struct Task {
+        int duration;
+        int serial;
+    };
+
+    Threads::OrderedWorker<Task> sWorker([](Task& a){
+        BOOST_TEST_MESSAGE("perform task with serial " << a.serial);
+        std::this_thread::sleep_for(std::chrono::milliseconds(a.duration));
+        BOOST_TEST_MESSAGE("done task with serial " << a.serial);
+    }, [last = 0](Task& a) mutable {
+        BOOST_TEST_MESSAGE("join task with serial " << a.serial);
+        BOOST_CHECK(a.serial > last); last++;
+    });
+    Threads::Group sGroup;
+    sWorker.start(sGroup, 4);
+    sWorker.insert(Task{400, 1});
+    sWorker.insert(Task{200, 2});
+    sWorker.insert(Task{50, 3});
+
+    std::this_thread::sleep_for(500ms);
+    sGroup.wait();
 }
 BOOST_AUTO_TEST_SUITE_END()
