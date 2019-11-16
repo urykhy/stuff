@@ -7,8 +7,9 @@ boost     = dependency('boost', modules : ['unit_test_framework', 'system', 'sta
 threads   = dependency('threads')
 uuid      = dependency('uuid')
 json      = dependency('jsoncpp')
+curl      = dependency('libcurl')
 compiler  = meson.get_compiler('cpp')
 dl        = compiler.find_library('dl')
 
-a = executable('a.out', 'test.cpp', dependencies : [boost, threads, uuid, json, dl], include_directories : includes)
+a = executable('a.out', 'test.cpp', dependencies : [boost, threads, uuid, json, curl, dl], include_directories : includes)
 test('basic test', a, args : ['-l', 'all'])
