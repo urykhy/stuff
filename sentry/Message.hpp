@@ -58,6 +58,30 @@ namespace Sentry
             return *this;
         }
 
+        struct Breadcrumb {
+            time_t timestamp = 0;
+            std::string level;     // fatal, error, warning, info, and debug
+            std::string message;
+            std::string category;
+            std::map<std::string, std::string> aux;
+        };
+
+        // Breadcrumbs
+        Message& log_work(const Breadcrumb& aWork)
+        {
+            auto& sJson = m_Root["breadcrumbs"]["values"];
+            Json::Value sEntry;
+            sEntry["timestamp"] = Json::Value::Int64(aWork.timestamp);
+            sEntry["category"] = aWork.category;
+            sEntry["message"] = aWork.message;
+            sEntry["level"] = aWork.level;
+            for (auto& [x,y] : aWork.aux)
+                sEntry["data"][x]=y;
+            sJson.append(sEntry);
+
+            return *this;
+        }
+
         std::string to_string() const
         {
             Json::StreamWriterBuilder sBuilder;

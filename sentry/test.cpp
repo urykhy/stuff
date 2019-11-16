@@ -18,6 +18,14 @@ BOOST_AUTO_TEST_CASE(simple)
 
     const auto sBT = foo();
     BOOST_TEST_MESSAGE(Sentry::Message().set_exception("ValueError", "44").set_trace(sBT).to_string());
+
+    Sentry::Message::Breadcrumb sWork;
+    sWork.category="test";
+    sWork.message="test started";
+    sWork.timestamp=time(nullptr);
+    sWork.aux["input"]="123";
+    sWork.aux["operation"]="collect";
+    BOOST_TEST_MESSAGE(Sentry::Message().log_work(sWork).set_message("multiple numbers required").to_string());
 }
 BOOST_AUTO_TEST_CASE(client)
 {
