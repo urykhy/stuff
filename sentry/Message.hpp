@@ -6,6 +6,7 @@
 #include <unsorted/Backtrace.hpp>
 #include <unsorted/Uuid.hpp>
 #include <networking/Servername.hpp>
+#include <sys/utsname.h>
 
 // about protocol
 // https://docs.sentry.io/development/sdk-dev/event-payloads/
@@ -76,8 +77,62 @@ namespace Sentry
             sEntry["message"] = aWork.message;
             sEntry["level"] = aWork.level;
             for (auto& [x,y] : aWork.aux)
-                sEntry["data"][x]=y;
+                sEntry["data"][x] = y;
             sJson.append(sEntry);
+
+            return *this;
+        }
+
+        Message& set_user(const std::string& aUser, const std::string& aAddress)
+        {
+            auto& sJson = m_Root["user"];
+            sJson["id"] = aUser;
+            sJson["ip_address"] = aAddress;
+            return *this;
+        }
+
+        struct Request {
+            std::string method = "GET";
+            std::string url;
+            std::map<std::string, std::string> aux;
+        };
+
+        Message& set_request(const Request& aRequest)
+        {
+            auto& sJson = m_Root["request"];
+            sJson["method"] = aRequest.method;
+            sJson["url"] = aRequest.url;
+            for (auto& [x,y] : aRequest.aux)
+                sJson["data"][x] = y;
+            return *this;
+        }
+
+        Message& set_version(const std::string& aName, const std::string& aVersion)
+        {
+            {
+                auto& sJson = m_Root["contexts"]["app"];
+                sJson["app_name"] = aName;
+                sJson["app_version"] = aVersion;
+
+                #ifdef __GNUC__
+                const std::string sCompiler = "gcc";
+                #else
+                #ifdef __clang__
+                const std::string sCompiler = "clang";
+                #endif
+                const std::string sCompiler = "unknown";
+                #endif
+                sJson["app_build"] = sCompiler + " " + __VERSION__ + " at " + __DATE__ + " " + __TIME__;
+            }
+
+            {
+                struct utsname ver;
+                uname(&ver);
+                auto& sJson = m_Root["contexts"]["os"];
+                sJson["name"]    = ver.sysname;
+                sJson["version"] = ver.version;
+                sJson["build"]   = ver.release;
+            }
 
             return *this;
         }

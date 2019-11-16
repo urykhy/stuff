@@ -26,6 +26,15 @@ BOOST_AUTO_TEST_CASE(simple)
     sWork.aux["input"]="123";
     sWork.aux["operation"]="collect";
     BOOST_TEST_MESSAGE(Sentry::Message().log_work(sWork).set_message("multiple numbers required").to_string());
+
+    BOOST_TEST_MESSAGE(Sentry::Message().set_user("alice@foo.bar","127.0.0.1").set_message("user not found").to_string());
+
+    Sentry::Message::Request sRequest;
+    sRequest.url="https://docs.sentry.io/development/sdk-dev/event-payloads/request/";
+    sRequest.aux["data"]="Submitted data in a format that makes the most sense";
+    BOOST_TEST_MESSAGE(Sentry::Message().set_request(sRequest).set_message("request failed").to_string());
+
+    BOOST_TEST_MESSAGE(Sentry::Message().set_version("test.cpp","0.1").set_message("test ok").set_level("info").to_string());
 }
 BOOST_AUTO_TEST_CASE(client)
 {
