@@ -1,6 +1,5 @@
 #pragma once
 
-#include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <netinet/in.h>
@@ -50,13 +49,6 @@ namespace Udp
             m_Peer.sin_family = AF_INET;
 	        m_Peer.sin_port = htons(aPort);
 	        m_Peer.sin_addr.s_addr = aRemote;
-        }
-
-        static uint32_t resolve(const std::string& aAddr) {
-            struct in_addr sTmp;
-            if (0 == inet_aton(aAddr.c_str(), &sTmp))
-                throw ErrnoError("fail to convert address");
-            return sTmp.s_addr;
         }
 
         void set_nonblocking()

@@ -5,7 +5,6 @@
 
 #include "UdpPipe.hpp"
 
-
 using namespace std::chrono_literals;
 
 struct Message {    // data over UDP
@@ -13,6 +12,12 @@ struct Message {    // data over UDP
 } __attribute__ ((packed));
 
 BOOST_AUTO_TEST_SUITE(Networking)
+BOOST_AUTO_TEST_CASE(resolve)
+{
+    BOOST_CHECK_EQUAL(0x100007F, Util::resolveAddr("127.0.0.1"));
+    BOOST_CHECK_EQUAL(0x100007F, Util::resolveName("127.0.0.1"));
+    BOOST_CHECK_EQUAL(0x100007F, Util::resolveName("localhost"));
+}
 BOOST_AUTO_TEST_CASE(pipe)
 {
     const std::string  BUFFER = "test123";
@@ -33,7 +38,7 @@ BOOST_AUTO_TEST_CASE(pipe)
     std::this_thread::sleep_for(50ms);
 
     sGroup.start([&](){
-        Udp::Producer sProd("127.0.0.1", PORT);
+        Udp::Producer sProd("localhost", PORT);
         for (size_t i = 0; i < COUNT; i++)
             sProd.write(BUFFER.data(), BUFFER.size() + 1);    // asciiZ string
     });

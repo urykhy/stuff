@@ -2,6 +2,7 @@
 
 #include <string>
 
+#include "Resolve.hpp"
 #include "UdpSocket.hpp"
 #include <boost/circular_buffer.hpp>
 
@@ -16,7 +17,7 @@ namespace Udp
     public:
 
         Producer(const std::string& aAddr, uint16_t aPort)
-        : m_Socket(Socket::resolve(aAddr), aPort)
+        : m_Socket(Util::resolveName(aAddr), aPort)
         { }
 
         void write(const void* aPtr, ssize_t aSize)
