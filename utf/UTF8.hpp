@@ -13,7 +13,7 @@ namespace UTF8
         if (c <= 0xBF) throw BadCharacter(); // Continuation byte
         if (c <= 0xDF) return 1;
         if (c <= 0xEF) return 2;
-        if (c <= 0xF4) return 3;
+        if (c <= 0xF7) return 3;
         throw BadCharacter();
     }
 
