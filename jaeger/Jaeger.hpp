@@ -68,11 +68,15 @@ namespace Jaeger
             set_span_tag(aID, Tag{"error", true});
         }
 
-        void span_log(size_t aID, const Tag& aTag)
+        template<class... T>
+        void span_log(size_t aID, const T&... aTag)
         {
             jaegertracing::thrift::Log sLog;
             sLog.timestamp = Time::get_time().to_us();
-            sLog.fields.push_back(convert(aTag));
+
+            // convert every aTag
+            (static_cast<void>(sLog.fields.push_back(convert(aTag))), ...);
+
             m_Batch.spans[aID].logs.push_back(sLog);
             m_Batch.spans[aID].__isset.logs = true;
         }
