@@ -8,11 +8,11 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
-#include <exception>
+#include <exception/Error.hpp>
 
 namespace Udp
 {
-    struct ErrnoError : std::runtime_error { ErrnoError (const std::string& aMsg) : std::runtime_error(aMsg + ": " + strerror(errno)) {}};
+    struct ErrnoError : std::runtime_error { ErrnoError (const std::string& aMsg) : std::runtime_error(Exception::with_errno(aMsg, errno)) {}};
 
     class Socket
     {

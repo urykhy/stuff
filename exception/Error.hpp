@@ -5,18 +5,30 @@
 
 namespace Exception
 {
-    template<class T>
-    std::string append_errno(T aMsg, int aCode)
+    inline std::string strerror(int e)
+    {
+        char sBuffer[1024];
+#if (_POSIX_C_SOURCE >= 200112L) && !  _GNU_SOURCE
+        if (0 == strerror_r(e, sBuffer, sizeof(sBuffer)))
+            return std::string(sBuffer);
+        else
+            return "strerror_r errror";
+#else
+        return strerror_r(e, sBuffer, sizeof(sBuffer));
+#endif
+    }
+
+    inline std::string with_errno(const std::string& aMsg, int aCode)
     {
         std::stringstream sBuffer;
-        sBuffer << aMsg << " (errno " << aCode << ": " << strerror(aCode) << ")";
+        sBuffer << aMsg << ": " << strerror(aCode) << " (" << aCode << ")";
         return sBuffer.str();
     }
 
     template<class T, class B = std::runtime_error>
     struct Error : public B
     {
-        Error(const std::string aMessage) : B(aMessage) {}
-        Error(const std::string aMessage, int aCode) : B(append_errno(aMessage, aCode)) {}
+        Error(const std::string& aMessage) : B(aMessage) {}
+        Error(const std::string& aMessage, int aCode) : B(with_errno(aMessage, aCode)) {}
     };
 }

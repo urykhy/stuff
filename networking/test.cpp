@@ -17,6 +17,7 @@ BOOST_AUTO_TEST_CASE(resolve)
     BOOST_CHECK_EQUAL(0x100007F, Util::resolveAddr("127.0.0.1"));
     BOOST_CHECK_EQUAL(0x100007F, Util::resolveName("127.0.0.1"));
     BOOST_CHECK_EQUAL(0x100007F, Util::resolveName("localhost"));
+    BOOST_CHECK_THROW([](){ Util::resolveName("nx.domain.qjz9zk"); }(), std::runtime_error);
 }
 BOOST_AUTO_TEST_CASE(pipe)
 {
