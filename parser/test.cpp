@@ -5,26 +5,16 @@
 #include <Atoi.hpp>
 #include <Hex.hpp>
 #include <ULeb128.hpp>
-
-#if 0
-g++ test-parser.cpp -std=c++14 -I . -lboost_unit_test_framework
-#endif
+#include <Autoindex.hpp>
 
 BOOST_AUTO_TEST_SUITE(Parser)
 BOOST_AUTO_TEST_CASE(simple)
 {
     std::string line="asd,zxc,123,";
     {
-        std::array<boost::string_ref, 4> result = {"z", "z", "z", "z"};
+        std::vector<boost::string_ref> result;
         BOOST_CHECK(Parse::simple(line, result));
-        std::array<boost::string_ref, 4> expected = {"asd", "zxc", "123", ""};
-        BOOST_CHECK_EQUAL_COLLECTIONS(result.begin(), result.end(), expected.begin(), expected.end());
-    }
-
-    {
-        std::array<boost::string_ref, 2> result = {"z", "z"};
-        BOOST_CHECK(Parse::simple(line, result));
-        std::array<boost::string_ref, 2> expected = {"asd", "zxc"};
+        std::vector<boost::string_ref> expected = {"asd", "zxc", "123"};
         BOOST_CHECK_EQUAL_COLLECTIONS(result.begin(), result.end(), expected.begin(), expected.end());
     }
 }
@@ -142,5 +132,25 @@ BOOST_AUTO_TEST_CASE(url)
 {
     BOOST_CHECK_EQUAL("https%3a%2f%2fwww.urlencoder.org%2f", Parser::to_url("https://www.urlencoder.org/"));
     BOOST_CHECK_EQUAL("https://www.urlencoder.org/", Parser::from_url("https%3A%2F%2Fwww.urlencoder.org%2F"));
+}
+BOOST_AUTO_TEST_CASE(autoindex)
+{
+    const std::string sBody=R"(
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">
+<html>
+ <head>
+  <title>Index of /</title>
+ </head>
+ <body>
+<h1>Index of /</h1>
+  <table>
+   <tr><th valign="top"><img src="/icons/blank.gif" alt="[ICO]"></th><th><a href="?C=N;O=D">Name</a></th><th><a href="?C=M;O=A">Last modified</a></th><th><a href="?C=S;O=A">Size</a></th></tr>
+   <tr><th colspan="4"><hr></th></tr>
+<tr><td valign="top"><img src="/icons/folder.gif" alt="[DIR]"></td><td><a href="calque/">calque/</a></td><td align="right">2015-08-07 17:52  </td><td align="right">  - </td></tr>
+<tr><td valign="top"><img src="/icons/folder.gif" alt="[DIR]"></td><td><a href="dygraf/">dygraf/</a></td><td align="right">2016-07-02 10:04  </td><td align="right">  - </td></tr>
+    )";
+    const Parse::StringList expected = {"calque/", "dygraf/"};
+    const auto result = Parse::Autoindex(sBody);
+    BOOST_CHECK_EQUAL_COLLECTIONS(result.begin(), result.end(), expected.begin(), expected.end());
 }
 BOOST_AUTO_TEST_SUITE_END()

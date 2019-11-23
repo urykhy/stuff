@@ -27,7 +27,7 @@ namespace Util
         std::stringstream sBuf;
         sBuf << aTrace;
         const std::string sTmp = sBuf.str();
-        std::vector<boost::string_ref> sList{20};   // max 20 elements
+        std::vector<boost::string_ref> sList;
 
         Parse::simple(sTmp, sList, '\n');
         for (auto iter = sList.rbegin(); iter != sList.rend() and iter+1 != sList.rend(); iter++)

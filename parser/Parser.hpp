@@ -5,17 +5,24 @@ namespace Parse
 {
     // simple parser.
     //
-    // parse N elements in string. drop tail. no quoting.
+    // call t for every substring
     template<class T>
-    bool simple(boost::string_ref str, T& t, const char sep = ',')
+    bool simple(boost::string_ref str, T&& t, const char sep = ',')
     {
-        for (size_t i = 0; i < t.size(); i++)
+        while (!str.empty())
         {
             auto pos = str.find(sep);
-            t[i] = str.substr(0, pos);
+            if (pos == boost::string_ref::npos)
+                pos = str.size();
+            t(str.substr(0, pos));
             str.remove_prefix(pos+1);
         }
         return true;
+    }
+
+    bool simple(boost::string_ref str, std::vector<boost::string_ref>& result, const char sep = ',')
+    {
+        return simple(str, [&result](const boost::string_ref& s){ result.push_back(s); }, sep);
     }
 
     // complicated parser.
