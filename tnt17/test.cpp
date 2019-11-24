@@ -52,7 +52,7 @@ BOOST_AUTO_TEST_CASE(simple)
     tnt17::IndexSpec sIndex;
 
     Threads::WaitGroup sWait(1);
-    const auto sAddr = boost::asio::ip::tcp::endpoint(boost::asio::ip::address::from_string("127.0.0.1"), 2090);
+    const auto sAddr = Event::endpoint("127.0.0.1", 2090);
     using C = tnt17::Client<DataEntry>;
     auto sClient = std::make_shared<C>(sLoop.service(), sAddr, 512 /*space id*/, [&sWait](std::exception_ptr aPtr){
         sWait.release();
@@ -61,7 +61,7 @@ BOOST_AUTO_TEST_CASE(simple)
         } else {
             try {
                 std::rethrow_exception(aPtr);
-            } catch (const std::exception& e) {
+            } catch (const Event::NetworkError& e) {
                 BOOST_TEST_MESSAGE("no connection: " << e.what());
             }
         }
@@ -69,20 +69,14 @@ BOOST_AUTO_TEST_CASE(simple)
     sClient->select(sIndex, 1 /*key*/ ,[](std::future<std::vector<DataEntry>>&& aResult){
         try {
             const auto sResult = aResult.get();
-        } catch (const std::exception& e) {
+        } catch (const Event::NetworkError& e) {
             BOOST_CHECK_EQUAL(e.what(), "network error: Transport endpoint is not connected");
         }
     });
 
     sClient->start();
     sWait.wait();
-    BOOST_REQUIRE(sClient->is_open());
-
-    if (!sClient->is_open()) {
-        BOOST_TEST_MESSAGE("no connection: exiting");
-        sGroup.wait();
-        return;
-    }
+    BOOST_REQUIRE(sClient->is_connected());
 
     // make calls, callback will be called in asio thread
     sWait.reset(2);
@@ -104,7 +98,7 @@ BOOST_AUTO_TEST_CASE(simple)
 
     sWait.wait();
     sClient->stop();
-    //std::this_thread::sleep_for(200ms);
+    std::this_thread::sleep_for(200ms);
 
     sGroup.wait();
 }

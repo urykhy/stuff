@@ -1,11 +1,12 @@
 #define BOOST_TEST_DYN_LINK
 #define BOOST_TEST_MODULE Suites
 #include <boost/test/unit_test.hpp>
+#include <chrono>
+using namespace std::chrono_literals;
 
 #include <threads/Asio.hpp>
 #include "Framed.hpp"
 #include "Echo.hpp"
-
 
 class Message
 {
@@ -34,6 +35,7 @@ private:
 };
 
 BOOST_AUTO_TEST_SUITE(Event)
+#if 0
 BOOST_AUTO_TEST_CASE(echo)
 {
     Threads::Group sGroup;
@@ -48,10 +50,11 @@ BOOST_AUTO_TEST_CASE(echo)
     });
     sServer->start();
 
-    auto sClient = std::make_shared<Event::Client>(sLoop.service(), boost::asio::ip::tcp::endpoint(boost::asio::ip::address::from_string("127.0.0.1"), 1234), 100, [](std::future<boost::asio::ip::tcp::socket&> aSocket)
+    auto sClient = std::make_shared<Event::Client>(sLoop.service(), boost::asio::ip::tcp::endpoint(boost::asio::ip::address::from_string("127.0.0.1"), 1234), 100, [](std::future<Event::Client::Ptr> aClient)
     {
         try {
-            auto& sSocket = aSocket.get();
+            auto sClient = aClient.get();
+            auto& sSocket = sClient->socket();
             BOOST_CHECK_MESSAGE(true, "connected to " << sSocket.remote_endpoint());
             auto sTmp = std::make_shared<Event::Echo::Client>(sSocket);
             sTmp->start();
@@ -64,37 +67,42 @@ BOOST_AUTO_TEST_CASE(echo)
     sleep (1);
     sGroup.wait();
 }
+#endif
 BOOST_AUTO_TEST_CASE(framed)
 {
     Threads::Group sGroup;
     Threads::Asio  sLoop;
-    sLoop.start(1, sGroup);
+    sLoop.start(4, sGroup);
 
     auto sServer = std::make_shared<Event::Server>(sLoop.service(), 1234, [](std::shared_ptr<boost::asio::ip::tcp::socket>&& aSocket)
     {
         BOOST_CHECK_MESSAGE(true, "connection from " << aSocket->remote_endpoint());
         auto sTmp = std::make_shared<Event::Framed::Server<Message>>(std::move(aSocket), [](std::string& arg) -> std::string {
             if (arg == "normal")
-                return "OK";
+                return arg + " OK";
             else
-                return "ERROR";
+                return arg + " ERROR";
         });
         sTmp->start();
     });
     sServer->start();
 
-    int sClientCalls = 0;
-    auto sClient = std::make_shared<Event::Client>(sLoop.service(), boost::asio::ip::tcp::endpoint(boost::asio::ip::address::from_string("127.0.0.1"), 1234), 100, [&sClientCalls](std::future<boost::asio::ip::tcp::socket&> aSocket)
+    std::atomic_int sClientCalls{0};
+    auto sClient = std::make_shared<Event::Client>(sLoop.service(), Event::endpoint("127.0.0.1", 1234), 100, [&sClientCalls](std::future<Event::Client::Ptr> aClient)
     {
-        try {
-            auto& sSocket = aSocket.get();
+        try
+        {
+            auto sClient = aClient.get();
+            auto& sSocket = sClient->socket();
             BOOST_CHECK_MESSAGE(true, "connected to " << sSocket.remote_endpoint());
-            auto sTmp = std::make_shared<Event::Framed::Client<Message>>(sSocket, [&sClientCalls](std::future<std::string>&& aResult){
-                sClientCalls++;
-                switch (sClientCalls)
-                {
-                case 1: BOOST_CHECK_EQUAL(aResult.get(), "OK");    break;
-                case 2: BOOST_CHECK_EQUAL(aResult.get(), "ERROR"); break;
+            auto sTmp = std::make_shared<Event::Framed::Client<Message>>(sClient, [&sClientCalls](std::future<std::string>&& aResult)
+            {
+                try{
+                    const std::string sResult = aResult.get();
+                    sClientCalls++;
+                    BOOST_CHECK(sResult == "normal OK" or sResult == "bad ERROR");
+                } catch (const std::exception& e)  {
+                    BOOST_TEST_MESSAGE("connection closed: " << e.what());
                 }
             });
             sTmp->start();
@@ -105,8 +113,10 @@ BOOST_AUTO_TEST_CASE(framed)
         }
     });
     sClient->start();
-
-    sleep (1);
+    std::this_thread::sleep_for(200ms);
+    sClient->stop();
+    sClient->stop();
+    std::this_thread::sleep_for(100ms);
     sGroup.wait();
     BOOST_CHECK_MESSAGE(sClientCalls == 2, "all client calls are made");
 }

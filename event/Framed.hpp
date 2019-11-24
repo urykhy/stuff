@@ -6,7 +6,6 @@
 namespace Event::Framed
 {
     // framed server and client
-    // FIXME: must use 1 threaded WorkQ, no locks/strand around queues
     template<class Message>
     class Client : public std::enable_shared_from_this<Client<Message>>
     {
@@ -15,20 +14,21 @@ namespace Event::Framed
         using Handler = std::function<void(std::future<std::string>&&)>;
 
     private:
-        using tcp = boost::asio::ip::tcp;
+        Event::Client::Ptr m_Client;
         tcp::socket& m_Socket;
         Handler      m_Handler;
 
-        boost::asio::coroutine m_Writer;
+        ba::coroutine m_Writer;
+        ba::coroutine m_Reader;
         std::list<Message>     m_Queue;
-        boost::asio::coroutine m_Reader;
 
         typename Message::Header m_ReplyHeader;
         std::string              m_ReplyData;
 
     public:
-        Client(tcp::socket& aSocket, Handler aHandler)
-        : m_Socket(aSocket)
+        Client(Event::Client::Ptr aClient, Handler aHandler)
+        : m_Client(aClient)
+        , m_Socket(aClient->socket())
         , m_Handler(aHandler)
         { }
 
@@ -38,7 +38,7 @@ namespace Event::Framed
 
         void call(const std::string& aRequest)
         {
-            m_Socket.get_io_service().post([this, p=this->shared_from_this(), aRequest] () mutable {
+            m_Client->post([this, p=this->shared_from_this(), aRequest] () mutable {
                 const bool sWriteOut = m_Queue.empty();
                 m_Queue.emplace_back(Message(aRequest));
                 if (sWriteOut)
@@ -62,8 +62,8 @@ namespace Event::Framed
                 }
             }
         }
-        std::function<void(boost::system::error_code ec, size_t size)> resume_writer() {
-            return [p=this->shared_from_this()](boost::system::error_code ec, size_t size){ p->writer(ec, size); };
+        auto resume_writer() {
+            return m_Client->wrap([p=this->shared_from_this()](boost::system::error_code ec, size_t size){ p->writer(ec, size); });
         }
 
         void reader(boost::system::error_code ec = boost::system::error_code(), size_t size = 0)
@@ -85,8 +85,8 @@ namespace Event::Framed
                 }
             }
         }
-        std::function<void(boost::system::error_code ec, size_t size)> resume_reader() {
-            return [p=this->shared_from_this()](boost::system::error_code ec, size_t size){ p->reader(ec, size); };
+        auto resume_reader() {
+            return m_Client->wrap([p=this->shared_from_this()](boost::system::error_code ec, size_t size){ p->reader(ec, size); });
         }
 #include <boost/asio/unyield.hpp>
 
@@ -98,6 +98,7 @@ namespace Event::Framed
         }
         void callback(boost::system::error_code ec)
         {
+            m_Client->set_error();
             std::promise<std::string> sPromise;
             sPromise.set_exception(std::make_exception_ptr(NetworkError(ec)));
             m_Handler(sPromise.get_future());
@@ -149,7 +150,7 @@ namespace Event::Framed
                 }
             }
         }
-        std::function<void(boost::system::error_code ec, size_t size)> resume() {
+        auto resume() {
             return [p=this->shared_from_this()](boost::system::error_code ec, size_t size){ (*p)(ec, size); };
         }
 #include <boost/asio/unyield.hpp>

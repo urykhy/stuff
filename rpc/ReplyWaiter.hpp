@@ -6,111 +6,90 @@
 
 #include <boost/asio.hpp>
 
+#include <event/State.hpp>
 #include <time/Meter.hpp>
 
 namespace RPC
 {
-    struct ReplyWaiter : public std::enable_shared_from_this<ReplyWaiter>
+    // must be used with external timer / locking
+    struct ReplyWaiter
     {
         using Handler = std::function<void(std::future<std::string>&&)>;
 
     private:
-        const unsigned TIMEOUT_MS=1;
-        using Lock = std::unique_lock<std::mutex>;
-        mutable std::mutex m_Mutex;
         std::map<uint64_t, Handler> m_Waiters;          // serial to handler
         std::multimap<uint64_t, uint64_t> m_Timeouts;   // timeout to serial
-        boost::asio::deadline_timer m_Timer;
-        std::atomic_bool m_Running{true};
-        std::atomic_bool m_Disconnected{false};
+        std::exception_ptr m_Error;
 
-        void setup_timer()
+        // got error, call handler
+        void call(const Handler& aHandler, std::exception_ptr aPtr)
         {
-            if (!m_Running and m_Waiters.empty())
-                return;
-            m_Timer.expires_from_now(boost::posix_time::millisec(TIMEOUT_MS));
-            m_Timer.async_wait([p=this->shared_from_this()](auto error){ if (!error) p->timeout_func(); });
+            std::promise<std::string> sPromise;
+            sPromise.set_exception(aPtr);
+            aHandler(sPromise.get_future());
         }
 
-        void timeout_func()
+        // mark all calls as failed
+        void flush_int()
         {
-            if (m_Disconnected)
-            {
-                on_network_error(std::make_exception_ptr(Event::NetworkError(boost::system::errc::make_error_code(boost::system::errc::not_connected))));
-            } else {
-                Lock sLock(m_Mutex);
-
-                auto sNow = Time::get_time().to_ms();
-                for (auto it = m_Timeouts.begin(); it != m_Timeouts.end() && it->first < sNow;)
-                {
-                    auto sIt = m_Waiters.find(it->second);
-                    if (sIt != m_Waiters.end())
-                    {
-                        m_Timer.get_io_service().post([sHandler = sIt->second]()
-                        {
-                            std::promise<std::string> sPromise;
-                            sPromise.set_exception(std::make_exception_ptr(Event::RemoteError("timeout")));
-                            sHandler(sPromise.get_future());
-                        });
-                        m_Waiters.erase(sIt);
-                    }
-                    it = m_Timeouts.erase(it);
-                }
-            }
-
-            setup_timer();
-        }
-
-        void on_network_error(std::exception_ptr aPtr)
-        {
-            Lock sLock(m_Mutex);
             for (auto& x : m_Waiters)
-            {
-                auto& sHandler = x.second;
-                std::promise<std::string> sPromise;
-                sPromise.set_exception(aPtr);
-                sHandler(sPromise.get_future());
-            }
+                call(x.second, m_Error);
             m_Timeouts.clear();
             m_Waiters.clear();
-            m_Disconnected = true;
         }
-
     public:
-        ReplyWaiter(boost::asio::io_service& aLoop)
-        : m_Timer(aLoop)
-        { }
 
-        void start() { m_Running = true; setup_timer(); }
-        void stop() { m_Running = false; }
+        bool empty() const { return m_Waiters.size(); }
 
+        // insert call
         void insert(uint64_t aSerial, unsigned aTimeoutMs, Handler aHandler)
         {
-            Lock lk(m_Mutex);
             m_Waiters[aSerial] = aHandler;
             m_Timeouts.insert(std::make_pair(Time::get_time().to_ms() + aTimeoutMs, aSerial));
         }
 
+        // got reply, call handler
         bool call(uint64_t aSerial, std::future<std::string>&& aResult)
         {
             Handler sHandler;
 
-            Lock sLock(m_Mutex);
             auto sIt = m_Waiters.find(aSerial);
             if (sIt == m_Waiters.end())
                 return false;
-            sHandler = sIt->second;
+            sHandler = std::move(sIt->second);
             m_Waiters.erase(sIt);
-            sLock.unlock();
 
             sHandler(std::move(aResult));
             return true;
         }
 
-        void network_error(std::exception_ptr aPtr) {
-            m_Timer.get_io_service().post([p=this->shared_from_this(), aPtr](){
-                p->on_network_error(aPtr);
-            });
+        // periodic check for timeouts
+        void on_timer()
+        {
+            if (m_Error != nullptr)
+            {
+                flush_int();
+                return;
+            }
+
+            auto sNow = Time::get_time().to_ms();
+            for (auto it = m_Timeouts.begin(); it != m_Timeouts.end() && it->first < sNow;)
+            {
+                auto sIt = m_Waiters.find(it->second);
+                if (sIt != m_Waiters.end())
+                {
+                    call(sIt->second, std::make_exception_ptr(Event::RemoteError("timeout")));
+                    m_Waiters.erase(sIt);
+                }
+                it = m_Timeouts.erase(it);
+            }
+        }
+
+        // mark all calls as failed
+        void flush(std::exception_ptr aPtr)
+        {
+            m_Error = aPtr;
+            flush_int();
         }
     };
 } // namespace RPC
