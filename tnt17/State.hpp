@@ -27,6 +27,7 @@ namespace tnt17
         void set_error()   { m_State = ERROR; }
         void close()       { m_State = IDLE; }
         bool is_connected() const { return m_State == ALIVE; }
+        StateEnum state()   const { return m_State; }
 
         bool is_alive() const { return is_running() and is_connected(); }
     };

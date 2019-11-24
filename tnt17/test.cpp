@@ -5,8 +5,9 @@
 #include <threads/Asio.hpp>
 #include <threads/Group.hpp>
 #include <threads/WaitGroup.hpp>
-#include <serialize/MsgPack.hpp>
+
 #include "Client.hpp"
+#include "Fetch.hpp"
 
 #include <chrono>
 using namespace std::chrono_literals;
@@ -72,54 +73,50 @@ BOOST_AUTO_TEST_CASE(simple)
     sClient->stop();
     std::this_thread::sleep_for(10ms);
     sGroup.wait();  // stop threads
+}
+BOOST_AUTO_TEST_CASE(fetch)
+{
+    Threads::Asio  sLoop;
+    Threads::Group sGroup;
+    sLoop.start(4, sGroup); // 4 asio threads
 
-#if 0
-    auto sClient = std::make_shared<C>(sLoop.service(), sAddr, 512 /*space id*/, [&sWait](std::exception_ptr aPtr){
-        sWait.release();
-        if (nullptr == aPtr) {
-            BOOST_TEST_MESSAGE("connected");
-        } else {
-            try {
-                std::rethrow_exception(aPtr);
-            } catch (const Event::NetworkError& e) {
-                BOOST_TEST_MESSAGE("no connection: " << e.what());
-            }
-        }
-    });
-    sClient->select(sIndex, 1 /*key*/ ,[](std::future<std::vector<DataEntry>>&& aResult){
-        try {
-            const auto sResult = aResult.get();
-        } catch (const Event::NetworkError& e) {
-            BOOST_CHECK_EQUAL(e.what(), "network error: Transport endpoint is not connected");
-        }
-    });
+    const auto sAddr = tnt17::endpoint("127.0.0.1", 2090);
+    using C = tnt17::Client<DataEntry>;
 
+    auto sClient = std::make_shared<C>(sLoop.service(), sAddr, 512 /*space id*/);
     sClient->start();
-    sWait.wait();
-    BOOST_REQUIRE(sClient->is_connected());
 
-    // make calls, callback will be called in asio thread
-    sWait.reset(2);
-    sClient->select(sIndex, 1 /*key*/ ,[&sWait](std::future<std::vector<DataEntry>>&& aResult){
-        const auto sResult = aResult.get();
-        BOOST_REQUIRE_EQUAL(sResult.size(), 1);
-        BOOST_CHECK_EQUAL(sResult[0].pk, 1);
-        BOOST_CHECK_EQUAL(sResult[0].value, "Roxette");
-        sWait.release();
-    });
+    using FQ = tnt17::FetchQueue<DataEntry>;
+    using FE = tnt17::Fetch<DataEntry>;
+    FQ sQueue;
+    sQueue.requests = {1,2,3,4,10,11,12};
 
-    sClient->select(tnt17::IndexSpec().set_id(1), "NightWish" /*key*/ ,[&sWait](std::future<std::vector<DataEntry>>&& aResult){
-        const auto sResult = aResult.get();
-        BOOST_REQUIRE_EQUAL(sResult.size(), 2);
-        BOOST_CHECK_EQUAL(sResult[0].value, "NightWish");
-        BOOST_CHECK_EQUAL(sResult[1].value, "NightWish");
-        sWait.release();
-    });
+    auto sFetch = std::make_shared<FE>(sClient, sQueue);
+    sFetch->start();
+    while (!sFetch->is_done()) std::this_thread::sleep_for(1ms);
 
-    sWait.wait();
+    BOOST_TEST_MESSAGE("fetch completed");
+
+    unsigned sKeys = 0;
+    for (auto& x : sQueue.responses)
+    {
+        switch (x.pk)
+        {
+        case 1: BOOST_CHECK_EQUAL(x.value, "Roxette"); break;
+        case 2: BOOST_CHECK_EQUAL(x.value, "Scorpions"); break;
+        case 3: BOOST_CHECK_EQUAL(x.value, "Ace of Base"); break;
+        case 4: BOOST_CHECK(false); break;  // there is no key in tnt, so - no data
+        case 10: BOOST_CHECK_EQUAL(x.value, "NightWish"); break;
+        case 11: BOOST_CHECK_EQUAL(x.value, "NightWish"); break;
+        case 12: BOOST_CHECK_EQUAL(x.value, "NightWish"); break;
+        }
+        sKeys++;
+    }
+    BOOST_CHECK_EQUAL(sKeys, 6); // 1,2,3,10,11,12 must be found
+
+    sFetch->stop();
     sClient->stop();
-    std::this_thread::sleep_for(200ms);
-#endif
-
+    std::this_thread::sleep_for(10ms);
+    sGroup.wait();  // stop threads
 }
 BOOST_AUTO_TEST_SUITE_END()

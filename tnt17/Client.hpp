@@ -21,6 +21,7 @@ namespace tnt17
         using Promise = std::promise<Result>;
         using Future  = std::future<Result>;
         using Handler = std::function<void(Future&&)>;
+        using Request = std::pair<uint64_t, std::string>;
 
     private:
         ba::io_context::strand m_Strand;
@@ -47,10 +48,6 @@ namespace tnt17
         typename Message::Header m_ReplyHeader;
         std::string              m_ReplyData;
 
-        // wrap any operation with this socket
-        template<class X> auto wrap(X&& x) -> decltype(m_Strand.wrap(std::move(x))) { return m_Strand.wrap(std::move(x)); }
-        template<class X> void post(X&& x) { m_Strand.post(std::move(x)); }
-
     public:
         Client(boost::asio::io_service& aLoop, const tcp::endpoint& aAddr, unsigned aSpace)
         : m_Strand(aLoop)
@@ -60,14 +57,15 @@ namespace tnt17
         , m_Space(aSpace)
         { }
 
-        void start() {
-            reader();
+        void start()
+        {
+            m_Strand.get_io_service().post(resume_reader());
         }
 
         bool is_alive() { return m_State.is_alive(); }
 
         template<class K>
-        std::pair<uint64_t, std::string> formatSelect(const IndexSpec& aIndex, const K& aKey)
+        Request formatSelect(const IndexSpec& aIndex, const K& aKey)
         {
             const uint64_t sSerial = m_Serial++;
             MsgPack::binary sBuffer;
@@ -75,7 +73,7 @@ namespace tnt17
             formatHeader(sStream, CODE_SELECT, sSerial);
             formatSelectBody(sStream, m_Space, aIndex);
             T::formatKey(sStream, aKey);
-            return std::make_pair(sSerial, sBuffer);
+            return Request(sSerial, sBuffer);
         }
 
         bool call(size_t aSerial, const std::string& aRequest, Handler&& aHandler)
@@ -91,8 +89,10 @@ namespace tnt17
                     p->callback(aHandler, std::move(aString));
                 });
                 m_Queue.emplace_back(Message(aRequest));
-                if (sWriteOut)
+                if (sWriteOut) {
+                    m_Writer = {};
                     writer();
+                }
             });
             return true;
         }
@@ -110,6 +110,12 @@ namespace tnt17
                 p->m_Socket.close();
             });
         }
+
+        // wrap any operation with this socket
+        template<class X> auto wrap(X&& x) -> decltype(m_Strand.wrap(std::move(x))) { return m_Strand.wrap(std::move(x)); }
+        template<class X> void post(X&& x) { m_Strand.post(std::move(x)); }
+
+        boost::asio::io_service& io_service() { return m_Strand.get_io_service(); }
 
     private:
 #include <boost/asio/yield.hpp>
@@ -131,7 +137,7 @@ namespace tnt17
             }
         }
         auto resume_writer() {
-            return wrap([p=this->shared_from_this()](boost::system::error_code ec, size_t size = 0){ p->writer(ec); });
+            return wrap([p=this->shared_from_this()](boost::system::error_code ec = boost::system::error_code(), size_t size = 0){ p->writer(ec); });
         }
 
         void reader(boost::system::error_code ec = boost::system::error_code())
@@ -171,7 +177,7 @@ namespace tnt17
             }
         }
         auto resume_reader() {
-            return wrap([p=this->shared_from_this()](boost::system::error_code ec, size_t size = 0){ p->reader(ec); });
+            return wrap([p=this->shared_from_this()](boost::system::error_code ec = boost::system::error_code(), size_t size = 0){ p->reader(ec); });
         }
 #include <boost/asio/unyield.hpp>
 
