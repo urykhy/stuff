@@ -4,8 +4,8 @@
 
 namespace tnt17
 {
-    namespace asio = boost::asio;
-    using boost::asio::ip::tcp;
+    namespace ba = boost::asio;
+    using    tcp = ba::ip::tcp;
 
     struct Message
     {
@@ -23,13 +23,13 @@ namespace tnt17
             m_Body = aData;
         }
 
-        using const_buffer = boost::asio::const_buffer;
+        using const_buffer = ba::const_buffer;
         using BufferList   = std::array<const_buffer, 2>;
         BufferList    as_buffer() const { return BufferList({header_buffer(), body_buffer()}); }
     private:
 
-        const_buffer  header_buffer() const { return boost::asio::buffer((const void*)&m_Header, sizeof(m_Header)); }
-        const_buffer  body_buffer()   const { return boost::asio::buffer((const void*)&m_Body[0], m_Body.size()); }
+        const_buffer  header_buffer() const { return ba::buffer((const void*)&m_Header, sizeof(m_Header)); }
+        const_buffer  body_buffer()   const { return ba::buffer((const void*)&m_Body[0], m_Body.size()); }
         Header      m_Header;
         std::string m_Body;
     };

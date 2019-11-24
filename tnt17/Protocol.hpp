@@ -1,4 +1,5 @@
 
+#include "Error.hpp"
 #include <serialize/MsgPack.hpp>
 
 namespace tnt17
@@ -10,7 +11,7 @@ namespace tnt17
     inline void assertProto(bool aFlag)
     {
         if (!aFlag)
-            throw Event::ProtocolError("bad msgpack message");
+            throw ProtocolError("bad msgpack message");
     }
 
     struct Header

@@ -2,6 +2,7 @@
 
 #include "Client.hpp"
 #include "Server.hpp"
+#include "ReplyWaiter.hpp"
 
 namespace Event::Framed
 {
@@ -14,21 +15,41 @@ namespace Event::Framed
         using Handler = std::function<void(std::future<std::string>&&)>;
 
     private:
-        Event::Client::Ptr m_Client;
-        tcp::socket& m_Socket;
-        Handler      m_Handler;
+        ba::io_context::strand m_Strand;
+        ba::deadline_timer     m_Timer;
+        tcp::socket            m_Socket;
+        const tcp::endpoint    m_Addr;
+
+        State   m_State;
+        Handler m_Handler;
 
         ba::coroutine m_Writer;
         ba::coroutine m_Reader;
-        std::list<Message>     m_Queue;
+        std::list<Message> m_Queue;
+        ReplyWaiter   m_Waiter;
 
         typename Message::Header m_ReplyHeader;
         std::string              m_ReplyData;
 
+        // wrap any operation with this socket
+        template<class T>
+        auto wrap(T&& t) -> decltype(m_Strand.wrap(std::move(t)))
+        {
+            return m_Strand.wrap(std::move(t));
+        }
+
+        template<class T>
+        void post(T&& t)
+        {
+            m_Strand.post(std::move(t));
+        }
+
     public:
-        Client(Event::Client::Ptr aClient, Handler aHandler)
-        : m_Client(aClient)
-        , m_Socket(aClient->socket())
+        Client(boost::asio::io_service& aLoop, const tcp::endpoint& aAddr, Handler aHandler)
+        : m_Strand(aLoop)
+        , m_Timer(aLoop)
+        , m_Socket(aLoop)
+        , m_Addr(aAddr)
         , m_Handler(aHandler)
         { }
 
@@ -36,11 +57,17 @@ namespace Event::Framed
             reader();
         }
 
-        void call(const std::string& aRequest)
+        bool call(size_t aSerial, const std::string& aRequest)
         {
-            m_Client->post([this, p=this->shared_from_this(), aRequest] () mutable {
+            const unsigned sTimeoutMs = 100;
+            if (!m_State.is_alive()))
+                return false;
+
+            post([this, p=this->shared_from_this(), aRequest] () mutable
+            {
                 const bool sWriteOut = m_Queue.empty();
                 m_Queue.emplace_back(Message(aRequest));
+                m_Waiter.insert(aSerial, sTimeoutMs, aHandler);
                 if (sWriteOut)
                     writer();
             });
@@ -50,8 +77,11 @@ namespace Event::Framed
 #include <boost/asio/yield.hpp>
         void writer(boost::system::error_code ec = boost::system::error_code(), size_t size = 0)
         {
-            if (ec)
+            if (ec || !m_State.is_alive())
+            {
+                m_Queue.clear();
                 return;
+            }
 
             reenter (&m_Writer)
             {
@@ -63,19 +93,32 @@ namespace Event::Framed
             }
         }
         auto resume_writer() {
-            return m_Client->wrap([p=this->shared_from_this()](boost::system::error_code ec, size_t size){ p->writer(ec, size); });
+            return wrap([p=this->shared_from_this()](boost::system::error_code ec, size_t size){ p->writer(ec, size); });
         }
 
         void reader(boost::system::error_code ec = boost::system::error_code(), size_t size = 0)
         {
             if (ec)
             {
+                m_State.set_error();
                 callback(ec);
                 return;
             }
 
             reenter (&m_Reader)
             {
+                m_State.connecting();
+                m_Timer.expires_from_now(boost::posix_time::millisec(100)); // 100 ms to connect
+                m_Timer.async_wait(wrap([p=this->shared_from_this()](boost::system::error_code ec){
+                    if (!ec) p->m_Socket.close();
+                }));
+                yield m_Socket.async_connect(m_Addr, resume_reader());
+                m_Timer.cancel();
+                m_State.established();
+                // FIXME: Auth
+
+                set_timer();
+
                 while (true)
                 {
                     yield boost::asio::async_read(m_Socket, boost::asio::buffer(&m_ReplyHeader, sizeof(m_ReplyHeader)), resume_reader());
@@ -86,16 +129,51 @@ namespace Event::Framed
             }
         }
         auto resume_reader() {
-            return m_Client->wrap([p=this->shared_from_this()](boost::system::error_code ec, size_t size){ p->reader(ec, size); });
+            return wrap([p=this->shared_from_this()](boost::system::error_code ec, size_t size){ p->reader(ec, size); });
         }
 #include <boost/asio/unyield.hpp>
 
         void callback(std::string& aReply)
         {
+            Header sHeader;
+            Reply sReply;
+            imemstream sStream(aReply);
+
+            try {
+                sHeader.parse(sStream);
+                sReply.parse(sStream);
+            } catch (const std::exception& e) {
+                callback(boost::system::errc::make_error_code(boost::system::errc::protocol_error));
+                notify(e.what());
+                return;
+            }
+
             std::promise<std::string> sPromise;
-            sPromise.set_value(aReply);
+            if (sReply.ok) {
+                const auto sRest = sStream.rest();
+                std::string sRestStr(sRest.begin(), sRest.end());
+                sPromise.set_value(sRestStr);
+            } else {
+                // normal error from server: not fatal, just a bad client call
+                sPromise.set_exception(std::make_exception_ptr(Event::RemoteError(sReply.error)));
+            }
+
+            m_Queue.call(sHeader.sync, sPromise.get_future());
+
+            //std::promise<std::string> sPromise;
+            //sPromise.set_value(aReply);
+            //m_Handler(sPromise.get_future());
+        }
+
+        // protocol error
+        void notify(const std::string& aMsg)
+        {
+            std::promise<std::string> sPromise;
+            sPromise.set_exception(std::make_exception_ptr(ProtocolError(aMsg)));
             m_Handler(sPromise.get_future());
         }
+
+        // called on network error
         void callback(boost::system::error_code ec)
         {
             m_Client->set_error();
@@ -103,6 +181,26 @@ namespace Event::Framed
             sPromise.set_exception(std::make_exception_ptr(NetworkError(ec)));
             m_Handler(sPromise.get_future());
             m_Queue.clear();
+        }
+    private:
+
+        void set_timer()
+        {
+            const unsigned TIMEOUT_MS = 1; // check timeouts every 1ms
+            if (!m_State.is_running() and m_Queue.empty())
+                return;
+            m_Timer.expires_from_now(boost::posix_time::millisec(TIMEOUT_MS));
+            m_Timer.async_wait(wrap([p=this->shared_from_this()](auto error)
+            {
+                if (!error)
+                    p->timeout_func();
+            }));
+        }
+
+        void timeout_func()
+        {
+            m_Queue.on_timer(); // report timeout on slow calls
+            set_timer();
         }
     };
 

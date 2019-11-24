@@ -38,6 +38,16 @@ namespace Threads {
             m_Cond.wait(lk, [this](){ return m_Wait == 0; });
         }
 
+        template<class T>
+        void wait_for(T&& aDuration) {
+            Lock lk(m_Mutex);
+            if (m_Wait == 0)
+                return;
+            m_Cond.wait_for(lk, aDuration, [this](){ return m_Wait == 0; });
+            if (m_Wait != 0)
+                throw std::runtime_error("wait_for timeout");
+        }
+
         ~WaitGroup() { wait(); }
     };
 }

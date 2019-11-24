@@ -4,27 +4,28 @@
 #include <mutex>
 #include <functional>
 
+#include "Error.hpp"
 #include <boost/asio.hpp>
-
-#include <event/State.hpp>
 #include <time/Meter.hpp>
 
-namespace RPC
+namespace tnt17
 {
     // must be used with external timer / locking
     struct ReplyWaiter
     {
-        using Handler = std::function<void(std::future<std::string>&&)>;
+        using Promise = std::promise<std::string>;
+        using Future  = std::future<std::string>;
+        using Handler = std::function<void(Future&&)>;
 
     private:
-        std::map<uint64_t, Handler> m_Waiters;          // serial to handler
+        std::map<uint64_t, Handler>       m_Waiters;    // serial to handler
         std::multimap<uint64_t, uint64_t> m_Timeouts;   // timeout to serial
-        std::exception_ptr m_Error;
+        std::exception_ptr                m_Error;      // if not null - we in failed state, call all handlers with error
 
-        // got error, call handler
+        // call handler with error
         void call(const Handler& aHandler, std::exception_ptr aPtr)
         {
-            std::promise<std::string> sPromise;
+            Promise sPromise;
             sPromise.set_exception(aPtr);
             aHandler(sPromise.get_future());
         }
@@ -42,14 +43,14 @@ namespace RPC
         bool empty() const { return m_Waiters.size(); }
 
         // insert call
-        void insert(uint64_t aSerial, unsigned aTimeoutMs, Handler aHandler)
+        void insert(uint64_t aSerial, unsigned aTimeoutMs, Handler&& aHandler)
         {
-            m_Waiters[aSerial] = aHandler;
+            m_Waiters[aSerial] = std::move(aHandler);
             m_Timeouts.insert(std::make_pair(Time::get_time().to_ms() + aTimeoutMs, aSerial));
         }
 
-        // got reply, call handler
-        bool call(uint64_t aSerial, std::future<std::string>&& aResult)
+        // call handler with aResult
+        bool call(uint64_t aSerial, Future&& aResult)
         {
             Handler sHandler;
 
@@ -78,18 +79,18 @@ namespace RPC
                 auto sIt = m_Waiters.find(it->second);
                 if (sIt != m_Waiters.end())
                 {
-                    call(sIt->second, std::make_exception_ptr(Event::RemoteError("timeout")));
+                    call(sIt->second, std::make_exception_ptr(RemoteError("timeout")));
                     m_Waiters.erase(sIt);
                 }
                 it = m_Timeouts.erase(it);
             }
         }
 
-        // mark all calls as failed
+        // call all handlers with error
         void flush(std::exception_ptr aPtr)
         {
             m_Error = aPtr;
             flush_int();
         }
     };
-} // namespace RPC
+} // namespace tnt17

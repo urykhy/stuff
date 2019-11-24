@@ -1,89 +1,219 @@
 #pragma once
 
-#include <mutex>
-#include <future>
-
-#include <event/Client.hpp>
-#include <event/Framed.hpp>
-#include <rpc/ReplyWaiter.hpp>
-
 #include "Message.hpp"
 #include "Protocol.hpp"
-#include "Auth.hpp"
+#include "ReplyWaiter.hpp"
+#include "State.hpp"
 
 namespace tnt17
 {
-    template<class T>
-    struct Client : public std::enable_shared_from_this<Client<T>>
+    tcp::endpoint endpoint(const std::string& aAddr, uint16_t aPort)
     {
-        using Notify = std::function<void(std::exception_ptr)>;
+        return tcp::endpoint(ba::ip::address::from_string(aAddr), aPort);
+    }
+
+    // framed server and client
+    template<class T>
+    class Client : public std::enable_shared_from_this<Client<T>>
+    {
+    public:
         using Result = std::vector<T>;
-        using Handler = std::function<void(std::future<Result>&&)>;
-        using tcp = boost::asio::ip::tcp;
-        using Transport= Event::Framed::Client<Message>;
+        using Promise = std::promise<Result>;
+        using Future  = std::future<Result>;
+        using Handler = std::function<void(Future&&)>;
+
     private:
+        ba::io_context::strand m_Strand;
+        ba::deadline_timer     m_Timer;
+        tcp::socket            m_Socket;
+        const tcp::endpoint    m_Addr;
+        const unsigned         m_Space;     // tnt space id
+        ba::coroutine          m_Writer;
+        ba::coroutine          m_Reader;
+        std::list<Message>     m_Queue;     // write out queue
+        State                  m_State;
 
-        std::shared_ptr<Event::Client> m_Client;
-        std::shared_ptr<Transport> m_Transport;
-        std::shared_ptr<Auth> m_Auth;
-
-        boost::asio::io_service& m_Loop;
-        boost::asio::deadline_timer m_Timer;
-        RPC::ReplyWaiter m_Queue;
-
-        using Lock = std::unique_ptr<std::mutex>;
-        std::mutex m_Mutex;
-
-        std::atomic<uint64_t> m_Serial{1};
-        const tcp::endpoint m_Addr;
-        const int m_SpaceID;
-        const Notify m_Notify;
-
-        // stage1. callback to decode server response and find proper callback to call
-        void callback(std::future<std::string>&& aResult)
+        struct Greetings
         {
-            std::string sResultStr;
-            try {
-                sResultStr = aResult.get();
-            } catch (...) {
-                notify(std::current_exception()); // must be network error
+            char version[64];
+            char salt[44];
+            char dummy[20];
+        } __attribute__((packed));
+        Greetings m_Greetings;
+
+        std::atomic<uint64_t>  m_Serial{1};
+        ReplyWaiter            m_Waiter;
+
+        typename Message::Header m_ReplyHeader;
+        std::string              m_ReplyData;
+
+        // wrap any operation with this socket
+        template<class X> auto wrap(X&& x) -> decltype(m_Strand.wrap(std::move(x))) { return m_Strand.wrap(std::move(x)); }
+        template<class X> void post(X&& x) { m_Strand.post(std::move(x)); }
+
+    public:
+        Client(boost::asio::io_service& aLoop, const tcp::endpoint& aAddr, unsigned aSpace)
+        : m_Strand(aLoop)
+        , m_Timer(aLoop)
+        , m_Socket(aLoop)
+        , m_Addr(aAddr)
+        , m_Space(aSpace)
+        { }
+
+        void start() {
+            reader();
+        }
+
+        bool is_alive() { return m_State.is_alive(); }
+
+        template<class K>
+        std::pair<uint64_t, std::string> formatSelect(const IndexSpec& aIndex, const K& aKey)
+        {
+            const uint64_t sSerial = m_Serial++;
+            MsgPack::binary sBuffer;
+            MsgPack::omemstream sStream(sBuffer);
+            formatHeader(sStream, CODE_SELECT, sSerial);
+            formatSelectBody(sStream, m_Space, aIndex);
+            T::formatKey(sStream, aKey);
+            return std::make_pair(sSerial, sBuffer);
+        }
+
+        bool call(size_t aSerial, const std::string& aRequest, Handler&& aHandler)
+        {
+            if (!is_alive())
+                return false;
+
+            post([this, p=this->shared_from_this(), aSerial, aRequest, aHandler = std::move(aHandler)] () mutable
+            {
+                const unsigned sTimeoutMs = 100;        // FIXME
+                const bool sWriteOut = m_Queue.empty();
+                m_Waiter.insert(aSerial, sTimeoutMs, [p, aHandler = std::move(aHandler)](ReplyWaiter::Future&& aString){
+                    p->callback(aHandler, std::move(aString));
+                });
+                m_Queue.emplace_back(Message(aRequest));
+                if (sWriteOut)
+                    writer();
+            });
+            return true;
+        }
+
+        void stop()
+        {
+            m_State.close();
+            m_State.stop();
+            // close socket from asio thread, to avoid a race
+            post([p=this->shared_from_this()]()
+            {
+                if (!p->m_Socket.is_open()) return;
+                boost::system::error_code ec;   // ignore shutdown error
+                p->m_Socket.shutdown(boost::asio::ip::tcp::socket::shutdown_both, ec);
+                p->m_Socket.close();
+            });
+        }
+
+    private:
+#include <boost/asio/yield.hpp>
+        void writer(boost::system::error_code ec = boost::system::error_code())
+        {
+            if (ec || !m_State.is_alive())
+            {
+                m_Queue.clear();
                 return;
             }
 
+            reenter (&m_Writer)
+            {
+                while (!m_Queue.empty())
+                {
+                    yield boost::asio::async_write(m_Socket, m_Queue.front().as_buffer(), resume_writer());
+                    m_Queue.pop_front();
+                }
+            }
+        }
+        auto resume_writer() {
+            return wrap([p=this->shared_from_this()](boost::system::error_code ec, size_t size = 0){ p->writer(ec); });
+        }
+
+        void reader(boost::system::error_code ec = boost::system::error_code())
+        {
+            if (ec)
+            {
+                m_State.set_error();
+                callback(ec);
+                return;
+            }
+
+            reenter (&m_Reader)
+            {
+                m_State.connecting();
+                m_Timer.expires_from_now(boost::posix_time::millisec(100)); // 100 ms to connect
+                m_Timer.async_wait(wrap([p=this->shared_from_this()](boost::system::error_code ec){
+                    if (!ec) p->m_Socket.close();
+                }));
+                yield m_Socket.async_connect(m_Addr, resume_reader());
+
+                // auth. just read a greetings
+                yield async_read(m_Socket
+                               , boost::asio::buffer(&m_Greetings, sizeof(m_Greetings))
+                               , resume_reader());
+                BOOST_TEST_MESSAGE("greeting from " << boost::string_ref(m_Greetings.version, 64));
+                m_Timer.cancel();
+                m_State.established();
+                set_timer();
+
+                while (true)
+                {
+                    yield boost::asio::async_read(m_Socket, boost::asio::buffer(&m_ReplyHeader, sizeof(m_ReplyHeader)), resume_reader());
+                    m_ReplyData.resize(m_ReplyHeader.decode());
+                    yield boost::asio::async_read(m_Socket, boost::asio::buffer(m_ReplyData), resume_reader());
+                    callback(m_ReplyData);
+                }
+            }
+        }
+        auto resume_reader() {
+            return wrap([p=this->shared_from_this()](boost::system::error_code ec, size_t size = 0){ p->reader(ec); });
+        }
+#include <boost/asio/unyield.hpp>
+
+        // stage1 callback. parse server reply
+        void callback(std::string& aReply)
+        {
             Header sHeader;
-            Reply sReply;
-            imemstream sStream(sResultStr);
+            Reply  sReply;
+            imemstream sStream(aReply);
 
             try {
                 sHeader.parse(sStream);
                 sReply.parse(sStream);
             } catch (const std::exception& e) {
-                // if we can't parse protocol - notify as fatal error
-                notify(std::make_exception_ptr(Event::ProtocolError(e.what())));
+                // severe error, drop connection
+                callback(boost::system::errc::make_error_code(boost::system::errc::protocol_error));
                 return;
             }
 
-            std::promise<std::string> sPromise;
-            if (sReply.ok) {
+            ReplyWaiter::Promise sPromise;
+            if (sReply.ok)
+            {
                 const auto sRest = sStream.rest();
                 std::string sRestStr(sRest.begin(), sRest.end());
                 sPromise.set_value(sRestStr);
             } else {
-                // normal error from server: not fatal, just a bad client call
-                sPromise.set_exception(std::make_exception_ptr(Event::RemoteError(sReply.error)));
+                // normal error from server: just a bad client call. connection can be used
+                sPromise.set_exception(std::make_exception_ptr(RemoteError(sReply.error)));
             }
 
-            m_Queue.call(sHeader.sync, sPromise.get_future());
+            // jump to stage 2 callback
+            m_Waiter.call(sHeader.sync, sPromise.get_future());
         }
 
-        // stage2. callback from ReplyWaiter. decode response and jump to user-provided callback
-        void xcall(const Handler& aHandler, std::future<std::string>&& aReply)
+        // stage 2 callback, from m_Waiter
+        void callback(const Handler& aHandler, ReplyWaiter::Future&& aString)
         {
-            std::promise<std::vector<T>> sPromise;
-            std::string sData;
+            Promise sPromise;
+            std::string sString;
 
             try {
-                sData = aReply.get();
+                sString = aString.get();
             }
             catch (...) {
                 sPromise.set_exception(std::current_exception());
@@ -92,111 +222,56 @@ namespace tnt17
             };
 
             try {
-                imemstream sStream(sData);
+                imemstream sStream(sString);
                 const uint32_t sCount = MsgPack::read_array_size(sStream);
-                std::vector<T> sResult{sCount};
+                Result sResult{sCount};
                 for (auto& x : sResult)
                     x.parse(sStream);
                 sPromise.set_value(sResult);
             } catch (const std::exception& e) {   // fail to parse response
-                sPromise.set_exception(std::make_exception_ptr(Event::ProtocolError(e.what())));
+                sPromise.set_exception(std::make_exception_ptr(ProtocolError(e.what())));
             }
             aHandler(sPromise.get_future());
         }
 
-        // called on state changes: connection established or network error
-        void notify(std::exception_ptr aPtr)
+        // called on network/protocol error
+        void callback(boost::system::error_code ec)
         {
-            if (aPtr != nullptr)
-            {
-                m_Queue.flush(aPtr); // flush call queue with error
-                stop();              // close sockets and so on on hard error
-            }
-            m_Notify(aPtr);
-        }
+            std::exception_ptr sPtr = nullptr;
+            BOOST_TEST_MESSAGE("callback called with error " << ec.message());
 
-        // timer to handle timeouts
+            // FIXME: pass real msgpack error ?
+            if (ec == boost::system::errc::protocol_error)
+                sPtr = std::make_exception_ptr(ProtocolError("fail to parse response"));
+            else
+                sPtr = std::make_exception_ptr(NetworkError(ec));
+
+            m_Waiter.flush(sPtr);    // drop all pending requests with error
+        }
+    private:
+
+        // periodic timer to handle timeouts
         void set_timer()
         {
             const unsigned TIMEOUT_MS = 1; // check timeouts every 1ms
-            if (!m_Client->is_running() and m_Queue.empty())
+            if (!m_State.is_running() and m_Queue.empty())
+            {
+                BOOST_TEST_MESSAGE("timer stopped");
                 return;
+            }
+
             m_Timer.expires_from_now(boost::posix_time::millisec(TIMEOUT_MS));
-            m_Timer.async_wait(m_Client->wrap([p=this->shared_from_this()](auto error){ if (!error) p->timeout_func(); }));
+            m_Timer.async_wait(wrap([p=this->shared_from_this()](auto error)
+            {
+                if (!error)
+                    p->timeout_func();
+            }));
         }
 
         void timeout_func()
         {
-            m_Queue.on_timer(); // report timeout on slow calls
+            m_Waiter.on_timer(); // report timeout on slow calls
             set_timer();
         }
-
-    public:
-        Client(boost::asio::io_service& aLoop, const tcp::endpoint& aAddr, int aSpaceID, Notify aNotify)
-        : m_Loop(aLoop)
-        , m_Timer(aLoop)
-        , m_Addr(aAddr)
-        , m_SpaceID(aSpaceID)
-        , m_Notify(aNotify)
-        { }
-
-        void start()
-        {
-            constexpr unsigned CONNECT_TIMEOUT = 100;
-            m_Client = std::make_shared<Event::Client>(m_Loop, m_Addr, CONNECT_TIMEOUT, [this, p=this->shared_from_this()](std::future<Event::Client::Ptr> aClient)
-            {
-                try {
-                    auto sClient = aClient.get();
-                    m_Auth = std::make_shared<Auth>(sClient, [this, p, sClient](boost::system::error_code ec){
-                        m_Auth.reset();
-                        if (ec) {
-                            notify(std::make_exception_ptr(Event::NetworkError(ec)));
-                            return;
-                        }
-                        m_Transport = std::make_shared<Transport>(sClient, [p](std::future<std::string>&& aResult){
-                            p->callback(std::move(aResult));
-                        });
-                        m_Transport->start();
-                        notify(nullptr);   // connection established
-                        set_timer();       // start timer to handle call timeouts
-                    });
-                    m_Auth->start();
-                } catch (...) {
-                    notify(std::current_exception());
-                }
-            });
-            m_Client->start();
-        }
-
-        void stop()
-        {
-            if (m_Client) {
-                m_Client->stop();
-            }
-        }
-
-        bool is_connected() const { return m_Client && m_Client->is_connected(); }
-
-        template<class K>
-        bool select(const IndexSpec& aIndex, const K& aKey, Handler aHandler, unsigned aTimeoutMs = 1000)
-        {
-            const uint64_t sSerial = m_Serial++;
-            MsgPack::binary sBuffer;
-            MsgPack::omemstream sStream(sBuffer);
-            formatHeader(sStream, CODE_SELECT, sSerial);
-            formatSelectBody(sStream, m_SpaceID, aIndex);
-            T::formatKey(sStream, aKey);
-
-            if (!m_Client || !m_Client->is_connected())
-                return false;
-
-            m_Client->post([this, p=this->shared_from_this(), aHandler, sSerial, sBuffer, aTimeoutMs] () mutable
-            {
-                m_Queue.insert(sSerial, aTimeoutMs, [p, aHandler](std::future<std::string>&& aReply) {
-                    p->xcall(aHandler, std::move(aReply));
-                });
-                m_Transport->call(sBuffer);
-            });
-        }
     };
-}
+} // namespace tnt17

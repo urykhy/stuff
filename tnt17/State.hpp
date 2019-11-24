@@ -2,7 +2,7 @@
 
 #include <atomic>
 
-namespace Event
+namespace tnt17
 {
     enum StateEnum
     {
@@ -31,4 +31,4 @@ namespace Event
         bool is_alive() const { return is_running() and is_connected(); }
     };
 
-} // namespace Event
+} // namespace tnt17

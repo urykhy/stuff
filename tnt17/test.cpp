@@ -47,13 +47,33 @@ BOOST_AUTO_TEST_CASE(simple)
 {
     Threads::Asio  sLoop;
     Threads::Group sGroup;
-    sLoop.start(1, sGroup);
+    sLoop.start(4, sGroup); // 4 asio threads
 
-    tnt17::IndexSpec sIndex;
+    const auto sAddr = tnt17::endpoint("127.0.0.1", 2090);
+    using C = tnt17::Client<DataEntry>;
+
+    auto sClient = std::make_shared<C>(sLoop.service(), sAddr, 512 /*space id*/);
+    sClient->start();
+    while (!sClient->is_alive()) std::this_thread::sleep_for(10ms);
 
     Threads::WaitGroup sWait(1);
-    const auto sAddr = Event::endpoint("127.0.0.1", 2090);
-    using C = tnt17::Client<DataEntry>;
+    auto sRequest = sClient->formatSelect(tnt17::IndexSpec{}.set_id(0), 1);
+    bool sQueued  = sClient->call(sRequest.first, sRequest.second, [&sWait](typename C::Future&& aResult)
+    {
+        const auto sResult = aResult.get();
+        BOOST_REQUIRE_EQUAL(sResult.size(), 1);
+        BOOST_CHECK_EQUAL(sResult[0].pk, 1);
+        BOOST_CHECK_EQUAL(sResult[0].value, "Roxette");
+        sWait.release();
+    });
+    BOOST_CHECK_EQUAL(sQueued, true);
+    sWait.wait_for(50ms);
+
+    sClient->stop();
+    std::this_thread::sleep_for(10ms);
+    sGroup.wait();  // stop threads
+
+#if 0
     auto sClient = std::make_shared<C>(sLoop.service(), sAddr, 512 /*space id*/, [&sWait](std::exception_ptr aPtr){
         sWait.release();
         if (nullptr == aPtr) {
@@ -99,7 +119,7 @@ BOOST_AUTO_TEST_CASE(simple)
     sWait.wait();
     sClient->stop();
     std::this_thread::sleep_for(200ms);
+#endif
 
-    sGroup.wait();
 }
 BOOST_AUTO_TEST_SUITE_END()
