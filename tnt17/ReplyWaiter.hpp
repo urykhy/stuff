@@ -92,5 +92,7 @@ namespace tnt17
             m_Error = aPtr;
             flush_int();
         }
+
+        void reset() { m_Error = nullptr; }
     };
 } // namespace tnt17

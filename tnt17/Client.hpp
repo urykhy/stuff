@@ -33,6 +33,7 @@ namespace tnt17
         ba::coroutine          m_Reader;
         std::list<Message>     m_Queue;     // write out queue
         State                  m_State;
+        uint64_t               m_LastTry = 0;
 
         struct Greetings
         {
@@ -102,13 +103,7 @@ namespace tnt17
             m_State.close();
             m_State.stop();
             // close socket from asio thread, to avoid a race
-            post([p=this->shared_from_this()]()
-            {
-                if (!p->m_Socket.is_open()) return;
-                boost::system::error_code ec;   // ignore shutdown error
-                p->m_Socket.shutdown(boost::asio::ip::tcp::socket::shutdown_both, ec);
-                p->m_Socket.close();
-            });
+            post([p=this->shared_from_this()]() { p->close_socket(); });
         }
 
         // wrap any operation with this socket
@@ -118,6 +113,16 @@ namespace tnt17
         boost::asio::io_service& io_service() { return m_Strand.get_io_service(); }
 
     private:
+
+        void close_socket()
+        {
+            if (!m_Socket.is_open())
+                return;
+            boost::system::error_code ec;   // ignore shutdown error
+            m_Socket.shutdown(boost::asio::ip::tcp::socket::shutdown_both, ec);
+            m_Socket.close();
+        }
+
 #include <boost/asio/yield.hpp>
         void writer(boost::system::error_code ec = boost::system::error_code())
         {
@@ -144,8 +149,8 @@ namespace tnt17
         {
             if (ec)
             {
-                m_State.set_error();
-                callback(ec);
+                BOOST_TEST_MESSAGE("callback called with error " << ec.message());
+                on_error(ec);
                 return;
             }
 
@@ -154,7 +159,8 @@ namespace tnt17
                 m_State.connecting();
                 m_Timer.expires_from_now(boost::posix_time::millisec(100)); // 100 ms to connect
                 m_Timer.async_wait(wrap([p=this->shared_from_this()](boost::system::error_code ec){
-                    if (!ec) p->m_Socket.close();
+                    if (!ec)
+                        p->m_Socket.close();
                 }));
                 yield m_Socket.async_connect(m_Addr, resume_reader());
 
@@ -163,9 +169,7 @@ namespace tnt17
                                , boost::asio::buffer(&m_Greetings, sizeof(m_Greetings))
                                , resume_reader());
                 BOOST_TEST_MESSAGE("greeting from " << boost::string_ref(m_Greetings.version, 64));
-                m_Timer.cancel();
-                m_State.established();
-                set_timer();
+                on_established();
 
                 while (true)
                 {
@@ -193,7 +197,7 @@ namespace tnt17
                 sReply.parse(sStream);
             } catch (const std::exception& e) {
                 // severe error, drop connection
-                callback(boost::system::errc::make_error_code(boost::system::errc::protocol_error));
+                on_error(boost::system::errc::make_error_code(boost::system::errc::protocol_error));
                 return;
             }
 
@@ -240,19 +244,32 @@ namespace tnt17
             aHandler(sPromise.get_future());
         }
 
-        // called on network/protocol error
-        void callback(boost::system::error_code ec)
+        // called once connection established
+        void on_established()
         {
-            std::exception_ptr sPtr = nullptr;
-            BOOST_TEST_MESSAGE("callback called with error " << ec.message());
+            m_Timer.cancel();       // stop connect timer
+            m_State.established();  // switch state
+            m_Waiter.reset();       // drop last error
+            set_timer();            // fire timeout-check timer
+        }
 
+        // called on network/protocol error
+        void on_error(boost::system::error_code ec)
+        {
+            m_Timer.cancel();                       // stop timer
+            m_LastTry = Time::get_time().to_ms();   // save disconnect moment
+            m_State.set_error();                    // set error state
+            set_timer();                            // setup 1ms timer
+            close_socket();                         // close socket
+
+            std::exception_ptr sPtr = nullptr;
             // FIXME: pass real msgpack error ?
             if (ec == boost::system::errc::protocol_error)
                 sPtr = std::make_exception_ptr(ProtocolError("fail to parse response"));
             else
                 sPtr = std::make_exception_ptr(NetworkError(ec));
 
-            m_Waiter.flush(sPtr);    // drop all pending requests with error
+            m_Waiter.flush(sPtr);                   // drop all pending requests with error
         }
     private:
 
@@ -276,8 +293,24 @@ namespace tnt17
 
         void timeout_func()
         {
+            check_reconnect();
             m_Waiter.on_timer(); // report timeout on slow calls
             set_timer();
+        }
+
+        void check_reconnect()
+        {
+            const uint64_t RECONNECT_MS = 1000;
+            const uint64_t sNow = Time::get_time().to_ms();
+
+            if (!is_alive() and m_LastTry + RECONNECT_MS < sNow)
+            {   // reset coroutines and start connecting
+                BOOST_TEST_MESSAGE("reconnecting");
+                m_Writer = {};
+                m_Reader = {};
+                m_LastTry = sNow;
+                start();
+            }
         }
     };
 } // namespace tnt17
