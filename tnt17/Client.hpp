@@ -149,6 +149,13 @@ namespace tnt17
         {
             if (ec)
             {
+                // if async_connect timed out - replace error message
+                if (m_State.is_running() and
+                    m_State.state() == CONNECTING
+                    and ec == boost::system::error_code(boost::system::errc::operation_canceled, boost::system::system_category()))
+                {
+                    ec = boost::system::errc::make_error_code(boost::system::errc::timed_out);
+                }
                 BOOST_TEST_MESSAGE("callback called with error " << ec.message());
                 on_error(ec);
                 return;
@@ -158,7 +165,7 @@ namespace tnt17
             {
                 m_State.connecting();
                 m_Timer.expires_from_now(boost::posix_time::millisec(100)); // 100 ms to connect
-                m_Timer.async_wait(wrap([p=this->shared_from_this()](boost::system::error_code ec){
+                m_Timer.async_wait(wrap([p=this->shared_from_this()](boost::system::error_code ec) {
                     if (!ec)
                         p->m_Socket.close();
                 }));
