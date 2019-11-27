@@ -71,9 +71,12 @@ namespace tnt17
 
             reenter (m_Coro.get())
             {
-                while(true)
+                while(is_running())
                 {
-                    yield ensure_connected();
+                    if (!m_Client->is_alive())
+                    {
+                        yield set_timer();
+                    }
 
                     if (!m_Key) // get next key
                         m_Key = m_Queue.get();
