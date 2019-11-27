@@ -166,12 +166,13 @@ namespace tnt17
                 m_State.connecting();
                 m_Timer.expires_from_now(boost::posix_time::millisec(100)); // 100 ms to connect
                 m_Timer.async_wait(wrap([p=this->shared_from_this()](boost::system::error_code ec) {
-                    if (!ec)
+                    if (!ec and p->m_State.state() == CONNECTING)
                         p->m_Socket.close();
                 }));
                 yield m_Socket.async_connect(m_Addr, resume_reader());
 
                 // auth. just read a greetings
+                m_State.auth();
                 yield async_read(m_Socket
                                , boost::asio::buffer(&m_Greetings, sizeof(m_Greetings))
                                , resume_reader());
