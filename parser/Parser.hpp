@@ -28,9 +28,7 @@ namespace Parse
     // complicated parser.
     //
     // parse csv format with quotes
-    //
-    // F must return std::string pointer to collect characters
-    //
+    // call f for every element
     // supported 2 format:
     //   quotes + double quotes.
     //   escaping
@@ -38,7 +36,8 @@ namespace Parse
     template<class F>
     bool quoted(boost::string_ref str, F f, const char sep = ',', const char quote = '"', const char esc = '\\')
     {
-        std::string* current = nullptr;
+        bool        next_token = false;
+        std::string current;
 
         bool first_character = true;
         bool quoted_string = false;
@@ -50,11 +49,11 @@ namespace Parse
         {
             c = str[i];
 
-            if (!current) {
-                current = f();    // starting new token
-                first_character = true; quoted_string = false; skip_quote = false; esc_quote = false;
+            if (next_token) {
+                f(current);    // starting new token
+                current.clear();
+                next_token = false; first_character = true; quoted_string = false; skip_quote = false; esc_quote = false;
             }
-
             if (first_character) {
                 first_character = false;
                 if (c == quote)
@@ -64,7 +63,7 @@ namespace Parse
                 }
             }
             if (esc_quote) {
-                current->push_back(c);
+                current.push_back(c);
                 esc_quote = false;
                 continue;
             }
@@ -72,26 +71,30 @@ namespace Parse
             {
                 if (skip_quote) {
                     skip_quote = false;
-                    if (c == sep)           current = nullptr;          // ",
-                    else if (c == quote)    current->push_back(quote);  // ""
-                    else                    return false;               // "x
+                    if (c == sep)           next_token = true;         // ",
+                    else if (c == quote)    current.push_back(quote);  // ""
+                    else                    return false;              // "x
                 } else {
                     if (c == esc)           esc_quote = true;
                     else if (c == quote)    skip_quote = true;
-                    else                    current->push_back(c);
+                    else                    current.push_back(c);
                 }
             } else {
                 if (c == esc)        esc_quote = true;
-                else if (c == sep)   current = nullptr;
-                else                 current->push_back(c);
+                else if (c == sep)   next_token = true;
+                else                 current.push_back(c);
             }
         }
         if (esc_quote)
             return false;
-        if (quoted_string and !skip_quote and nullptr != current)
+        if (quoted_string and !skip_quote and !next_token)
             return false;
+        f(current);
         if (c == sep)   // if last char in string is separator - append empty token
-            f();
+        {
+            current.clear();
+            f(current);
+        }
 
         return true;
     }

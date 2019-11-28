@@ -23,9 +23,8 @@ BOOST_AUTO_TEST_CASE(quoted)
     {
         std::list<std::string> result;
         std::string line="asd,\"foo\",\"Super, \"\"luxurious\"\" truck\",";
-        BOOST_CHECK(Parse::quoted(line, [&result]() mutable -> std::string* {
-            result.push_back("");
-            return &result.back();
+        BOOST_CHECK(Parse::quoted(line, [&result](std::string& aStr) mutable {
+            result.push_back(aStr);
         }));
 
         std::list<std::string> expected = {"asd", "foo", "Super, \"luxurious\" truck", ""};
@@ -35,18 +34,16 @@ BOOST_AUTO_TEST_CASE(quoted)
     {
         std::list<std::string> result;
         std::string line="asd,\"foo\"";
-        BOOST_CHECK(Parse::quoted(line, [&result]() mutable -> std::string* {
-            result.push_back("");
-            return &result.back();
+        BOOST_CHECK(Parse::quoted(line, [&result](std::string& aStr) mutable {
+            result.push_back(aStr);
         }));
     }
 
     {
         std::list<std::string> result;
         std::string line="asd,\"foo";
-        BOOST_CHECK(false == Parse::quoted(line, [&result]() mutable -> std::string* {
-            result.push_back("");
-            return &result.back();
+        BOOST_CHECK(false == Parse::quoted(line, [&result](std::string& aStr) mutable {
+            result.push_back(aStr);
         }));
     }
 }
@@ -56,9 +53,8 @@ BOOST_AUTO_TEST_CASE(escape)
         std::list<std::string> result;
 
         std::string line=R"(asd,f\,oo,Super\, "luxurious" truck,)";
-        BOOST_CHECK(Parse::quoted(line, [&result]() mutable -> std::string* {
-            result.push_back("");
-            return &result.back();
+        BOOST_CHECK(Parse::quoted(line, [&result](std::string& aStr) mutable {
+            result.push_back(aStr);
         }, ',', '"', '\\'));
 
         std::list<std::string> expected = {"asd", "f,oo", "Super, \"luxurious\" truck", ""};
@@ -68,9 +64,8 @@ BOOST_AUTO_TEST_CASE(escape)
         std::list<std::string> result;
 
         std::string line=R"("a\\sd",f"oo,"Super, \"luxurious"" truck",)";
-        BOOST_CHECK(Parse::quoted(line, [&result]() mutable -> std::string* {
-            result.push_back("");
-            return &result.back();
+        BOOST_CHECK(Parse::quoted(line, [&result](std::string& aStr) mutable {
+            result.push_back(aStr);
         }));
 
         std::list<std::string> expected = {"a\\sd", "f\"oo", "Super, \"luxurious\" truck", ""};
@@ -79,17 +74,15 @@ BOOST_AUTO_TEST_CASE(escape)
     {
         std::list<std::string> result;
         std::string line=R"(asd,foo\)";
-        BOOST_CHECK(false == Parse::quoted(line, [&result]() mutable -> std::string* {
-            result.push_back("");
-            return &result.back();
+        BOOST_CHECK(false == Parse::quoted(line, [&result](std::string& aStr) mutable {
+            result.push_back(aStr);
         }));
     }
     {
         std::list<std::string> result;
         std::string line=R"(asd,\"foo,"""bar""")";
-        BOOST_CHECK(true == Parse::quoted(line, [&result]() mutable -> std::string* {
-            result.push_back("");
-            return &result.back();
+        BOOST_CHECK(true == Parse::quoted(line, [&result](std::string& aStr) mutable {
+            result.push_back(aStr);
         }));
         auto it = result.begin();
         BOOST_CHECK_EQUAL(*it++, "asd");
