@@ -19,6 +19,20 @@ BOOST_AUTO_TEST_CASE(resolve)
     BOOST_CHECK_EQUAL(0x100007F, Util::resolveName("localhost"));
     BOOST_CHECK_THROW([](){ Util::resolveName("nx.domain.qjz9zk"); }(), std::runtime_error);
 }
+BOOST_AUTO_TEST_CASE(socket)
+{
+    Udp::Socket s;
+    auto sBufSize = s.getBufSize();
+    BOOST_TEST_MESSAGE("buffer size: " << sBufSize.first << "/" << sBufSize.second);
+
+    s.setBufSize(4096, 16384);
+    sBufSize = s.getBufSize();
+    // kernel internally doubles that size
+    BOOST_TEST_MESSAGE("buffer size: " << sBufSize.first << "/" << sBufSize.second);
+    BOOST_CHECK(sBufSize.first  == 8192);
+    BOOST_CHECK(sBufSize.second == 32768);
+
+}
 BOOST_AUTO_TEST_CASE(pipe)
 {
     const std::string  BUFFER = "test123";
