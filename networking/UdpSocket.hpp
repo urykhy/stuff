@@ -15,6 +15,33 @@ namespace Udp
 {
     struct ErrnoError : std::runtime_error { ErrnoError (const std::string& aMsg) : std::runtime_error(Exception::with_errno(aMsg, errno)) {}};
 
+    template<unsigned S>
+    class MultiBuffer
+    {
+        std::array<iovec, S> m_Iovec;
+        std::array<mmsghdr, S> m_Hdr;
+        unsigned m_Index = 0;
+    public:
+
+        MultiBuffer()
+        {
+            memset(m_Iovec.data(), 0, sizeof(m_Iovec));
+            memset(m_Hdr.data(),   0, sizeof(m_Hdr));
+        }
+        void append(void* aBuffer, size_t aSize)
+        {
+            m_Iovec[m_Index].iov_base = aBuffer;
+            m_Iovec[m_Index].iov_len  = aSize;
+            m_Hdr[m_Index].msg_hdr.msg_iov = &m_Iovec[m_Index];
+            m_Hdr[m_Index].msg_hdr.msg_iovlen = 1;
+            m_Index++;
+        }
+        unsigned size() const { return m_Index; }
+
+        mmsghdr* buffer() { return m_Hdr.data(); }
+        size_t size(unsigned aIndex) const { return m_Hdr[aIndex].msg_len; }
+    };
+
     class Socket
     {
         int m_Fd = -1;
@@ -82,6 +109,13 @@ namespace Udp
             return ::recvfrom(m_Fd, aPtr, aSize, MSG_TRUNC, (struct sockaddr *)&sAddr, &sLen);
         }
 
+        // returns the number of messages received
+        ssize_t mread(struct mmsghdr* aPtr, ssize_t aSize)
+        {
+            // timeout is bugged, so just use nonblocking socket
+            return recvmmsg(m_Fd, aPtr, aSize, MSG_TRUNC, nullptr);
+        }
+
         ssize_t write(const void* aPtr, ssize_t aSize)
         {
             socklen_t sLen = sizeof(m_Peer);
@@ -126,6 +160,15 @@ namespace Udp
                 throw ErrnoError("fail to get send buffer size");
 
             return std::make_pair(sRcv, sSnd);
+        }
+
+        int getError()
+        {
+            socklen_t sDummy = sizeof(int);
+            int sError = 0;
+            if (getsockopt(m_Fd, SOL_SOCKET, SO_ERROR, &sError, &sDummy))
+                throw ErrnoError("fail to get socket error");
+            return sError;
         }
 
         ~Socket() { close(); }
