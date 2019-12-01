@@ -31,4 +31,6 @@ namespace Exception
         Error(const std::string& aMessage) : B(aMessage) {}
         Error(const std::string& aMessage, int aCode) : B(with_errno(aMessage, aCode)) {}
     };
+
+    struct ErrnoError : std::runtime_error { ErrnoError (const std::string& aMsg) : std::runtime_error(Exception::with_errno(aMsg, errno)) {}};
 }

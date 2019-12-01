@@ -4,6 +4,7 @@
 #include <chrono>
 
 #include "UdpPipe.hpp"
+#include "EventFd.hpp"
 
 using namespace std::chrono_literals;
 
@@ -92,5 +93,12 @@ BOOST_AUTO_TEST_CASE(mread)
     BOOST_CHECK_EQUAL("abcdefg", sData[1].data);
     BOOST_CHECK_EQUAL("ABCDEFG", sData[2].data);
     BOOST_CHECK_EQUAL("HIJKLMN", sData[3].data);
+}
+BOOST_AUTO_TEST_CASE(eventfd)
+{
+    Util::EventFd sFd;
+    sFd.signal();
+    sFd.signal();
+    BOOST_CHECK_EQUAL(2, sFd.read());
 }
 BOOST_AUTO_TEST_SUITE_END()
