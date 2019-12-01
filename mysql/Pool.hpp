@@ -18,7 +18,7 @@ namespace Util
         Generate m_Gen;
         Check m_Check;
         const size_t m_IdleCount;
-        const size_t m_Timeout;
+        const time_t m_Timeout;
 
         bool is_timedout(time_t x)
         {
@@ -27,7 +27,7 @@ namespace Util
 
     public:
 
-        Pool(Generate g, Check c, size_t aIdleCount = 1, size_t aTimeout = 10)
+        Pool(Generate g, Check c, size_t aIdleCount = 1, time_t aTimeout = 10)
         : m_Gen(g), m_Check(c), m_IdleCount(aIdleCount), m_Timeout(aTimeout)
         {}
 

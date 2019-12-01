@@ -23,7 +23,7 @@ BOOST_AUTO_TEST_CASE(native)
     Threads::Group sGroup;
     sManager.start(sGroup);
 
-    // at least 1 page read's required
+    // at least 1 page required
     sManager.read(fd, 4096, 0, [](int rc, AIO::BufferPtr buf)
     {
         const char* data = static_cast<const char*>(buf->data());
