@@ -29,6 +29,9 @@ namespace tnt17
         };
 
     private:
+        const uint64_t RECONNECT_MS = 1000;
+        const uint32_t CONNECT_MS   = 10;
+
         ba::io_context::strand m_Strand;
         ba::deadline_timer     m_Timer;
         tcp::socket            m_Socket;
@@ -190,7 +193,7 @@ namespace tnt17
             reenter (&m_Reader)
             {
                 m_State.connecting();
-                m_Timer.expires_from_now(boost::posix_time::millisec(100)); // 100 ms to connect
+                m_Timer.expires_from_now(boost::posix_time::millisec(CONNECT_MS));
                 m_Timer.async_wait(wrap([p=this->shared_from_this()](boost::system::error_code ec) {
                     if (!ec and p->m_State.state() == CONNECTING)
                         p->m_Socket.close();
@@ -334,10 +337,9 @@ namespace tnt17
 
         void check_reconnect()
         {
-            const uint64_t RECONNECT_MS = 1000;
             const uint64_t sNow = Time::get_time().to_ms();
 
-            if (!is_alive() and m_LastTry + RECONNECT_MS < sNow)
+            if (m_State.is_running() and !m_State.is_connected() and m_LastTry + RECONNECT_MS < sNow)
             {   // reset coroutines and start connecting
                 BOOST_TEST_MESSAGE("reconnecting");
                 m_Writer = {};
