@@ -104,16 +104,15 @@ namespace tnt17
             return Request{sSerial, sBuffer};
         }
 
-        bool call(const Request& aRequest, Handler&& aHandler)
+        bool call(const Request& aRequest, Handler&& aHandler, unsigned aTimeoutMS = 10)
         {
             if (!is_alive())
                 return false;
 
-            post([this, p=this->shared_from_this(), aRequest, aHandler = std::move(aHandler)] () mutable
+            post([this, p=this->shared_from_this(), aRequest, aHandler = std::move(aHandler), aTimeoutMS] () mutable
             {
-                const unsigned sTimeoutMs = 100;        // FIXME
                 const bool sWriteOut = m_Queue.empty();
-                m_Waiter.insert(aRequest.serial, sTimeoutMs, [p, aHandler = std::move(aHandler)](ReplyWaiter::Future&& aString){
+                m_Waiter.insert(aRequest.serial, aTimeoutMS, [p, aHandler = std::move(aHandler)](ReplyWaiter::Future&& aString){
                     p->callback(aHandler, std::move(aString));
                 });
                 m_Queue.emplace_back(Message(aRequest.body));
