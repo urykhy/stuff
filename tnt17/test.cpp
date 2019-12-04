@@ -8,6 +8,7 @@
 
 #include "Client.hpp"
 #include "Fetch.hpp"
+#include "Cache.hpp"
 
 #include <chrono>
 using namespace std::chrono_literals;
@@ -59,7 +60,7 @@ BOOST_AUTO_TEST_CASE(simple)
 
     Threads::WaitGroup sWait(1);
     auto sRequest = sClient->formatSelect(tnt17::IndexSpec{}.set_id(0), 1);
-    bool sQueued  = sClient->call(sRequest.first, sRequest.second, [&sWait](typename C::Future&& aResult)
+    bool sQueued  = sClient->call(sRequest, [&sWait](typename C::Future&& aResult)
     {
         const auto sResult = aResult.get();
         BOOST_REQUIRE_EQUAL(sResult.size(), 1);
@@ -117,6 +118,45 @@ BOOST_AUTO_TEST_CASE(fetch)
     sFetch->stop();
     sClient->stop();
     std::this_thread::sleep_for(10ms);
+    sGroup.wait();  // stop threads
+}
+BOOST_AUTO_TEST_CASE(cache)
+{
+    Threads::Asio  sLoop;
+    Threads::Group sGroup;
+    sLoop.start(1, sGroup);
+
+    const auto sAddr = tnt17::endpoint("127.0.0.1", 2090);
+    auto sClient = tnt17::cache::Engine(sLoop.service(), sAddr, 513 /*space id*/);
+    while (!sClient.is_alive()) std::this_thread::sleep_for(10ms);
+
+    Threads::WaitGroup sWait(1);
+    sClient.Delete("123", [&sWait](auto&& aResult){
+        auto sResult = aResult.get();
+        if (sResult)
+            BOOST_TEST_MESSAGE("deleted data: " << sResult->value);
+        sWait.release();
+    });
+    sWait.wait_for(50ms);
+
+    sWait.reset(1);
+    sClient.Set(tnt17::cache::Entry{"123", 12, "some data"}, [&sWait](auto&& aResult){
+        auto sResult = aResult.get();
+        if (sResult)
+            BOOST_TEST_MESSAGE("inserted data: " << sResult->value);
+        sWait.release();
+    });
+    sWait.wait_for(50ms);
+
+    sWait.reset(1);
+    sClient.Get("123", [&sWait](tnt17::cache::Engine::Future&& aResult){
+        const auto sResult = aResult.get();
+        BOOST_CHECK_EQUAL(sResult->key, "123");
+        BOOST_CHECK_EQUAL(sResult->value, "some data");
+        sWait.release();
+    });
+    sWait.wait_for(50ms);
+
     sGroup.wait();  // stop threads
 }
 BOOST_AUTO_TEST_SUITE_END()

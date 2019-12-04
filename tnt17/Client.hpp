@@ -21,7 +21,12 @@ namespace tnt17
         using Promise = std::promise<Result>;
         using Future  = std::future<Result>;
         using Handler = std::function<void(Future&&)>;
-        using Request = std::pair<uint64_t, std::string>;
+
+        struct Request
+        {
+            uint64_t serial = 0;
+            std::string body;
+        };
 
     private:
         ba::io_context::strand m_Strand;
@@ -74,22 +79,44 @@ namespace tnt17
             formatHeader(sStream, CODE_SELECT, sSerial);
             formatSelectBody(sStream, m_Space, aIndex);
             T::formatKey(sStream, aKey);
-            return Request(sSerial, sBuffer);
+            return Request{sSerial, sBuffer};
         }
 
-        bool call(size_t aSerial, const std::string& aRequest, Handler&& aHandler)
+        Request formatInsert(const T& aData)
+        {
+            const uint64_t sSerial = m_Serial++;
+            MsgPack::binary sBuffer;
+            MsgPack::omemstream sStream(sBuffer);
+            formatHeader(sStream, CODE_INSERT, sSerial);
+            formatInsertBody(sStream, m_Space, aData);
+            return Request{sSerial, sBuffer};
+        }
+
+        template<class K>
+        Request formatDelete(const IndexSpec& aIndex, const K& aKey)
+        {
+            const uint64_t sSerial = m_Serial++;
+            MsgPack::binary sBuffer;
+            MsgPack::omemstream sStream(sBuffer);
+            formatHeader(sStream, CODE_DELETE, sSerial);
+            formatDeleteBody(sStream, m_Space, aIndex);
+            T::formatKey(sStream, aKey);
+            return Request{sSerial, sBuffer};
+        }
+
+        bool call(const Request& aRequest, Handler&& aHandler)
         {
             if (!is_alive())
                 return false;
 
-            post([this, p=this->shared_from_this(), aSerial, aRequest, aHandler = std::move(aHandler)] () mutable
+            post([this, p=this->shared_from_this(), aRequest, aHandler = std::move(aHandler)] () mutable
             {
                 const unsigned sTimeoutMs = 100;        // FIXME
                 const bool sWriteOut = m_Queue.empty();
-                m_Waiter.insert(aSerial, sTimeoutMs, [p, aHandler = std::move(aHandler)](ReplyWaiter::Future&& aString){
+                m_Waiter.insert(aRequest.serial, sTimeoutMs, [p, aHandler = std::move(aHandler)](ReplyWaiter::Future&& aString){
                     p->callback(aHandler, std::move(aString));
                 });
-                m_Queue.emplace_back(Message(aRequest));
+                m_Queue.emplace_back(Message(aRequest.body));
                 if (sWriteOut) {
                     m_Writer = {};
                     writer();

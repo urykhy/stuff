@@ -26,3 +26,5 @@ function get_by_ids(args)
     return unpack(res)
 end
 
+s = box.schema.space.create('cache')
+s:create_index('primary', {type = 'hash', parts = {1, 'string'}})

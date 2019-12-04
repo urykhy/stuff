@@ -88,7 +88,7 @@ namespace tnt17
                     }
 
                     m_Request = m_Client->formatSelect(tnt17::IndexSpec{}.set_id(0), *m_Key);
-                    m_Queued  = m_Client->call(m_Request.first, m_Request.second, [this, aHandler = resume()](typename XClient::Future&& aResult) mutable
+                    m_Queued  = m_Client->call(m_Request, [this, aHandler = resume()](typename XClient::Future&& aResult) mutable
                     {
                         try {
                             // FIXME: notify if really no data ?

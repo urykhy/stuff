@@ -100,26 +100,26 @@ namespace tnt17
         write_uint(aStream, 0x20);    write_array_size(aStream, 1);
     }
 
-#if 0
-    template<class P, class V>
-    void formatInsertBody(P& aStream, int aSpaceId, const V& aValue)
+    template<class S, class V>
+    void formatInsertBody(S& aStream, int aSpaceId, const V& aValue)
     {
         using namespace MsgPack;
         write_map_size(aStream, 2);
-        write(aStream, 0x10);    write(aStream, aSpaceId);
-        write(aStream, 0x21);    aValue.write(aStream);
+        write_uint(aStream, 0x10);    write_uint(aStream, aSpaceId);
+        write_uint(aStream, 0x21);    aValue.serialize(aStream);
     }
 
-    template<class P>
-    void formatDeleteBody(P& aStream, int aSpaceId, int aIndexId, uint64_t aKey)
+    template<class S>
+    void formatDeleteBody(S& aStream, int aSpaceId, const IndexSpec& aIndex)
     {
         using namespace MsgPack;
         write_map_size(aStream, 3);
-        write(aStream, 0x10);    write(aStream, aSpaceId);
-        write(aStream, 0x11);    write(aStream, aIndexId);
-        write(aStream, 0x20);    write_array_size(aStream, 1);    write(aStream, aKey);
+        write_uint(aStream, 0x10);    write_uint(aStream, aSpaceId);
+        write_uint(aStream, 0x11);    write_uint(aStream, aIndex.id);
+        write_uint(aStream, 0x20);    write_array_size(aStream, 1);
     }
 
+#if 0
     template<class P, class A>
     void formatCallBody(P& aStream, const std::string& aName, const A& aArgs)
     {
@@ -136,27 +136,6 @@ namespace tnt17
         write_map_size(aStream, 2);
         write(aStream, 0x23);    write(aStream, aName);
         write(aStream, 0x21);    write_array_size(aStream, 2);    write(aStream, "chap-sha1");     write(aStream, aHash);
-    }
-
-    template<class U, class T>
-    void parseReply(const T& aData, Header& aHeader, std::vector<U>& aResult)
-    {
-        using namespace MsgPack;
-        imemstream sStream(aData);
-        aHeader.parse(sStream);
-
-        Reply sReply;
-        sReply.parse(sStream);
-
-        if (sReply.ok)
-        {
-            uint32_t sReplyCount = read_array_size(sStream);
-            aResult.resize(sReplyCount);
-            for (auto& x : aResult)
-                x.parse(sStream);
-        } else {
-            throw std::runtime_error(std::string(sReply.error.data(), sReply.error.size()));
-        }
     }
 #endif
 }
