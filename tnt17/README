@@ -1,4 +1,0 @@
-TNT CFG
-
-box.cfg {listen = 2090}
-box.space.test.index.primary:select(0, {iterator = "ALL", limit=10})

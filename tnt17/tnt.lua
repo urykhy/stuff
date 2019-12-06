@@ -28,3 +28,6 @@ end
 
 s = box.schema.space.create('cache')
 s:create_index('primary', {type = 'hash', parts = {1, 'string'}})
+
+-- box.space.test.index.primary:select(0, {iterator = "ALL", limit=10})
+-- get_by_ids({1,2,4,5,6,7,8,9,10})
