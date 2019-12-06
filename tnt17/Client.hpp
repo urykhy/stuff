@@ -107,14 +107,20 @@ namespace tnt17
             return Request{sSerial, sBuffer};
         }
 
-        bool call(const Request& aRequest, Handler&& aHandler, unsigned aTimeoutMS = 10)
+        void call(const Request& aRequest, Handler&& aHandler, unsigned aTimeoutMS = 10)
         {
-            if (!is_alive())
-                return false;
-
             post([this, p=this->shared_from_this(), aRequest, aHandler = std::move(aHandler), aTimeoutMS] () mutable
             {
                 const bool sWriteOut = m_Queue.empty();
+                if (!is_alive())
+                {
+                    auto ec = boost::system::error_code(boost::system::errc::not_connected, boost::system::system_category());
+                    Promise sPromise;
+                    sPromise.set_exception(std::make_exception_ptr(NetworkError(ec)));
+                    aHandler(sPromise.get_future());
+                    return;
+                }
+
                 m_Waiter.insert(aRequest.serial, aTimeoutMS, [p, aHandler = std::move(aHandler)](ReplyWaiter::Future&& aString){
                     p->callback(aHandler, std::move(aString));
                 });
@@ -124,7 +130,6 @@ namespace tnt17
                     writer();
                 }
             });
-            return true;
         }
 
         void stop()

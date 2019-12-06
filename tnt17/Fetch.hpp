@@ -47,7 +47,6 @@ namespace tnt17
         State                     m_State;
         std::optional<unsigned>   m_Key;      // current key
         typename XClient::Request m_Request;  // current request
-        bool                      m_Queued{false};
     public:
 
         Fetch(XClientPtr aClient, FetchQueue<T>& aQueue)
@@ -88,7 +87,7 @@ namespace tnt17
                     }
 
                     m_Request = m_Client->formatSelect(tnt17::IndexSpec{}.set_id(0), *m_Key);
-                    m_Queued  = m_Client->call(m_Request, [this, aHandler = resume()](typename XClient::Future&& aResult) mutable
+                    yield m_Client->call(m_Request, [this, aHandler = resume()](typename XClient::Future&& aResult) mutable
                     {
                         try {
                             // FIXME: notify if really no data ?
@@ -101,9 +100,6 @@ namespace tnt17
                             aHandler(boost::system::errc::make_error_code(boost::system::errc::protocol_error));
                         }
                     });
-                    if (!m_Queued)
-                        continue;
-                    yield;
                     BOOST_TEST_MESSAGE("key " << *m_Key << " fetched");
                     m_Key = {}; // key processed
                 }

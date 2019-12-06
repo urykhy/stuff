@@ -60,7 +60,7 @@ BOOST_AUTO_TEST_CASE(simple)
 
     Threads::WaitGroup sWait(1);
     auto sRequest = sClient->formatSelect(tnt17::IndexSpec{}.set_id(0), 1);
-    bool sQueued  = sClient->call(sRequest, [&sWait](typename C::Future&& aResult)
+    sClient->call(sRequest, [&sWait](typename C::Future&& aResult)
     {
         const auto sResult = aResult.get();
         BOOST_REQUIRE_EQUAL(sResult.size(), 1);
@@ -68,7 +68,6 @@ BOOST_AUTO_TEST_CASE(simple)
         BOOST_CHECK_EQUAL(sResult[0].value, "Roxette");
         sWait.release();
     });
-    BOOST_CHECK_EQUAL(sQueued, true);
     sWait.wait_for(50ms);
 
     sClient->stop();

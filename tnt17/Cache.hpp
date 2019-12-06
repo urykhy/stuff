@@ -84,24 +84,22 @@ namespace tnt17::cache
 
         bool is_alive() const { return m_Client->is_alive(); }
 
-        // return false if cache unavailable
-        // true - if connection established and call placed
-        bool Get(const std::string& aKey, Handler aHandler)
+        void Get(const std::string& aKey, Handler aHandler)
         {
             auto sRequest = m_Client->formatSelect(IndexSpec().set_limit(1), aKey);
-            return m_Client->call(sRequest, makeCallback(std::move(aHandler)));
+            m_Client->call(sRequest, makeCallback(std::move(aHandler)));
         }
 
-        bool Set(const Entry& aData, Handler aHandler)
+        void Set(const Entry& aData, Handler aHandler)
         {
             auto sRequest = m_Client->formatInsert(aData);
-            return m_Client->call(sRequest,makeCallback(std::move(aHandler)));
+            m_Client->call(sRequest,makeCallback(std::move(aHandler)));
         }
 
-        bool Delete(const std::string& aKey, Handler aHandler)
+        void Delete(const std::string& aKey, Handler aHandler)
         {
             auto sRequest = m_Client->formatDelete(IndexSpec{}, aKey);
-            return m_Client->call(sRequest,makeCallback(std::move(aHandler)));
+            m_Client->call(sRequest,makeCallback(std::move(aHandler)));
         }
     };
 } // namespace tnt17
