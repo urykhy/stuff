@@ -12,4 +12,11 @@ namespace Util
         const std::string sTmp((const char*)sID, sizeof(sID));
         return Parser::to_hex(sTmp);
     }
+
+    uint64_t Uuid64()
+    {
+        uuid_t sID;
+        uuid_generate_random(sID);
+        return *(reinterpret_cast<uint64_t*>(&sID));
+    }
 } // namespace Util

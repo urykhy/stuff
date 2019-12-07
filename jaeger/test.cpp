@@ -5,13 +5,14 @@
 using namespace std::chrono_literals;
 
 #include "Jaeger.hpp"
+#include "unsorted/Uuid.hpp"
 #include <networking/UdpPipe.hpp>
 
 BOOST_AUTO_TEST_SUITE(Jaeger)
 BOOST_AUTO_TEST_CASE(simple)
 {
     using Tag = Jaeger::Metric::Tag;
-    Jaeger::Metric sMetric("test.cpp");
+    Jaeger::Metric sMetric("test.cpp", Util::Uuid64());
     sMetric.set_process_tag(Tag{"version","0.1/test"});
     size_t id = 0;
     id = sMetric.start("initialize"); std::this_thread::sleep_for(100us); sMetric.stop(id);
