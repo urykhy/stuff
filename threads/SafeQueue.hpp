@@ -2,8 +2,9 @@
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
-#include <set>
+#include <optional>
 #include <queue>
+#include <set>
 #include "Group.hpp"
 
 namespace Threads
@@ -64,15 +65,15 @@ namespace Threads
             return m_List.empty();
         }
 
-        bool try_get(Node& aItem)
+        std::optional<Node> try_get()
         {
+            std::optional<Node> sResult;
             Lock lk(m_Mutex);
             if (m_List.empty())
-                return false;
-            auto sItem = m_List.top();
+                return sResult;
+            sResult = std::move(m_List.top());
             m_List.pop();
-            aItem = std::move(sItem);
-            return true;
+            return sResult;
         }
 
         bool wait(Node& aItem, std::function<bool(const Node&)> aTest = [](const Node&) -> bool { return true; })
