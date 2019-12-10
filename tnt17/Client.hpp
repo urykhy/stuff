@@ -181,6 +181,10 @@ namespace tnt17
 
         void reader(boost::system::error_code ec = boost::system::error_code())
         {
+            if (!ec and m_State.state() == TIMEOUT)
+            {   // timer already closed socket
+                ec = boost::system::error_code(boost::system::errc::operation_canceled, boost::system::system_category());
+            }
             if (ec)
             {
                 // if async_connect timed out - replace error message
@@ -201,7 +205,10 @@ namespace tnt17
                 m_Timer.expires_from_now(boost::posix_time::millisec(CONNECT_MS));
                 m_Timer.async_wait(wrap([p=this->shared_from_this()](boost::system::error_code ec) {
                     if (!ec and p->m_State.state() == CONNECTING)
+                    {
                         p->m_Socket.close();
+                        p->m_State.timeout();
+                    }
                 }));
                 yield m_Socket.async_connect(m_Addr, resume_reader());
 

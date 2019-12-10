@@ -8,6 +8,7 @@ namespace tnt17
     {
         IDLE
       , CONNECTING
+      , TIMEOUT
       , AUTH
       , ALIVE
       , ERROR
@@ -24,6 +25,7 @@ namespace tnt17
         bool is_running()   const { return m_Running; }
 
         void connecting()  { m_State = CONNECTING; }
+        void timeout()     { m_State = TIMEOUT; }
         void auth()        { m_State = AUTH; }
         void established() { m_State = ALIVE; }
         void set_error()   { m_State = ERROR; }
