@@ -19,7 +19,7 @@ namespace Util
     {
         struct in_addr sTmp;
         if (0 == inet_aton(aAddr.c_str(), &sTmp))
-            throw std::runtime_error(Exception::with_errno("fail to convert address", errno));
+            throw Exception::ErrnoError("fail to convert address");
         return sTmp.s_addr;
     }
 

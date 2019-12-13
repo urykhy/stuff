@@ -5,6 +5,7 @@
 
 #include "UdpPipe.hpp"
 #include "EventFd.hpp"
+#include "SRV.hpp"
 
 using namespace std::chrono_literals;
 
@@ -19,6 +20,14 @@ BOOST_AUTO_TEST_CASE(resolve)
     BOOST_CHECK_EQUAL(0x100007F, Util::resolveName("127.0.0.1"));
     BOOST_CHECK_EQUAL(0x100007F, Util::resolveName("localhost"));
     BOOST_CHECK_THROW([](){ Util::resolveName("nx.domain.qjz9zk"); }(), std::runtime_error);
+
+    Util::SRV sResolver;
+    auto sSet = sResolver("_kerberos._tcp.kerberos.elf.dark");
+    BOOST_CHECK(sSet.size() > 0);
+    for (auto& x : sSet)
+        BOOST_TEST_MESSAGE("resolved to " << x.name << ":" << x.port << " with priority: " << x.prio << ", weight: " << x.weight);
+    bool rc = sSet[0].resolve() == Util::SRV::HostPort{0x0A0A670A, 88};
+    BOOST_CHECK(rc);
 }
 BOOST_AUTO_TEST_CASE(socket)
 {
