@@ -5,6 +5,7 @@
 
 #include "UdpPipe.hpp"
 #include "EventFd.hpp"
+#include "TimerFd.hpp"
 #include "SRV.hpp"
 
 using namespace std::chrono_literals;
@@ -109,5 +110,13 @@ BOOST_AUTO_TEST_CASE(eventfd)
     sFd.signal();
     sFd.signal();
     BOOST_CHECK_EQUAL(2, sFd.read());
+}
+BOOST_AUTO_TEST_CASE(timerfd)
+{
+    Util::TimerFd sFd;
+    std::this_thread::sleep_for(50ms);
+    int sCount = sFd.read();
+    BOOST_TEST_MESSAGE("10 ms timer wake up " << sCount << " times in 50ms");
+    BOOST_CHECK(sCount >= 5);
 }
 BOOST_AUTO_TEST_SUITE_END()

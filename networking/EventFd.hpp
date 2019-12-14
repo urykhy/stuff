@@ -1,6 +1,5 @@
 #pragma once
 
-#include <errno.h>
 #include <sys/eventfd.h>
 #include <unistd.h>
 
@@ -22,14 +21,7 @@ namespace Util
             if (m_Fd == -1) { throw Error("fail to create eventfd socket"); }
         }
 
-        ~EventFd() throw()
-        {
-            if (m_Fd != -1)
-            {
-                ::close(m_Fd);
-                m_Fd = -1;
-            }
-        }
+        ~EventFd() throw() { ::close(m_Fd); }
 
         bool signal(uint64_t v = 1)
         {
@@ -48,7 +40,7 @@ namespace Util
             if (res == sizeof(v))
                 return v;
             if (res == -1 && (errno != EINTR && errno != EAGAIN))
-                throw Error("fail to read event_fd");
+                throw Error("fail to read eventfd");
             return 0;
         }
 
