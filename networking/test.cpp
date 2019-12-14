@@ -84,6 +84,7 @@ BOOST_AUTO_TEST_CASE(mread)
     producer.write("abcdefg", 8);
     producer.write("ABCDEFG", 8);
     producer.write("HIJKLMN", 8);
+    BOOST_TEST_MESSAGE("TIOCOUTQ: " << producer.outq());
     std::this_thread::sleep_for(100ms);
 
     std::array<Message, MSG_COUNT> sData;

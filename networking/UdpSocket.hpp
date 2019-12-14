@@ -143,6 +143,15 @@ namespace Udp
             return sAvail;
         }
 
+        // Get the number of bytes in the output buffer
+        ssize_t outq()
+        {
+            int sSize = 0;
+            if (ioctl(m_Fd, TIOCOUTQ, &sSize))
+                throw Error("fail to get tiocoutq");
+            return sSize;
+        }
+
         void setBufSize(int aRcv, int aSnd)
         {
             if (aRcv > 0 and setsockopt(m_Fd, SOL_SOCKET, SO_RCVBUF, &aRcv, sizeof(aRcv)))
