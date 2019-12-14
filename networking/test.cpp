@@ -7,6 +7,7 @@
 #include "EventFd.hpp"
 #include "TimerFd.hpp"
 #include "SRV.hpp"
+#include <unsorted/Taskset.hpp>
 
 using namespace std::chrono_literals;
 
@@ -114,6 +115,7 @@ BOOST_AUTO_TEST_CASE(eventfd)
 }
 BOOST_AUTO_TEST_CASE(timerfd)
 {
+    Util::setCore(1);
     Util::TimerFd sFd;
     std::this_thread::sleep_for(50ms);
     int sCount = sFd.read();
