@@ -74,7 +74,7 @@ namespace Udp
             if (aReuse)
             {
                 int sReuse = 1;
-                if (setsockopt(m_Fd, SOL_SOCKET, SO_REUSEADDR, &sReuse, sizeof(sReuse)))
+                if (setsockopt(m_Fd, SOL_SOCKET, SO_REUSEPORT, &sReuse, sizeof(sReuse)))
                     throw Error("fail to set reuse port");
             }
 
