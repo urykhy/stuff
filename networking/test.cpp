@@ -9,6 +9,8 @@
 #include "SRV.hpp"
 #include <unsorted/Taskset.hpp>
 
+#include "EPoll.hpp"
+
 using namespace std::chrono_literals;
 
 struct Message {    // data over UDP
@@ -121,5 +123,35 @@ BOOST_AUTO_TEST_CASE(timerfd)
     int sCount = sFd.read();
     BOOST_TEST_MESSAGE("10 ms timer wake up " << sCount << " times in 50ms");
     BOOST_CHECK(sCount >= 5);
+}
+BOOST_AUTO_TEST_SUITE_END()
+BOOST_AUTO_TEST_SUITE(epoll)
+BOOST_AUTO_TEST_CASE(basic)
+{
+    struct TimerHandler : public Util::EPoll::HandlerFace
+    {
+        int m_Calls = 0;
+        Util::TimerFd m_Timer;
+        int get() { return m_Timer.get(); }
+
+        Result on_read() override
+        {
+            int rc = m_Timer.read();
+            BOOST_REQUIRE_GE(rc, 0);
+            m_Calls += rc;
+            return Result::OK;
+        }
+        Result on_write() override { return Result::OK; }
+        void on_error() override { BOOST_CHECK(false); }
+    };
+    auto sHandler = std::make_shared<TimerHandler>();
+
+    Util::EPoll sEpoll;
+    Threads::Group sGroup;
+    sEpoll.insert(sHandler->get(), EPOLLIN, sHandler);
+    sEpoll.start(sGroup);
+    std::this_thread::sleep_for(50ms);
+    sGroup.wait();
+    BOOST_CHECK_EQUAL(sHandler->m_Calls, 5);
 }
 BOOST_AUTO_TEST_SUITE_END()
