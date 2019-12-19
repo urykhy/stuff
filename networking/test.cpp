@@ -127,43 +127,6 @@ BOOST_AUTO_TEST_CASE(timerfd)
 }
 BOOST_AUTO_TEST_SUITE_END()
 BOOST_AUTO_TEST_SUITE(epoll)
-BOOST_AUTO_TEST_CASE(basic)
-{
-    Logger::Configure("../../unsorted/logger.conf");
-    auto sLogger = Logger::Get("test");
-    log4cxx::NDC ndc("epoll.timer");
-
-    Util::EPoll sEpoll;
-    Threads::Group sGroup;
-    sEpoll.start(sGroup);
-    std::this_thread::sleep_for(10ms);
-
-    struct TimerHandler : public Util::EPoll::HandlerFace
-    {
-        int m_Calls = 0;
-        Util::TimerFd m_Timer;
-        int get() { return m_Timer.get(); }
-
-        Result on_read() override
-        {
-            int rc = m_Timer.read();
-            BOOST_REQUIRE_GE(rc, 0);
-            m_Calls += rc;
-            return Result::OK;
-        }
-        Result on_write() override { return Result::OK; }
-        void on_error() override { BOOST_CHECK(false); }
-    };
-    auto sHandler = std::make_shared<TimerHandler>();
-    sEpoll.post([sHandler](Util::EPoll* ptr) {
-        ptr->insert(sHandler->get(), EPOLLIN, sHandler);
-    });
-    LOG4CXX_DEBUG(sLogger, "started");
-    std::this_thread::sleep_for(50ms);
-    LOG4CXX_DEBUG(sLogger, "done");
-    sGroup.wait();
-    BOOST_CHECK_GE(sHandler->m_Calls, 5);
-}
 BOOST_AUTO_TEST_CASE(ping)
 {
     Util::EPoll sEpoll;
