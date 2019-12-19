@@ -153,11 +153,12 @@ namespace Udp
             return ::recvfrom(m_Fd, aPtr, aSize, MSG_TRUNC, (struct sockaddr *)&sAddr, &sLen);
         }
 
+        // aCount - max number of messages to read
         // returns the number of messages received
-        ssize_t mread(struct mmsghdr* aPtr, ssize_t aSize)
+        ssize_t read(struct mmsghdr* aPtr, ssize_t aCount)
         {
             // timeout is bugged, so just use nonblocking socket
-            return recvmmsg(m_Fd, aPtr, aSize, MSG_TRUNC, nullptr);
+            return recvmmsg(m_Fd, aPtr, aCount, MSG_TRUNC, nullptr);
         }
 
         ssize_t write(const Msg& aMessage)

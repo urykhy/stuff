@@ -96,7 +96,7 @@ BOOST_AUTO_TEST_CASE(mread)
     for (unsigned i = 0; i < MSG_COUNT; i++)
         sHeader.append(&sData[i], sizeof(Message));
 
-    int rc = consumer.mread(sHeader.buffer(), sHeader.size());
+    int rc = consumer.read(sHeader.buffer(), sHeader.size());
     BOOST_CHECK_EQUAL(0, consumer.getError());
     BOOST_TEST_MESSAGE("got " << rc << " messages");
     BOOST_REQUIRE_EQUAL(rc, MSG_COUNT);
