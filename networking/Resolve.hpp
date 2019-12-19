@@ -23,6 +23,11 @@ namespace Util
         return sTmp.s_addr;
     }
 
+    inline std::string formatAddr(const struct sockaddr_in& aAddr)
+    {
+        return std::string(inet_ntoa(aAddr.sin_addr)) + ":" + std::to_string(ntohs(aAddr.sin_port));
+    }
+
     inline uint32_t resolveName(const std::string& aName)
     {
         struct addrinfo sHints;

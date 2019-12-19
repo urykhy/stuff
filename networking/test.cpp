@@ -164,4 +164,46 @@ BOOST_AUTO_TEST_CASE(basic)
     sGroup.wait();
     BOOST_CHECK_GE(sHandler->m_Calls, 5);
 }
+BOOST_AUTO_TEST_CASE(ping)
+{
+    Util::EPoll sEpoll;
+    Threads::Group sGroup;
+    sEpoll.start(sGroup);
+
+    struct PingHandler : public Util::EPoll::HandlerFace
+    {
+        Udp::Socket m_Socket;
+        PingHandler() : m_Socket(2092) {}
+        int get() { return m_Socket.get(); }
+
+        Result on_read() override
+        {
+            auto sMsg = m_Socket.read();
+            BOOST_CHECK_EQUAL(sMsg.size, 4);
+            BOOST_TEST_MESSAGE("message: " << sMsg.message << " from " << Util::formatAddr(sMsg.addr));
+            Udp::Socket::Msg sReply{0, "pong", sMsg.addr};
+            m_Socket.write(sReply);
+            return m_Socket.ionread() ? Result::RETRY : Result::OK;
+        }
+        Result on_write() override { return Result::OK; }
+        void on_error() override { BOOST_CHECK(false); }
+    };
+    auto sHandler = std::make_shared<PingHandler>();
+    sEpoll.post([sHandler](Util::EPoll* ptr) {
+        ptr->insert(sHandler->get(), EPOLLIN, sHandler);
+    });
+    std::this_thread::sleep_for(10ms);
+
+    // create other socket, send message, wait for response
+    Udp::Socket sProducer(Util::resolveName("127.0.0.1"), 2092); // `connect` to port
+    BOOST_TEST_MESSAGE("producer socket bound to " << sProducer.port());
+    sProducer.write("ping", 4);
+    std::this_thread::sleep_for(20ms);
+
+    auto sMsg = sProducer.read();
+    BOOST_TEST_MESSAGE("message: " << sMsg.message << " from " << Util::formatAddr(sMsg.addr));
+    BOOST_CHECK_EQUAL(sMsg.message, "pong");
+
+    sGroup.wait();
+}
 BOOST_AUTO_TEST_SUITE_END()
