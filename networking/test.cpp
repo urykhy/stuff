@@ -133,6 +133,11 @@ BOOST_AUTO_TEST_CASE(basic)
     auto sLogger = Logger::Get("test");
     log4cxx::NDC ndc("epoll.timer");
 
+    Util::EPoll sEpoll;
+    Threads::Group sGroup;
+    sEpoll.start(sGroup);
+    std::this_thread::sleep_for(10ms);
+
     struct TimerHandler : public Util::EPoll::HandlerFace
     {
         int m_Calls = 0;
@@ -150,11 +155,9 @@ BOOST_AUTO_TEST_CASE(basic)
         void on_error() override { BOOST_CHECK(false); }
     };
     auto sHandler = std::make_shared<TimerHandler>();
-
-    Util::EPoll sEpoll;
-    Threads::Group sGroup;
-    sEpoll.insert(sHandler->get(), EPOLLIN, sHandler);
-    sEpoll.start(sGroup);
+    sEpoll.post([sHandler](Util::EPoll* ptr) {
+        ptr->insert(sHandler->get(), EPOLLIN, sHandler);
+    });
     LOG4CXX_DEBUG(sLogger, "started");
     std::this_thread::sleep_for(50ms);
     LOG4CXX_DEBUG(sLogger, "done");

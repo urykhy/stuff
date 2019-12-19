@@ -7,7 +7,9 @@
 #include <memory>
 #include <vector>
 
+#include "EventFd.hpp"
 #include <threads/Group.hpp>
+#include <threads/SafeQueue.hpp>
 #include <exception/Error.hpp>
 
 namespace Util
@@ -23,6 +25,7 @@ namespace Util
             virtual ~HandlerFace() {}
         };
         using HandlerPtr = std::shared_ptr<HandlerFace>;
+        using Func = std::function<void(EPoll*)>;
     private:
 
         std::atomic_bool m_Running{true};
@@ -33,6 +36,30 @@ namespace Util
         std::set<int> m_Retry; // retry call
         std::vector<int> m_RetryQueue;
         std::vector<int> m_CleanupQueue;
+
+        struct EventHandler : HandlerFace
+        {
+            EPoll* m_Parent = nullptr;
+            EventHandler(EPoll* aParent) : m_Parent(aParent) {}
+            Result on_read() override { return m_Parent->on_event(); }
+            Result on_write() override { return Result::OK; }
+            void on_error() override {}
+        };
+        EventFd m_Event;
+        HandlerPtr m_EventHandler;
+        Threads::SafeQueue<Func> m_External;
+
+        HandlerFace::Result on_event()
+        {
+            const size_t sCount = m_Event.read();
+            for (size_t i = 0; i < sCount; i++)
+            {
+                auto sFunc = m_External.try_get();
+                if (sFunc)
+                    sFunc->operator()(this);
+            }
+            return m_External.idle() ? HandlerFace::Result::OK : HandlerFace::Result::RETRY;
+        }
 
         void process(int aFd, uint32_t aEvent)
         {
@@ -81,6 +108,9 @@ namespace Util
             m_Fd = epoll_create(aMaxEvents);
             if (m_Fd == -1)
                 throw Error("fail to create epoll socket");
+
+            m_EventHandler = std::make_shared<EventHandler>(this);
+            insert(m_Event.get(), EPOLLIN, m_EventHandler);
         }
         ~EPoll() { close(m_Fd); }
 
@@ -146,6 +176,13 @@ namespace Util
             int rc = epoll_ctl(m_Fd, EPOLL_CTL_DEL, aFd, nullptr);
             if (rc == -1)
                 throw Error("epoll_ctl/erase failed");
+        }
+
+        // thread safe way to insert/erase
+        void post(Func aFunc)
+        {
+            m_External.insert(aFunc);
+            m_Event.signal();
         }
     };
 
