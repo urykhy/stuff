@@ -1,10 +1,10 @@
 #pragma once
 
-#include <sys/epoll.h>
 #include <atomic>
-#include <set>
 #include <map>
 #include <memory>
+#include <set>
+#include <sys/epoll.h>
 #include <vector>
 
 #include "EventFd.hpp"
@@ -94,7 +94,6 @@ namespace Util
             if (sRetry)
                 m_RetryQueue.push_back(aFd);
         }
-
     public:
 
         using Error = Exception::ErrnoError;
@@ -105,7 +104,7 @@ namespace Util
             m_RetryQueue.reserve(aMaxEvents);
             m_CleanupQueue.reserve(aMaxEvents);
 
-            m_Fd = epoll_create(aMaxEvents);
+            m_Fd = epoll_create1(EPOLL_CLOEXEC);
             if (m_Fd == -1)
                 throw Error("fail to create epoll socket");
 
