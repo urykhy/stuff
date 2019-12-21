@@ -30,7 +30,6 @@ namespace Util
 
         std::atomic_bool m_Running{true};
         int m_Fd = -1;
-        uint64_t m_Serial = 0;
         std::vector<struct epoll_event> m_Events;
         std::map<int, HandlerPtr> m_Handlers;   // fd to handler
         std::set<int> m_Retry; // retry call
@@ -115,8 +114,7 @@ namespace Util
 
         void dispatch(int aTimeoutMs = 10)
         {
-            m_Serial++;
-            int sCount = epoll_wait(m_Fd, m_Events.data(), m_Events.size(), aTimeoutMs);
+            int sCount = epoll_wait(m_Fd, m_Events.data(), m_Events.size(), m_Retry.empty() ? aTimeoutMs : 1);
             if (sCount == -1 and errno != EINTR)
                 throw Error("epoll_wait failed");
 
