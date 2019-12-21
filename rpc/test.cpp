@@ -5,6 +5,7 @@
 
 #include "RPC.hpp"
 #include <threads/Asio.hpp>
+#include <networking/Resolve.hpp>
 
 BOOST_AUTO_TEST_SUITE(RPC)
 BOOST_AUTO_TEST_CASE(library)
@@ -19,6 +20,38 @@ BOOST_AUTO_TEST_CASE(library)
     BOOST_CHECK_EQUAL(sLib.debug_call("bar","123").error(), "method not found");
     BOOST_CHECK_EQUAL(sLib.debug_call("throw","").error(), "exception from call");
 }
+BOOST_AUTO_TEST_CASE(simple)
+{
+    constexpr uint16_t PORT = 1234;
+    constexpr uint16_t SERIAL = 12;
+    using namespace std::chrono_literals;
+
+    Util::EPoll sEpoll;
+    Threads::Group sGroup;
+    sEpoll.start(sGroup);
+
+    RPC::Library sLibrary;
+    sLibrary.insert("foo",[](auto& s){ return s + "bar"; });
+
+    auto sServer = std::make_shared<RPC::Server>(PORT, sLibrary);
+    sEpoll.post([sServer](Util::EPoll* ptr) { ptr->insert(sServer->get(), EPOLLIN, sServer); });
+
+    std::this_thread::sleep_for(10ms);
+
+    // create a call and wait for response
+    const std::string sCall = RPC::Library::formatCall(SERIAL, "foo", "foo");
+
+    Udp::Socket sProducer(Util::resolveName("127.0.0.1"), PORT); // `connect` to port
+    sProducer.write(sCall.data(), sCall.size());
+    std::this_thread::sleep_for(10ms); // wait for processing
+
+    auto [sSerial, sResult] = Library::parseResponse(sProducer.read().message);
+    BOOST_CHECK_EQUAL(sSerial, SERIAL);
+    BOOST_CHECK_EQUAL(sResult, "foobar");
+
+    sGroup.wait();
+}
+#if 0
 BOOST_AUTO_TEST_CASE(simple)
 {
     constexpr uint16_t PORT = 1234;
@@ -73,4 +106,5 @@ BOOST_AUTO_TEST_CASE(simple)
     sGroup.wait();
     BOOST_CHECK_EQUAL(sCount, 3);
 }
+#endif
 BOOST_AUTO_TEST_SUITE_END()

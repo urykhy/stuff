@@ -3,6 +3,7 @@
 #include <map>
 #include <string>
 #include "rpc.pb.h"
+#include <event/Error.hpp>
 
 namespace RPC
 {
@@ -61,27 +62,14 @@ namespace RPC
             return sBuf;
         }
 
-        static uint64_t parseResponse(std::future<std::string>& aResult, std::promise<std::string>& aPromise)
+        static std::pair<uint64_t, std::string> parseResponse(const std::string& aStr)
         {
-            try
-            {
-                RPC::Response sResponse;
-                if (!sResponse.ParseFromString(aResult.get()))
-                {
-                    aPromise.set_exception(std::make_exception_ptr(Event::ProtocolError("cant parse protobuf")));
-                    return 0;
-                }
-                if (sResponse.has_error())
-                    aPromise.set_exception(std::make_exception_ptr(Event::RemoteError(sResponse.error())));
-                else
-                    aPromise.set_value(sResponse.result());
-                return sResponse.serial();
-            }
-            catch(const std::exception& e)
-            {
-                aPromise.set_exception(std::current_exception());
-            }
-            return 0;
+            RPC::Response sResponse;
+            if (!sResponse.ParseFromString(aStr))
+                throw Event::ProtocolError("cant parse protobuf");
+            if (sResponse.has_error())
+                throw Event::RemoteError(sResponse.error());
+            return std::make_pair(sResponse.serial(), sResponse.result());
         }
 
 #ifdef BOOST_CHECK_EQUAL

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <boost/system/system_error.hpp>
+
 namespace Event
 {
     struct NetworkError   : std::runtime_error { NetworkError (boost::system::error_code ec) : std::runtime_error("network error: " + ec.message()) {}};
