@@ -124,6 +124,11 @@ BOOST_AUTO_TEST_CASE(timerfd)
     int sCount = sFd.read();
     BOOST_TEST_MESSAGE("10 ms timer wake up " << sCount << " times in 50ms");
     BOOST_CHECK(sCount >= 5);
+
+    sFd.cancel();
+    std::this_thread::sleep_for(50ms);
+    sCount = sFd.read();
+    BOOST_CHECK(sCount == 0);
 }
 BOOST_AUTO_TEST_SUITE_END()
 BOOST_AUTO_TEST_SUITE(epoll)

@@ -40,6 +40,13 @@ namespace Util
             return 0;
         }
 
+        void cancel()
+        {
+            itimerspec sNew;
+            memset(&sNew, 0, sizeof(sNew));
+            if (timerfd_settime(m_Fd, 0, &sNew, nullptr) < 0) { throw Error("fail to cancel timer"); }
+        }
+
         int get() const { return m_Fd; }
     };
 } // namespace Util
