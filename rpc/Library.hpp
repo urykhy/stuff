@@ -1,5 +1,6 @@
 #pragma once
 
+#include <future>
 #include <map>
 #include <string>
 #include "rpc.pb.h"
@@ -62,14 +63,25 @@ namespace RPC
             return sBuf;
         }
 
-        static std::pair<uint64_t, std::string> parseResponse(const std::string& aStr)
+        static std::pair<uint64_t, std::future<std::string>> parseResponse(const std::string& aStr)
         {
+            uint64_t sSerial = 0;
+            std::promise<std::string> sPromise;
             RPC::Response sResponse;
+
             if (!sResponse.ParseFromString(aStr))
-                throw Event::ProtocolError("cant parse protobuf");
-            if (sResponse.has_error())
-                throw Event::RemoteError(sResponse.error());
-            return std::make_pair(sResponse.serial(), sResponse.result());
+            {
+                sPromise.set_exception(std::make_exception_ptr(Event::ProtocolError("cant parse protobuf")));
+            }
+            else
+            {
+                sSerial = sResponse.serial();
+                if (sResponse.has_error())
+                    sPromise.set_exception(std::make_exception_ptr(Event::RemoteError(sResponse.error())));
+                else
+                    sPromise.set_value(sResponse.result());
+            }
+            return std::make_pair(sSerial, sPromise.get_future());
         }
 
 #ifdef BOOST_CHECK_EQUAL
