@@ -19,9 +19,9 @@ namespace Util
         struct HandlerFace
         {
             enum Result { OK, RETRY, CLOSE };
-            virtual Result on_read() = 0;
-            virtual Result on_write() = 0;
-            virtual void on_error() = 0;
+            virtual Result on_read(int) = 0;
+            virtual Result on_write(int) = 0;
+            virtual void on_error(int) = 0;
             virtual ~HandlerFace() {}
         };
         using HandlerPtr = std::shared_ptr<HandlerFace>;
@@ -40,9 +40,9 @@ namespace Util
         {
             EPoll* m_Parent = nullptr;
             EventHandler(EPoll* aParent) : m_Parent(aParent) {}
-            Result on_read() override { return m_Parent->on_event(); }
-            Result on_write() override { return Result::OK; }
-            void on_error() override {}
+            Result on_read(int) override { return m_Parent->on_event(); }
+            Result on_write(int) override { return Result::OK; }
+            void on_error(int) override {}
         };
         EventFd m_Event;
         HandlerPtr m_EventHandler;
@@ -72,20 +72,20 @@ namespace Util
             auto sFace = sIt->second;
             if (!sClose and aEvent & EPOLLOUT)
             {
-                auto sResult = sFace->on_write();
+                auto sResult = sFace->on_write(aFd);
                 sClose |= sResult == HandlerFace::Result::CLOSE;
                 sRetry |= sResult == HandlerFace::Result::RETRY;
             }
             if (!sClose and aEvent & EPOLLIN)
             {
-                auto sResult = sFace->on_read();
+                auto sResult = sFace->on_read(aFd);
                 sClose |= sResult == HandlerFace::Result::CLOSE;
                 sRetry |= sResult == HandlerFace::Result::RETRY;
             }
 
             if (sClose)
             {
-                sFace->on_error();
+                sFace->on_error(aFd);
                 m_CleanupQueue.push_back(aFd);
                 return;
             }
