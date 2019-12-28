@@ -72,13 +72,7 @@ namespace Udp
         }
     public:
 
-        Socket()
-        {
-            create();
-            bind();
-        }
-
-        Socket(uint16_t aPort, bool aReuse = false)
+        Socket(uint16_t aPort = 0, bool aReuse = false)
         {
             create();
 
@@ -89,7 +83,7 @@ namespace Udp
                     throw Error("fail to set reuse port");
             }
 
-            bind (aPort);
+            bind(aPort);
         }
 
         Socket(uint32_t aRemote, uint16_t aPort)
