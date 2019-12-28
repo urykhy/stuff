@@ -33,10 +33,10 @@ BOOST_AUTO_TEST_CASE(simple)
     sLibrary.insert("add_bar",[](auto& s){ return s + "bar"; });
 
     auto sServer = std::make_shared<RPC::Server>(PORT, sLibrary);
-    sEpoll.post([sServer](Util::EPoll* ptr) { ptr->insert(sServer->get(), EPOLLIN, sServer); });
+    sEpoll.post([sServer](Util::EPoll* ptr) { ptr->insert(sServer->get_fd(), EPOLLIN, sServer); });
 
     auto sClient = std::make_shared<RPC::Client>(&sEpoll, Util::resolveName("127.0.0.1"), PORT);
-    sEpoll.post([sClient](Util::EPoll* ptr) { ptr->insert(sClient->get(), EPOLLIN, sClient); });
+    sEpoll.post([sClient](Util::EPoll* ptr) { ptr->insert(sClient->get_fd(), EPOLLIN, sClient); });
 
     std::this_thread::sleep_for(10ms);
 

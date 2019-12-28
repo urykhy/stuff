@@ -3,6 +3,7 @@
 #include <boost/test/unit_test.hpp>
 #include <chrono>
 
+#include "MultiBuffer.hpp"
 #include "UdpPipe.hpp"
 #include "EventFd.hpp"
 #include "TimerFd.hpp"
@@ -37,11 +38,11 @@ BOOST_AUTO_TEST_CASE(resolve)
 BOOST_AUTO_TEST_CASE(socket)
 {
     Udp::Socket s;
-    auto sBufSize = s.getBufSize();
+    auto sBufSize = s.get_buffer();
     BOOST_TEST_MESSAGE("buffer size: " << sBufSize.first << "/" << sBufSize.second);
 
-    s.setBufSize(4096, 16384);
-    sBufSize = s.getBufSize();
+    s.set_buffer(4096, 16384);
+    sBufSize = s.get_buffer();
     // kernel internally doubles that size
     BOOST_TEST_MESSAGE("buffer size: " << sBufSize.first << "/" << sBufSize.second);
     BOOST_CHECK(sBufSize.first  == 8192);
@@ -92,12 +93,12 @@ BOOST_AUTO_TEST_CASE(mread)
     std::this_thread::sleep_for(100ms);
 
     std::array<Message, MSG_COUNT> sData;
-    Udp::MultiBuffer<MSG_COUNT> sHeader;
+    Util::MultiBuffer<MSG_COUNT> sHeader;
     for (unsigned i = 0; i < MSG_COUNT; i++)
         sHeader.append(&sData[i], sizeof(Message));
 
     int rc = consumer.read(sHeader.buffer(), sHeader.size());
-    BOOST_CHECK_EQUAL(0, consumer.getError());
+    BOOST_CHECK_EQUAL(0, consumer.get_error());
     BOOST_TEST_MESSAGE("got " << rc << " messages");
     BOOST_REQUIRE_EQUAL(rc, MSG_COUNT);
 
@@ -142,7 +143,7 @@ BOOST_AUTO_TEST_CASE(ping)
     {
         Udp::Socket m_Socket;
         PingHandler() : m_Socket(2092) {}
-        int get() { return m_Socket.get(); }
+        int get_fd() { return m_Socket.get_fd(); }
 
         Result on_read(int) override
         {
@@ -158,13 +159,13 @@ BOOST_AUTO_TEST_CASE(ping)
     };
     auto sHandler = std::make_shared<PingHandler>();
     sEpoll.post([sHandler](Util::EPoll* ptr) {
-        ptr->insert(sHandler->get(), EPOLLIN, sHandler);
+        ptr->insert(sHandler->get_fd(), EPOLLIN, sHandler);
     });
     std::this_thread::sleep_for(10ms);
 
     // create other socket, send message, wait for response
     Udp::Socket sProducer(Util::resolveName("127.0.0.1"), 2092); // `connect` to port
-    BOOST_TEST_MESSAGE("producer socket bound to " << sProducer.port());
+    BOOST_TEST_MESSAGE("producer socket bound to " << sProducer.get_port());
     sProducer.write("ping", 4);
     std::this_thread::sleep_for(20ms);
 
