@@ -44,12 +44,12 @@ namespace Tcp
 
         ssize_t read(void* aPtr, ssize_t aSize)
         {
-            return ::recv(m_Fd, aPtr, aSize, 0);
+            return checkCall([&](){ return ::recv(m_Fd, aPtr, aSize, 0); }, "recv");
         }
 
         ssize_t write(const void* aPtr, ssize_t aSize)
         {
-            return ::send(m_Fd, aPtr, aSize, 0);
+            return checkCall([&](){ return ::send(m_Fd, aPtr, aSize, 0); }, "send");
         }
 
         void set_quick_ack()

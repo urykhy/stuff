@@ -57,7 +57,7 @@ namespace Udp
             {
                 socklen_t sLen = sizeof(sResult.addr);
                 sResult.message.resize(sSize);
-                sResult.size = recvfrom(m_Fd, sResult.message.data(), sSize, MSG_TRUNC, (struct sockaddr *)&sResult.addr, &sLen);
+                sResult.size = checkCall([&](){ return ::recvfrom(m_Fd, sResult.message.data(), sSize, MSG_TRUNC, (struct sockaddr *)&sResult.addr, &sLen); }, "recv");
             }
             return sResult;
         }
@@ -66,7 +66,7 @@ namespace Udp
         {
             struct sockaddr_in sAddr;
             socklen_t sLen = sizeof(sAddr);
-            return ::recvfrom(m_Fd, aPtr, aSize, MSG_TRUNC, (struct sockaddr *)&sAddr, &sLen);
+            return checkCall([&](){ return ::recvfrom(m_Fd, aPtr, aSize, MSG_TRUNC, (struct sockaddr *)&sAddr, &sLen); }, "recv");
         }
 
         // aCount - max number of messages to read
@@ -80,13 +80,13 @@ namespace Udp
         ssize_t write(const void* aPtr, ssize_t aSize)
         {
             socklen_t sLen = sizeof(m_Peer);
-            return ::sendto(m_Fd, aPtr, aSize, 0, (struct sockaddr *)&m_Peer, sLen);
+            return checkCall([&](){ return ::sendto(m_Fd, aPtr, aSize, 0, (struct sockaddr *)&m_Peer, sLen); }, "send");
         }
 
         ssize_t write(const Msg& aMessage)
         {
             socklen_t sLen = sizeof(aMessage.addr);
-            return ::sendto(m_Fd, aMessage.message.data(), aMessage.message.size(), 0, (struct sockaddr *)&aMessage.addr, sLen);
+            return checkCall([&](){ return ::sendto(m_Fd, aMessage.message.data(), aMessage.message.size(), 0, (struct sockaddr *)&aMessage.addr, sLen); }, "send");
         }
     };
 }

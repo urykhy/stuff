@@ -23,6 +23,16 @@ namespace Util
     protected:
 
         int m_Fd = -1;
+
+        template<class T>
+        ssize_t checkCall(T t, const char* msg)
+        {
+            ssize_t sRes = t();
+            if (sRes < 0 and errno != EAGAIN)
+                throw Error("fail to " + std::string(msg));
+            return sRes;
+        }
+
     public:
 
         CoreSocket() {}
