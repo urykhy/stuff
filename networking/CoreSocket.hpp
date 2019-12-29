@@ -107,6 +107,15 @@ namespace Util
             return ntohs(sTmp.sin_port);
         }
 
+        sockaddr_in get_peer()
+        {
+            struct sockaddr_in sTmp;
+            socklen_t sLen = sizeof(sTmp);
+            if (getpeername(m_Fd, (struct sockaddr *)&sTmp, &sLen) == -1)
+                throw Error("fail to get socket peer");
+            return sTmp;
+        }
+
         int get_fd() { return m_Fd; }
 
         void set_reuse_port()

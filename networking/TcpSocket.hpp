@@ -14,13 +14,8 @@ namespace Tcp
         }
     public:
 
-        Socket(uint16_t aPort = 0, bool aReuse = false)
-        {
-            create();
-            if (aReuse)
-                this->set_reuse_port();
-            bind(aPort);
-        }
+        Socket() { create(); }
+        Socket(int aFd) { m_Fd = aFd; }
 
         void connect(uint32_t aRemote, uint16_t aPort)
         {
@@ -36,7 +31,7 @@ namespace Tcp
         int accept()
         {
             int sFd = ::accept(m_Fd, nullptr, nullptr);
-            if (sFd == -1)
+            if (sFd == -1 and errno != EAGAIN)
                 throw Error("fail to accept");
             return sFd;
         }
@@ -45,6 +40,16 @@ namespace Tcp
         {
             if (::listen(m_Fd, aQueue) == -1)
                 throw Error("fail to listen");
+        }
+
+        ssize_t read(void* aPtr, ssize_t aSize)
+        {
+            return ::recv(m_Fd, aPtr, aSize, 0);
+        }
+
+        ssize_t write(const void* aPtr, ssize_t aSize)
+        {
+            return ::send(m_Fd, aPtr, aSize, 0);
         }
 
         void set_quick_ack()

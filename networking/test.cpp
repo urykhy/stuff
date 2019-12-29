@@ -10,6 +10,8 @@
 #include "SRV.hpp"
 #include <unsorted/Taskset.hpp>
 
+#include "TcpSocket.hpp"
+
 #include "EPoll.hpp"
 #include <unsorted/Log4cxx.hpp>
 
@@ -130,6 +132,31 @@ BOOST_AUTO_TEST_CASE(timerfd)
     std::this_thread::sleep_for(50ms);
     sCount = sFd.read();
     BOOST_CHECK(sCount == 0);
+}
+BOOST_AUTO_TEST_CASE(tcp)
+{
+    Threads::Group sGroup;
+    sGroup.start([](){
+        Tcp::Socket sServer;
+        sServer.set_reuse_port();
+        sServer.bind(2090);
+        sServer.listen();
+        int sFd = sServer.accept();
+        BOOST_CHECK_GE(sFd, 0);
+        Tcp::Socket sPeer = Tcp::Socket(sFd);
+        BOOST_TEST_MESSAGE("connection from " << Util::formatAddr(sPeer.get_peer()));
+        std::string sData(10, ' ');
+        sPeer.read(sData.data(), 10);
+        sPeer.write(sData.data(), 10);
+    });
+    std::this_thread::sleep_for(10ms);
+
+    Tcp::Socket sClient = Tcp::Socket();
+    sClient.connect(Util::resolveName("127.0.0.1"), 2090);
+    sClient.write("1234567890",10);
+    std::string sReply(10, ' ');
+    sClient.read(sReply.data(), 10);
+    BOOST_CHECK_EQUAL("1234567890", sReply);
 }
 BOOST_AUTO_TEST_SUITE_END()
 BOOST_AUTO_TEST_SUITE(epoll)
