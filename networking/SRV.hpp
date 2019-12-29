@@ -66,6 +66,8 @@ namespace Util
                 sResult.push_back(sEntry);
             }
 
+            // priority: the priority of the target host, lower value means more preferred.
+            // weight: A relative weight for records with the same priority, higher value means higher chance of getting picked.
             std::sort(sResult.begin(), sResult.end(), [](const auto& x, const auto& y) {
                 if (x.prio < y.prio)
                     return true;
