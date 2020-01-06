@@ -8,14 +8,14 @@
 namespace Container
 {
     template<class T>
-    class Queue {
+    class SPSC_Queue {
         std::vector<T> m_Data;
         boost::lockfree::spsc_queue<unsigned> m_Queue;
         const unsigned m_Max;
         unsigned m_Back = 0;
     public:
 
-        Queue(unsigned aSize)
+        SPSC_Queue(unsigned aSize)
         : m_Data(aSize)
         , m_Queue(aSize - 2)    // 2 elements required to separate writer from reader
         , m_Max(aSize)

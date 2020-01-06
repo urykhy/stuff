@@ -6,7 +6,7 @@
 #include "UdpSocket.hpp"
 #include <boost/circular_buffer.hpp>
 
-#include <container/Queue.hpp>
+#include <container/Lockfree.hpp>
 #include <threads/Group.hpp>
 
 namespace Udp
@@ -38,7 +38,7 @@ namespace Udp
 
         using Handler = std::function<void(Item& t)>;
         Socket m_Socket;
-        Container::Queue<Item> m_Queue;  // FIXME: not thread safe
+        Container::SPSC_Queue<Item> m_Queue;
         Handler m_Handler;
         std::atomic_bool m_Running{true};
 
