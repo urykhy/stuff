@@ -28,7 +28,7 @@ namespace Jaeger
         jaegertracing::thrift::Batch m_Batch;
         const uint64_t m_TraceIDHigh;
         const uint64_t m_TraceIDLow;
-        size_t m_SpanID = 0;
+        size_t m_SpanID;
 
         jaegertracing::thrift::Tag convert(const Tag& aTag)
         {
@@ -47,16 +47,18 @@ namespace Jaeger
 
     public:
 
-        Metric(const std::string& aName)
+        Metric(const std::string& aName, size_t aSpanID = 0)
         : m_TraceIDHigh(Time::get_time().to_us())
         , m_TraceIDLow(lrand48())
+        , m_SpanID(aSpanID)
         {
             m_Batch.process.serviceName = aName;
         }
 
-        Metric(const std::string& aName, const std::pair<uint64_t, uint64_t>& aUUID)
+        Metric(const std::string& aName, const std::pair<uint64_t, uint64_t>& aUUID, size_t aSpanID = 0)
         : m_TraceIDHigh(aUUID.first)
         , m_TraceIDLow(aUUID.second)
+        , m_SpanID(aSpanID)
         {
             m_Batch.process.serviceName = aName;
         }
