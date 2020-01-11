@@ -12,24 +12,23 @@ BOOST_AUTO_TEST_SUITE(Jaeger)
 BOOST_AUTO_TEST_CASE(simple)
 {
     using Tag = Jaeger::Metric::Tag;
-    Jaeger::Metric sMetric("test.cpp", Util::Uuid64());
+    Jaeger::Metric sMetric("test.cpp", Util::Uuid64(), 32);
     sMetric.set_process_tag(Tag{"version","0.1/test"});
-    size_t id = 0;
-    id = sMetric.start("initialize"); std::this_thread::sleep_for(100us); sMetric.stop(id);
-    id = sMetric.start("download");   std::this_thread::sleep_for(200us); sMetric.stop(id);
-    id = sMetric.start("process");
+
+    { Jaeger::Metric::Guard sM(sMetric, "initialize"); std::this_thread::sleep_for(100us); }
+    { Jaeger::Metric::Guard sM(sMetric, "download"); std::this_thread::sleep_for(100us); }
+
+    Jaeger::Metric::Guard sProcess(sMetric, "process");
     {
-        size_t s = 0;
-        s = sMetric.start("fetch", id); std::this_thread::sleep_for(200us); sMetric.stop(s);
-        s = sMetric.start("merge", id); std::this_thread::sleep_for(300us); sMetric.stop(s);
-        sMetric.span_log(s, Tag{"factor", 42.2}, Tag{"duplicates", 50l}, Tag{"unique", 10l}, Tag{"truncated", 4l});
-        s = sMetric.start("write", id); std::this_thread::sleep_for(500us); sMetric.stop(s);
-        sMetric.set_span_error(s);
+        { Jaeger::Metric::Guard sM(sProcess.child("fetch")); std::this_thread::sleep_for(200us); }
+        { Jaeger::Metric::Guard sM(sProcess.child("merge")); std::this_thread::sleep_for(300us); sM.set_log(Tag{"factor", 42.2}, Tag{"duplicates", 50l}, Tag{"unique", 10l}, Tag{"truncated", 4l}); }
+        try { Jaeger::Metric::Guard sM(sProcess.child("write")); std::this_thread::sleep_for(300us); throw 1; } catch(...) {}
     }
-    sMetric.stop(id);
-    sMetric.set_span_tag(id, Tag{"result", "success"});
-    sMetric.set_span_tag(id, Tag{"count", 50l});
-    id = sMetric.start("commit");     std::this_thread::sleep_for(10us);  sMetric.stop(id);
+    sProcess.set_tag(Tag{"result", "success"});
+    sProcess.set_tag(Tag{"count", 50l});
+    sProcess.close();
+
+    { Jaeger::Metric::Guard sM(sMetric, "commit"); std::this_thread::sleep_for(10us); }
 
     // serialize and send via UDP
     const std::string sMessage = sMetric.serialize();

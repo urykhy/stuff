@@ -28,7 +28,8 @@ namespace Jaeger
         jaegertracing::thrift::Batch m_Batch;
         const uint64_t m_TraceIDHigh;
         const uint64_t m_TraceIDLow;
-        size_t m_SpanID;
+        const size_t m_BaseSpanID;
+        size_t m_SpanID = 0;
 
         jaegertracing::thrift::Tag convert(const Tag& aTag)
         {
@@ -47,18 +48,18 @@ namespace Jaeger
 
     public:
 
-        Metric(const std::string& aName, size_t aSpanID = 0)
+        Metric(const std::string& aName, size_t aBaseID = 0)
         : m_TraceIDHigh(Time::get_time().to_us())
         , m_TraceIDLow(lrand48())
-        , m_SpanID(aSpanID)
+        , m_BaseSpanID(aBaseID)
         {
             m_Batch.process.serviceName = aName;
         }
 
-        Metric(const std::string& aName, const std::pair<uint64_t, uint64_t>& aUUID, size_t aSpanID = 0)
+        Metric(const std::string& aName, const std::pair<uint64_t, uint64_t>& aUUID, size_t aBaseID = 0)
         : m_TraceIDHigh(aUUID.first)
         , m_TraceIDLow(aUUID.second)
-        , m_SpanID(aSpanID)
+        , m_BaseSpanID(aBaseID)
         {
             m_Batch.process.serviceName = aName;
         }
@@ -69,20 +70,22 @@ namespace Jaeger
             m_Batch.process.__isset.tags = true;
         }
 
-        void set_span_tag(size_t aID, const Tag& aTag)
+        void span_tag(size_t aID, const Tag& aTag)
         {
+            aID -= m_BaseSpanID;
             m_Batch.spans[aID].tags.push_back(convert(aTag));
             m_Batch.spans[aID].__isset.tags = true;
         }
 
-        void set_span_error(size_t aID)
+        void span_error(size_t aID)
         {
-            set_span_tag(aID, Tag{"error", true});
+            span_tag(aID, Tag{"error", true});
         }
 
         template<class... T>
         void span_log(size_t aID, const T&... aTag)
         {
+            aID -= m_BaseSpanID;
             jaegertracing::thrift::Log sLog;
             sLog.timestamp = Time::get_time().to_us();
 
@@ -98,7 +101,7 @@ namespace Jaeger
             jaegertracing::thrift::Span sSpan;
             sSpan.traceIdHigh = m_TraceIDHigh;
             sSpan.traceIdLow = m_TraceIDLow;
-            sSpan.spanId = m_SpanID++;
+            sSpan.spanId = m_BaseSpanID + m_SpanID++;
             sSpan.parentSpanId = aParent;
             sSpan.operationName = aName;
             sSpan.flags = 0;
@@ -110,6 +113,7 @@ namespace Jaeger
 
         void stop(size_t aID)
         {
+            aID -= m_BaseSpanID;
             m_Batch.spans[aID].duration = Time::get_time().to_us() - m_Batch.spans[aID].startTime;
         }
 
@@ -121,6 +125,50 @@ namespace Jaeger
             sAgent.emitBatch(m_Batch);
             return sBuffer->getBufferAsString();
         }
+
+        class Guard
+        {
+            Guard() = delete;
+            Guard(const Guard&) = delete;
+            Guard& operator=(const Guard&) = delete;
+
+            Guard(Guard&& aOld)
+            : m_Metric(aOld.m_Metric)
+            , m_ID(aOld.m_ID)
+            { aOld.m_Alive = false; }
+
+            const int m_XCount = std::uncaught_exceptions();
+            Metric& m_Metric;
+            size_t m_ID;
+            bool m_Alive = true;
+        public:
+
+            Guard(Metric& aMetric, const std::string& aName, size_t aParent = 0)
+            : m_Metric(aMetric)
+            , m_ID(m_Metric.start(aName, aParent))
+            { }
+            ~Guard() { close(); }
+
+            void close()
+            {
+                if (m_Alive)
+                {
+                    if (m_XCount != std::uncaught_exceptions())
+                        set_error();
+                    m_Metric.stop(m_ID);
+                    m_Alive = false;
+                }
+            }
+
+            Guard child(const std::string& aName)
+            {
+                return Guard(m_Metric, aName, m_ID);
+            }
+
+            void set_error() {  m_Metric.span_error(m_ID); }
+            void set_tag(const Tag& aTag) { m_Metric.span_tag(m_ID, aTag); }
+            template<class... T> void set_log(const T&... aTag) { m_Metric.span_log(m_ID, aTag...); }
+        };
     };
 
 } // namespace Jaeger
