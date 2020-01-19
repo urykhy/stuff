@@ -98,8 +98,8 @@ case "$1" in
 
             # open for internet
             # syncthing and torrents and i2p
-            $ipt -A INPUT -p udp -m multiport --dports 21027,6771,6881 -j ACCEPT
-            $ipt -A INPUT -p tcp -m multiport --dports 22000,6771,6881,61089 -j ACCEPT
+            $ipt -A INPUT -p udp -m multiport --dports 21027,6771,6881,16881 -j ACCEPT
+            $ipt -A INPUT -p tcp -m multiport --dports 22000,6771,6881,61089,16881 -j ACCEPT
             #$ipt -A INPUT -p tcp -m multiport --dports 9001,9030 -j ACCEPT # tor
             # drop others
             $ipt -A INPUT -j $NFLOG --nflog-prefix "in"
@@ -111,6 +111,12 @@ case "$1" in
             $ipt -t nat -A OUTPUT -m set --match-set PROXY dst -p tcp -m multiport --dports 80     -j DNAT --to-destination 127.0.0.1:9050 # privoxy
             $ipt -t nat -A OUTPUT -m set --match-set TOR   dst -p tcp -m multiport --dports 80,443 -j DNAT --to-destination 127.0.0.1:9052 # tor
             #$ipt -t nat -A PREROUTING -i br0 -p tcp --dport 80 -j REDIRECT --to-ports 3128
+
+            # redirect to local caddy on 3080 port
+            $ipt -t nat -A PREROUTING -p tcp --dport 80  -d 192.168.1.70          -j REDIRECT --to-ports 3080
+            $ipt -t nat -A OUTPUT     -p tcp --dport 80  -d 127.0.0.1,10.103.10.3 -j REDIRECT --to-ports 3080 # catch access from localhost
+            $ipt -t nat -A PREROUTING -p tcp --dport 443 -d 192.168.1.70          -j REDIRECT --to-ports 3081
+            $ipt -t nat -A OUTPUT     -p tcp --dport 443 -d 127.0.0.1,10.103.10.3 -j REDIRECT --to-ports 3081 # catch access from localhost
 
             #$ipt -t nat -A PREROUTING -i wlan1 -p tcp --dport 81 -j DNAT --to-destination 10.103.10.1:80 # nextcloud
 
