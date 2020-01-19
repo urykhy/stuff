@@ -14,7 +14,7 @@ BOOST_AUTO_TEST_CASE(simple)
     BOOST_TEST_MESSAGE("uuid " << Util::Uuid());
     BOOST_TEST_MESSAGE(Sentry::Message().to_string());
     BOOST_TEST_MESSAGE(Sentry::Message().set_tag("exception_type","std::test").to_string());
-    BOOST_TEST_MESSAGE(Sentry::Message().set_message("fail to download").to_string());
+    BOOST_TEST_MESSAGE(Sentry::Message().set_message("fail to download").set_extra("filename","foobar").to_string());
 
     const auto sBT = foo();
     BOOST_TEST_MESSAGE(Sentry::Message().set_exception("ValueError", "44").set_trace(sBT).to_string());

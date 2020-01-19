@@ -36,6 +36,7 @@ namespace Sentry
         Message& set_environment(const std::string& v) { m_Root["environment"] = v; return *this; }
         Message& set_message(const std::string& v)     { m_Root["message"]["message"] = v; return *this; }
         Message& set_tag(const std::string& aName, const std::string& aValue) { m_Root["tags"][aName] = aValue; return *this; }
+        Message& set_extra(const std::string& aName, const std::string& aValue) {m_Root["extra"][aName] = aValue; return *this;}
 
         Message& set_exception(const std::string& aType, const std::string& aValue, const std::string& aModule = "unknown") {
             auto& sX = m_Root["exception"];
