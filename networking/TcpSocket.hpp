@@ -15,7 +15,8 @@ namespace Tcp
     public:
 
         Socket() { create(); }
-        Socket(int aFd) { m_Fd = aFd; }
+        explicit Socket(int aFd) { m_Fd = aFd; }
+        Socket(Socket&& aSocket) { m_Fd = aSocket.m_Fd; aSocket.m_Fd = -1; }
 
         void connect(uint32_t aRemote, uint16_t aPort)
         {

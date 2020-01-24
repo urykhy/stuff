@@ -169,8 +169,8 @@ namespace Util
             auto sIt = m_Handlers.find(aFd);
             if (sIt == m_Handlers.end())
                 return;
-            m_Handlers.erase(sIt);
             int rc = epoll_ctl(m_Fd, EPOLL_CTL_DEL, aFd, nullptr);
+            m_Handlers.erase(sIt); // close socket here, after CTL_DEL
             if (rc == -1)
                 throw Error("epoll_ctl/erase failed");
         }

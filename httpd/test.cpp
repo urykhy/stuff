@@ -3,8 +3,13 @@
 #include <boost/test/unit_test.hpp>
 
 #include "Parser.hpp"
+#include "Server.hpp"
+#include <threads/Group.hpp>
+#include <curl/Curl.hpp>
 
-BOOST_AUTO_TEST_SUITE(Httpd)
+using namespace std::chrono_literals;
+
+BOOST_AUTO_TEST_SUITE(httpd)
 BOOST_AUTO_TEST_CASE(parser)
 {
     std::string sData = \
@@ -44,5 +49,37 @@ BOOST_AUTO_TEST_CASE(parser)
     httpd::Parser sParser(sHandler);
     sParser.consume(sData.data(), sData.size());
     BOOST_CHECK(sCalled);
+}
+BOOST_AUTO_TEST_CASE(simple)
+{
+    Util::EPoll sEpoll;
+    Threads::Group sGroup;
+    sEpoll.start(sGroup);
+
+    auto sListener = std::make_shared<Tcp::Listener>(&sEpoll, 2081, httpd::Make([](httpd::Server::WeakPtr aServer, httpd::Request& aRequest)
+    {
+        BOOST_TEST_MESSAGE("request: " << aRequest.m_Url);
+        std::string sResponse =
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Length: 10\r\n"
+        "Content-Type: text/numbers\r\n"
+        "\r\n"
+        "0123456789";
+        auto sServer = aServer.lock();
+        if (sServer)
+            sServer->write(sResponse);
+    }));
+    sListener->start();
+
+    std::this_thread::sleep_for(10ms);
+
+    {
+        Curl::Client::Params sParams;
+        Curl::Client sClient(sParams);
+        auto sResult = sClient.GET("http://127.0.0.1:2081/hello");
+        BOOST_CHECK_EQUAL(sResult.first, 200);
+        BOOST_CHECK_EQUAL(sResult.second, "0123456789");
+    }
+    std::this_thread::sleep_for(10ms);
 }
 BOOST_AUTO_TEST_SUITE_END()
