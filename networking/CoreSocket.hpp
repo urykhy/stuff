@@ -126,7 +126,7 @@ namespace Util
             return sTmp;
         }
 
-        int get_fd() { return m_Fd; }
+        int get_fd() const { return m_Fd; }
 
         void set_reuse_port()
         {

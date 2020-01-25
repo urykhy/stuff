@@ -5,7 +5,7 @@
 
 namespace Tcp
 {
-    struct Listener : public Util::EPoll::HandlerFace, std::enable_shared_from_this<Listener>
+    struct Listener : Util::EPoll::HandlerFace, std::enable_shared_from_this<Listener>
     {
         using Handler = std::function<Util::EPoll::HandlerPtr(Tcp::Socket&&)>;
 

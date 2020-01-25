@@ -52,12 +52,14 @@ BOOST_AUTO_TEST_CASE(parser)
 }
 BOOST_AUTO_TEST_CASE(simple)
 {
-    Util::EPoll sEpoll;
-    Threads::Group sGroup;
-    sEpoll.start(sGroup);
+    Util::EPoll    sEPoll;
+    httpd::Worker  sWorker([](std::function<void()>& aCall) { aCall(); });
+    Threads::Group sGroup;  // in d-tor we stop all threads
+    sEPoll.start(sGroup);
+    sWorker.start(sGroup);
 
-    auto sListener = std::make_shared<Tcp::Listener>(&sEpoll, 2081, httpd::Make([](httpd::Server::WeakPtr aServer, httpd::Request& aRequest)
-    {
+    auto sHandler = [](httpd::Server::SharedPtr aServerPtr, Request& aRequest)
+    {   // called in Worker
         BOOST_TEST_MESSAGE("request: " << aRequest.m_Url);
         std::string sResponse =
         "HTTP/1.1 200 OK\r\n"
@@ -65,10 +67,10 @@ BOOST_AUTO_TEST_CASE(simple)
         "Content-Type: text/numbers\r\n"
         "\r\n"
         "0123456789";
-        auto sServer = aServer.lock();
-        if (sServer)
-            sServer->write(sResponse);
-    }));
+        aServerPtr->write(sResponse);
+    };
+
+    auto sListener = std::make_shared<Tcp::Listener>(&sEPoll, 2081, httpd::Make(&sEPoll, &sWorker, sHandler));
     sListener->start();
 
     std::this_thread::sleep_for(10ms);
