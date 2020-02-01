@@ -1,10 +1,8 @@
 #define BOOST_TEST_DYN_LINK
 #define BOOST_TEST_MODULE Suites
 #include <boost/test/unit_test.hpp>
+#include "Router.hpp"
 
-#include "Parser.hpp"
-#include "Server.hpp"
-#include <threads/Group.hpp>
 #include <curl/Curl.hpp>
 
 using namespace std::chrono_literals;
@@ -53,13 +51,12 @@ BOOST_AUTO_TEST_CASE(parser)
 BOOST_AUTO_TEST_CASE(simple)
 {
     Util::EPoll    sEPoll;
-    httpd::Worker  sWorker([](std::function<void()>& aCall) { aCall(); });
+    httpd::Router sRouter;
     Threads::Group sGroup;  // in d-tor we stop all threads
     sEPoll.start(sGroup);
-    sWorker.start(sGroup);
 
-    auto sHandler = [](httpd::Server::SharedPtr aServerPtr, Request& aRequest)
-    {   // called in Worker
+    auto sHandler1 = [](httpd::Server::SharedPtr aServer, const Request& aRequest)
+    {
         BOOST_TEST_MESSAGE("request: " << aRequest.m_Url);
         std::string sResponse =
         "HTTP/1.1 200 OK\r\n"
@@ -67,10 +64,28 @@ BOOST_AUTO_TEST_CASE(simple)
         "Content-Type: text/numbers\r\n"
         "\r\n"
         "0123456789";
-        aServerPtr->write(sResponse);
+        aServer->write(sResponse);
+        return Server::DONE;
     };
+    sRouter.insert({"GET","/hello",false}, sHandler1);  // call handler in network thread
 
-    auto sListener = std::make_shared<Tcp::Listener>(&sEPoll, 2081, httpd::Make(&sEPoll, &sWorker, sHandler));
+    auto sHandler2 = [](httpd::Server::SharedPtr aServer, const Request& aRequest){
+        BOOST_TEST_MESSAGE("request: " << aRequest.m_Url);
+        std::string sResponse =
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Length: 10\r\n"
+        "Content-Type: text/numbers\r\n"
+        "\r\n"
+        "9876543210";
+        aServer->write(sResponse);
+        return Server::DONE;
+    };
+    sRouter.insert({"GET","/async",true}, sHandler2);  // call handler in worker thread
+    sRouter.start(sGroup);
+
+    auto sListener = std::make_shared<Tcp::Listener>(&sEPoll, 2081, httpd::Make(&sEPoll, [&sRouter](Server::SharedPtr aServer, const Request& aRequest){
+        return sRouter(aServer, aRequest);
+    }));
     sListener->start();
 
     std::this_thread::sleep_for(10ms);
@@ -81,6 +96,11 @@ BOOST_AUTO_TEST_CASE(simple)
         auto sResult = sClient.GET("http://127.0.0.1:2081/hello");
         BOOST_CHECK_EQUAL(sResult.first, 200);
         BOOST_CHECK_EQUAL(sResult.second, "0123456789");
+        sResult = sClient.GET("http://127.0.0.1:2081/async");
+        BOOST_CHECK_EQUAL(sResult.first, 200);
+        BOOST_CHECK_EQUAL(sResult.second, "9876543210");
+        sResult = sClient.GET("http://127.0.0.1:2081/not_exists");
+        BOOST_CHECK_EQUAL(sResult.first, 404);
     }
     std::this_thread::sleep_for(10ms);
 }

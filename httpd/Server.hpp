@@ -9,19 +9,18 @@
 
 namespace httpd
 {
-    using Worker = Threads::SafeQueueThread<std::function<void()>>;
-
     struct Server : Util::EPoll::HandlerFace, std::enable_shared_from_this<Server>
     {
         using SharedPtr = std::shared_ptr<Server>;
         using WeakPtr   = std::weak_ptr<Server>;
-        using Handler   = std::function<void(SharedPtr, Request&)>;
+
+        enum  UserResult { DONE, ASYNC };
+        using Handler   = std::function<UserResult(SharedPtr, const Request&)>;
 
     private:
         Tcp::Socket  m_Socket;
         Util::EPoll* m_EPoll;
         Parser       m_Parser;
-        Worker*      m_Worker;
         Handler      m_Handler;
 
         const size_t BUFFER_SIZE = 4096;
@@ -30,33 +29,23 @@ namespace httpd
         Threads::SafeQueue<Request> m_Incoming;
         std::atomic_bool m_Busy{false};
 
-        void schedule_request()
-        {
-            m_Busy = true;
-            WeakPtr sWeak = shared_from_this();
-            m_Worker->insert([sWeak]()
-            {
-                auto sPtr = sWeak.lock();
-                if (sPtr)
-                    sPtr->process_request();
-            });
-        }
-
         void process_request()
         {
-            auto sItem = m_Incoming.try_get();
-            if (!sItem)
+            m_Busy = true;
+            while(true)
             {
-                m_Busy = false;
-                return;
+                auto sItem = m_Incoming.try_get();
+                if (!sItem)
+                {
+                    m_Busy = false;
+                    return;
+                }
+                auto sResult = m_Handler(shared_from_this(), *sItem);
+                // if async call -> return in busy state, wait for notify()
+                if (sResult == UserResult::ASYNC)
+                    return;
+                // normal call. can process next request
             }
-
-            m_Handler(shared_from_this(), *sItem);
-
-            if (m_Incoming.idle())
-                m_Busy = false;
-            else
-                schedule_request();
         }
 
         std::string m_WriteOut; // used only from network thread
@@ -84,11 +73,10 @@ namespace httpd
 
     public:
 
-        Server(Tcp::Socket&& aSocket, Util::EPoll* aEPoll, Worker* aWorker, Handler aHandler)
+        Server(Tcp::Socket&& aSocket, Util::EPoll* aEPoll, Handler aHandler)
         : m_Socket(std::move(aSocket))
         , m_EPoll(aEPoll)
         , m_Parser([this](Request& a){ m_Incoming.insert(a); })
-        , m_Worker(aWorker)
         , m_Handler(aHandler)
         { }
 
@@ -110,6 +98,14 @@ namespace httpd
             });
         }
 
+        // called if async request processed
+        void notify()
+        {
+            m_EPoll->post([p = shared_from_this()](Util::EPoll* ptr) {
+                p->process_request();
+            });
+        }
+
         virtual Result on_read(int)
         {
             void* sBuffer = alloca(BUFFER_SIZE);
@@ -120,7 +116,7 @@ namespace httpd
             if (sUsed < sSize)
                 return CLOSE;
             if (!m_Busy and !m_Incoming.idle())
-                schedule_request();
+                process_request();
             return sSize < BUFFER_SIZE ? OK : RETRY;
         }
         virtual Result on_write(int)
@@ -131,11 +127,11 @@ namespace httpd
         virtual ~Server() {}
     };
 
-    inline auto Make(Util::EPoll* aEPoll, Worker* aWorker, Server::Handler aHandler)
+    inline auto Make(Util::EPoll* aEPoll, Server::Handler aHandler)
     {
-        return [aEPoll, aWorker, aHandler](Tcp::Socket&& aSocket)
+        return [aEPoll, aHandler](Tcp::Socket&& aSocket)
         {
-            return std::make_shared<Server>(std::move(aSocket), aEPoll, aWorker, aHandler);
+            return std::make_shared<Server>(std::move(aSocket), aEPoll, aHandler);
         };
     }
 } // namespace httpd
