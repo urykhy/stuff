@@ -5,7 +5,7 @@
 #include <parser/Parser.hpp>
 #include <parser/Atoi.hpp>
 
-namespace Util
+namespace Sentry
 {
     namespace bs = boost::stacktrace;
     using Stacktrace = bs::stacktrace;

@@ -3,10 +3,11 @@
 #include <sstream>
 
 #include <json/json.h>
-#include <unsorted/Backtrace.hpp>
 #include <unsorted/Uuid.hpp>
 #include <networking/Servername.hpp>
 #include <sys/utsname.h>
+
+#include "Backtrace.hpp"
 
 // about protocol
 // https://docs.sentry.io/development/sdk-dev/event-payloads/
@@ -46,10 +47,10 @@ namespace Sentry
             return *this;
         }
 
-        Message& set_trace(const Util::Stacktrace& aTrace)
+        Message& set_trace(const Stacktrace& aTrace)
         {
             auto& sJson = m_Root["exception"]["stacktrace"]["frames"] = Json::arrayValue;
-            Util::ParseStacktrace(aTrace, [&sJson](auto aFrame){
+            ParseStacktrace(aTrace, [&sJson](auto aFrame){
                 Json::Value sEntry;
                 sEntry["function"] = aFrame.function;
                 sEntry["filename"] = aFrame.filename;

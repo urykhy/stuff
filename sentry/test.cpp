@@ -5,8 +5,8 @@
 #include "Message.hpp"
 #include "Client.hpp"
 
-Util::Stacktrace bar() { return Util::GetStacktrace(); }
-Util::Stacktrace foo() { return bar(); }
+Sentry::Stacktrace bar() { return Sentry::GetStacktrace(); }
+Sentry::Stacktrace foo() { return bar(); }
 
 BOOST_AUTO_TEST_SUITE(Sentry)
 BOOST_AUTO_TEST_CASE(simple)
