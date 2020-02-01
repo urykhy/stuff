@@ -27,6 +27,7 @@ namespace Curl
             std::string username;
             std::string password;
             std::string cookie;
+            bool verbose=false;
 
             struct Header
             {
@@ -71,6 +72,7 @@ namespace Curl
             setopt(CURLOPT_INFILESIZE_LARGE, aData.size());
             setopt(CURLOPT_READDATA, this);
             setopt(CURLOPT_READFUNCTION, &put_handler);
+            setopt(CURLOPT_EXPECT_100_TIMEOUT_MS, 0);
             m_UploadData = &aData;
             return query(aUrl);
         }
@@ -80,6 +82,7 @@ namespace Curl
             setopt(CURLOPT_POST, 1);
             setopt(CURLOPT_POSTFIELDS, aData.c_str());
             setopt(CURLOPT_POSTFIELDSIZE, aData.size());
+            setopt(CURLOPT_EXPECT_100_TIMEOUT_MS, 0);
             return query(aUrl);
         }
         Result GET(const std::string& aUrl, time_t aIMS = 0)
@@ -205,6 +208,9 @@ namespace Curl
             // cookies // "name1=content1; name2=content2;"
             if (!m_Params.cookie.empty())
                 setopt(CURLOPT_COOKIE, m_Params.cookie.c_str());
+
+            if (m_Params.verbose)
+                setopt(CURLOPT_VERBOSE, 1);
 
             if (m_Multi)
             {
