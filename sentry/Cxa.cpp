@@ -49,7 +49,7 @@ namespace Sentry
         Sentry::Message sMsg("__cxa_throw");
         sMsg.set_message("exception thrown");
         sMsg.set_exception(sWhat, Util::Demangle(sInfo->name()));
-        sMsg.set_trace(GetStacktrace(), 3);
+        sMsg.set_trace(GetStacktrace(), 4);
         gPrepare(sMsg);
         gClient->send(sMsg);
     }
