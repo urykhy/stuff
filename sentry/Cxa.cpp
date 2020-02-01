@@ -23,12 +23,14 @@ namespace Sentry
         gInitDone = true;
     }
 
-    static std::unique_ptr<Client> gClient;
+    static std::unique_ptr<Queue> gClient;
     static Prepare gPrepare;
     void InitCXA(const Client::Params& aParams, const Prepare& aPrepare)
     {
-        gClient = std::make_unique<Client>(aParams);
         gPrepare = aPrepare;
+        auto sClient = std::make_unique<Queue>(aParams);
+        sClient->start();
+        gClient = std::move(sClient);
     }
 
     void hook(void* aObject, void* aInfo)
