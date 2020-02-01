@@ -20,7 +20,7 @@ namespace Parse
         return true;
     }
 
-    bool simple(boost::string_ref str, std::vector<boost::string_ref>& result, const char sep = ',')
+    inline bool simple(boost::string_ref str, std::vector<boost::string_ref>& result, const char sep = ',')
     {
         return simple(str, [&result](const boost::string_ref& s){ result.push_back(s); }, sep);
     }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <curl/Curl.hpp>
+#include "Message.hpp"
 
 namespace Sentry
 {

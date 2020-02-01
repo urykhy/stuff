@@ -3,7 +3,8 @@ project('sentry', 'cpp', version : '0.1')
 includes = include_directories('..')
 add_project_arguments('-ggdb', '-O0', '-std=c++17', language: 'cpp')
 
-boost     = dependency('boost', modules : ['unit_test_framework', 'system', 'stacktrace_backtrace'])
+test      = dependency('boost', modules : ['unit_test_framework'])
+boost     = dependency('boost', modules : ['system', 'stacktrace_backtrace'])
 threads   = dependency('threads')
 uuid      = dependency('uuid')
 json      = dependency('jsoncpp')
@@ -11,5 +12,11 @@ curl      = dependency('libcurl')
 compiler  = meson.get_compiler('cpp')
 dl        = compiler.find_library('dl')
 
-a = executable('a.out', 'test.cpp', dependencies : [boost, threads, uuid, json, curl, dl], include_directories : includes)
+cxa_src = 'Cxa.cpp'
+cxa_lib = static_library('cxa_lib', cxa_src, include_directories : includes, dependencies : [curl, dl, json])
+cxa_dep = declare_dependency(link_with : cxa_lib)
+
+a = executable('a.out', 'test.cpp', dependencies : [boost, test, threads, uuid, json, curl, dl], include_directories : includes)
 test('basic test', a, args : ['-l', 'all'])
+
+cxa = executable('cxa', 'test_cxa.cpp', dependencies : [boost, threads, uuid, json, curl, dl, cxa_dep], include_directories : includes)

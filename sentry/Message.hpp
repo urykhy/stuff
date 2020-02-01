@@ -47,7 +47,7 @@ namespace Sentry
             return *this;
         }
 
-        Message& set_trace(const Stacktrace& aTrace)
+        Message& set_trace(const Stacktrace& aTrace, const int aOffset = 1)
         {
             auto& sJson = m_Root["exception"]["stacktrace"]["frames"] = Json::arrayValue;
             ParseStacktrace(aTrace, [&sJson](auto aFrame){
@@ -57,7 +57,7 @@ namespace Sentry
                 sEntry["lineno"] = Json::Value::Int64(aFrame.line);
                 sEntry["instruction_addr"] = aFrame.addr;
                 sJson.append(sEntry);
-            });
+            }, aOffset);
             return *this;
         }
 

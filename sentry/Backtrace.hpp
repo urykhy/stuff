@@ -9,12 +9,12 @@ namespace Sentry
 {
     namespace bs = boost::stacktrace;
     using Stacktrace = bs::stacktrace;
-    Stacktrace GetStacktrace() { return bs::stacktrace(); }
+    inline Stacktrace GetStacktrace() { return bs::stacktrace(); }
 
     // ugly hack to make it faster
     // output to stream, and parse
     template<class T>
-    void ParseStacktrace(const Stacktrace& aTrace, T aHandler)
+    void ParseStacktrace(const Stacktrace& aTrace, T aHandler, const int aOffset)
     {
         struct Frame {
             std::string function;
@@ -30,7 +30,7 @@ namespace Sentry
         std::vector<boost::string_ref> sList;
 
         Parse::simple(sTmp, sList, '\n');
-        for (auto iter = sList.rbegin(); iter != sList.rend() and iter+1 != sList.rend(); iter++)
+        for (auto iter = sList.rbegin(); iter != sList.rend() and iter + aOffset != sList.rend(); iter++)
         {
             auto& x = *iter;
             Frame sFrame;

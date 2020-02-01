@@ -5,7 +5,7 @@
 
 namespace Util
 {
-    std::string Uuid()
+    inline std::string Uuid()
     {
         uuid_t sID;
         uuid_generate_random(sID);
@@ -14,7 +14,7 @@ namespace Util
     }
 
     using UuidPair = std::pair<uint64_t, uint64_t>;
-    UuidPair Uuid64()
+    inline UuidPair Uuid64()
     {
         uuid_t sID;
         uuid_generate_random(sID);

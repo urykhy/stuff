@@ -6,7 +6,7 @@
 
 namespace Util
 {
-    std::string Servername()
+    inline std::string Servername()
     {
         char sTmp[128];
         if (gethostname(sTmp, sizeof(sTmp)))
