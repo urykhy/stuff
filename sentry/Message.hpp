@@ -30,12 +30,11 @@ namespace Sentry
 
         // allowed: debug, info, warning, error, fatal
         Message& set_level(const std::string& v) { m_Root["level"] = v; return *this; }
-
-        Message& set_transaction(const std::string& v) { m_Root["transaction"] = v; return *this; }
-        Message& set_release(const std::string& v)     { m_Root["release"] = v; return *this; }
-        Message& set_distrib(const std::string& v)     { m_Root["dist"] = v; return *this; }
         Message& set_environment(const std::string& v) { m_Root["environment"] = v; return *this; }
+        Message& set_transaction(const std::string& v) { m_Root["transaction"] = v; return *this; }
+
         Message& set_message(const std::string& v)     { m_Root["message"]["message"] = v; return *this; }
+        Message& set_module(const std::string& n, const std::string& v) { m_Root["modules"][n] = v; return *this; }
         Message& set_tag(const std::string& aName, const std::string& aValue) { m_Root["tags"][aName] = aValue; return *this; }
         Message& set_extra(const std::string& aName, const std::string& aValue) {m_Root["extra"][aName] = aValue; return *this;}
 
@@ -109,6 +108,8 @@ namespace Sentry
             return *this;
         }
 
+        Message& set_release(const std::string& v)     { m_Root["release"] = v; return *this; }
+        Message& set_distrib(const std::string& v)     { m_Root["dist"] = v; return *this; }
         Message& set_version(const std::string& aName, const std::string& aVersion)
         {
             {

@@ -1,6 +1,7 @@
 #define BOOST_TEST_DYN_LINK
 #define BOOST_TEST_MODULE Suites
 #include <boost/test/unit_test.hpp>
+#include <gnu/libc-version.h>
 
 #include "Message.hpp"
 #include "Client.hpp"
@@ -11,30 +12,37 @@ Sentry::Trace foo() { return bar(); }
 BOOST_AUTO_TEST_SUITE(Sentry)
 BOOST_AUTO_TEST_CASE(simple)
 {
-    BOOST_TEST_MESSAGE("uuid " << Util::Uuid());
-    BOOST_TEST_MESSAGE(Sentry::Message().to_string());
-    BOOST_TEST_MESSAGE(Sentry::Message().set_tag("exception_type","std::test").to_string());
-    BOOST_TEST_MESSAGE(Sentry::Message().set_message("fail to download").set_extra("filename","foobar").to_string());
-
-    const auto sBT = foo();
-    BOOST_TEST_MESSAGE(Sentry::Message().set_exception("ValueError", "44").set_trace(sBT).to_string());
-
     Sentry::Message::Breadcrumb sWork;
     sWork.category="test";
     sWork.message="test started";
     sWork.timestamp=time(nullptr);
     sWork.aux["input"]="123";
     sWork.aux["operation"]="collect";
-    BOOST_TEST_MESSAGE(Sentry::Message().log_work(sWork).set_message("multiple numbers required").to_string());
-
-    BOOST_TEST_MESSAGE(Sentry::Message().set_user("alice@foo.bar","127.0.0.1").set_message("user not found").to_string());
 
     Sentry::Message::Request sRequest;
     sRequest.url="https://docs.sentry.io/development/sdk-dev/event-payloads/request/";
     sRequest.aux["data"]="Submitted data in a format that makes the most sense";
-    BOOST_TEST_MESSAGE(Sentry::Message().set_request(sRequest).set_message("request failed").to_string());
 
-    BOOST_TEST_MESSAGE(Sentry::Message().set_version("test.cpp","0.1").set_message("test ok").set_level("info").to_string());
+    auto sCurlVersion = curl_version_info(CURLVERSION_NOW);
+
+    Sentry::Message sM;
+    sM.set_environment("dev").
+       set_transaction("8VSi1K2EX7QwcyzoVgvn7VXHREispL").
+       set_message("fail to download").
+       set_module("curl",sCurlVersion->version).
+       set_module("ssl",sCurlVersion->ssl_version).
+       set_module("libz",sCurlVersion->libz_version).
+       set_module("glibc", gnu_get_libc_version()).
+       set_tag("demo","yes").
+       set_extra("filename","foobar").
+       set_exception("Sentry::Error","some message").
+       set_trace(foo()).
+       log_work(sWork).
+       set_user("alice@foo.bar","127.0.0.1").
+       set_request(sRequest).
+       set_version("test.cpp","0.1");
+
+    BOOST_TEST_MESSAGE(sM.to_string());
 }
 BOOST_AUTO_TEST_CASE(client)
 {
