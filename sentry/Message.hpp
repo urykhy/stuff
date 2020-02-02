@@ -47,10 +47,10 @@ namespace Sentry
             return *this;
         }
 
-        Message& set_trace(const Stacktrace& aTrace, const size_t aOffset = 2)
+        Message& set_trace(const Trace& aTrace, const size_t aOffset = 2)
         {
             auto& sJson = m_Root["exception"]["stacktrace"]["frames"] = Json::arrayValue;
-            ParseStacktrace(aTrace, [&sJson](auto aFrame){
+            ParseTrace(aTrace, [&sJson](auto aFrame){
                 Json::Value sEntry;
                 sEntry["function"] = aFrame.function;
                 sEntry["filename"] = aFrame.filename;

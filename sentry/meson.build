@@ -14,7 +14,7 @@ dl        = compiler.find_library('dl')
 bfd       = compiler.find_library('bfd')
 
 cxa_src = 'Cxa.cpp'
-cxa_lib = static_library('cxa_lib', cxa_src, include_directories : includes, dependencies : [curl, dl, json, bfd])
+cxa_lib = static_library('sentry_cxa', cxa_src, include_directories : includes, dependencies : [curl, dl, json, bfd])
 cxa_dep = declare_dependency(link_with : cxa_lib)
 
 a = executable('a.out', 'test.cpp', dependencies : [boost, test, threads, uuid, json, curl, dl, bfd], include_directories : includes)

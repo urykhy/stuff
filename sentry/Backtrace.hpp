@@ -5,16 +5,16 @@
 
 namespace Sentry
 {
-    using Stacktrace = backward::StackTrace;
-    inline Stacktrace GetStacktrace()
+    using Trace = backward::StackTrace;
+    inline Trace GetTrace()
     {
-        Stacktrace st;
+        Trace st;
         st.load_here();
         return st;
     }
 
     template<class T>
-    void ParseStacktrace(const Stacktrace& aTrace, T aHandler, const size_t aOffset)
+    void ParseTrace(const Trace& aTrace, T aHandler, const size_t aOffset)
     {
         struct Frame
         {
@@ -40,4 +40,4 @@ namespace Sentry
             aHandler(sFrame);
         }
     }
-} // namespace Util
+}
