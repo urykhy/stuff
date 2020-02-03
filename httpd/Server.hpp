@@ -50,25 +50,27 @@ namespace httpd
 
         std::string m_WriteOut; // used only from network thread
 
-        bool write_out()
+        Result write_out()
         {
             if (m_WriteOut.empty())
-                return true;
+                return OK;
             ssize_t sSize = m_Socket.write(m_WriteOut.data(), m_WriteOut.size());
+            if (sSize < 0) // eagain, wait for next event
+                return OK;
             if (sSize > 0)
                 m_WriteOut.erase(0, sSize);
             if (m_WriteOut.empty())
                 m_WriteOut.shrink_to_fit();
-            return sSize >= 0;
+            return OK;
         }
 
-        bool write_int(const std::string& aData)
+        Result write_int(const std::string& aData)
         {
             bool sIdle = m_WriteOut.empty();
             m_WriteOut.append(aData);
             if (sIdle)
                 return write_out();
-            return true;
+            return RETRY;
         }
 
     public:
@@ -90,8 +92,9 @@ namespace httpd
                 return;
 
             m_EPoll->post([p = shared_from_this(), aData](Util::EPoll* ptr) {
-                if (!p->write_int(aData))
-                {
+                bool sClose = false;
+                try { sClose = (CLOSE == p->write_int(aData)); } catch (...) { sClose = true; }
+                if (sClose) {
                     p->on_error(p->get_fd());
                     ptr->erase(p->get_fd());
                 }
@@ -112,6 +115,8 @@ namespace httpd
             size_t sSize = m_Socket.read(sBuffer, BUFFER_SIZE);
             if (sSize == 0)
                 return CLOSE;
+            if (sSize < 0) // eagain, wait for next event
+                return OK;
             size_t sUsed = m_Parser.consume((char*)sBuffer, sSize);
             if (sUsed < sSize)
                 return CLOSE;
@@ -121,7 +126,7 @@ namespace httpd
         }
         virtual Result on_write(int)
         {
-            return write_out() ? OK : CLOSE;
+            return write_out();
         }
         virtual void on_error(int) { m_Error = true; }
         virtual ~Server() {}

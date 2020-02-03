@@ -72,13 +72,19 @@ namespace Util
             auto sFace = sIt->second;
             if (!sClose and aEvent & EPOLLOUT)
             {
-                auto sResult = sFace->on_write(aFd);
+                auto sResult = HandlerFace::CLOSE;
+                try {
+                    sResult = sFace->on_write(aFd);
+                } catch (...) { sResult = HandlerFace::Result::CLOSE; }
                 sClose |= sResult == HandlerFace::Result::CLOSE;
                 sRetry |= sResult == HandlerFace::Result::RETRY;
             }
             if (!sClose and aEvent & EPOLLIN)
             {
-                auto sResult = sFace->on_read(aFd);
+                auto sResult = HandlerFace::CLOSE;
+                try {
+                    sResult = sFace->on_read(aFd);
+                } catch (...) { sResult = HandlerFace::Result::CLOSE; }
                 sClose |= sResult == HandlerFace::Result::CLOSE;
                 sRetry |= sResult == HandlerFace::Result::RETRY;
             }
