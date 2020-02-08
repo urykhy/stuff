@@ -92,7 +92,7 @@ BOOST_AUTO_TEST_CASE(Mass)
 {
     Curl::Client::GlobalInit();
 
-    enum {REQUEST_COUNT = 50000};
+    enum {REQUEST_COUNT = 5000};
     std::atomic_int sDone{0};
 
     Curl::Multi::Params sParams;    // default 3 sec per request, 32 connections

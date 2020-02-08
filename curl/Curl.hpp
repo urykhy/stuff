@@ -23,6 +23,7 @@ namespace Curl
         struct Params
         {
             time_t timeout_ms = 3000;
+            time_t connect_ms = 250;
             std::string user_agent = "Curl/Client";
             std::string username;
             std::string password;
@@ -180,6 +181,7 @@ namespace Curl
             setopt(CURLOPT_NOSIGNAL, 1);
             setopt(CURLOPT_FOLLOWLOCATION, 1);
             setopt(CURLOPT_TIMEOUT_MS, m_Params.timeout_ms);
+            setopt(CURLOPT_CONNECTTIMEOUT_MS, m_Params.connect_ms);
             //setopt(CURLOPT_BUFFERSIZE, 1024*1024);
 
             // user agent
