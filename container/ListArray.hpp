@@ -15,7 +15,7 @@ namespace Container
         const size_t m_Size;
 
     public:
-        ListArray(const size_t c = 1024 * 1024) : m_Size(c) {}
+        ListArray(const size_t c = 20 * 1024) : m_Size(c) {}
 
         void push_back(const T& t)
 		{
@@ -26,6 +26,8 @@ namespace Container
             }
             m_List.back().push_back(t);
         }
+
+        T& back() { return m_List.back().back(); }
 
         void clear() { m_List.clear(); }
         size_t size() const { return m_List.empty() ? 0 : m_Size * (m_List.size() - 1) + m_List.back().size(); }

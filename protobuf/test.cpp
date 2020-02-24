@@ -108,15 +108,28 @@ BOOST_AUTO_TEST_CASE(generated)
     sMessage.set_i32(123);  // fixed
     sMessage.set_s32(-45);  // zz
     sMessage.set_f32(-4.6); // fixed float
+    sMessage.add_packed_list(12);
+    sMessage.add_packed_list(14);
+    sMessage.set_binary("321");
 
     std::string sBuf;
     sMessage.SerializeToString(&sBuf);
 
-    pmr_tutorial::xtest sCustom;
+    char sBuffer[1024] = {};
+    std::pmr::monotonic_buffer_resource sPool{std::data(sBuffer), std::size(sBuffer)};
+    pmr_tutorial::xtest sCustom(&sPool);
     sCustom.ParseFromString(sBuf);
     BOOST_CHECK_EQUAL(sMessage.i32(), *sCustom.i32);
     BOOST_CHECK_EQUAL(sMessage.s32(), *sCustom.s32);
     BOOST_CHECK_EQUAL(sMessage.f32(), *sCustom.f32);
+    BOOST_CHECK_EQUAL(2, sCustom.packed_list.size());
+    for (unsigned i = 0; i < sCustom.packed_list.size(); i++)
+    {
+        auto sIt = sCustom.packed_list.begin();
+        std::advance(sIt, i);
+        BOOST_CHECK_EQUAL(sMessage.packed_list(i), *sIt);
+    }
+    BOOST_CHECK_EQUAL(sMessage.binary(), sCustom.binary->c_str());
 }
 /*BOOST_AUTO_TEST_CASE(person)
 {

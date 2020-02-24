@@ -35,8 +35,8 @@ namespace Protobuf
 
     struct FieldInfo
     {
-        int8_t tag = -1;
-        int8_t id = -1;
+        uint8_t  tag = -1;
+        uint64_t id = -1;
 
         enum
         {
@@ -46,8 +46,8 @@ namespace Protobuf
           , TAG_LENGTH  = 2
         };
 
-        FieldInfo(uint8_t aTag)
-        : tag(aTag & 0x07)
+        FieldInfo(uint64_t aTag)
+        : tag((uint8_t)(aTag & 0x07))
         , id(aTag >> 3)
         { }
 
@@ -82,7 +82,7 @@ namespace Protobuf
             uint8_t sByte = 0;
             do {
                 sByte = readByte();
-            } while (sByte > 0x80); // Each byte in a varint, except the last byte, has the most significant bit (msb) set
+            } while (sByte >= 0x80); // Each byte in a varint, except the last byte, has the most significant bit (msb) set
         }
 
 #ifdef BOOST_TEST_DYN_LINK  // open for tests only
@@ -90,7 +90,7 @@ namespace Protobuf
 #endif
         FieldInfo readTag()
         {
-            return FieldInfo(readByte());
+            return FieldInfo(readVarInt<uint64_t>());
         }
 
         template<class T>
@@ -106,7 +106,7 @@ namespace Protobuf
                 sByte = readByte();
                 sValue |= (((T)sByte & 0x7F) << sShift);
                 sShift += 7;
-            } while (sByte > 0x80); // Each byte in a varint, except the last byte, has the most significant bit (msb) set
+            } while (sByte >= 0x80); // Each byte in a varint, except the last byte, has the most significant bit (msb) set
 
             return sValue;
         }

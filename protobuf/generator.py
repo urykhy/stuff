@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import io
 import sys
 from lark import Lark
 
@@ -7,15 +8,17 @@ parser = Lark(r"""
     start        : cmd+
     cmd          : "syntax" "=" "\"" STRING "\"" SEMICOLON -> syntax
                  | "package" name SEMICOLON                -> package
+                 | "option" name "=" STRING SEMICOLON
                  | message -> message
                  | enum    -> enum
 
     message      : "message" name "{" (entry|enum|message)+ "}"
-    entry        : kind type name "=" id default? SEMICOLON comment?
+    entry        : kind type name "=" id packed? default? SEMICOLON comment?
     enum         : "enum" name "{" enum_entry+ "}"
     enum_entry   : name "=" value SEMICOLON
 
-    default      : "[" "default" "=" STRING "]"
+    default      : "[" "default" "=" DEFAULT "]"
+    packed       : "[" "packed" "=" STRING "]"
     kind         : REQUIRED|OPTIONAL|REPEATED
     type         : STRING
     name         : STRING
@@ -27,6 +30,7 @@ parser = Lark(r"""
     REQUIRED     : "required"
     OPTIONAL     : "optional"
     REPEATED     : "repeated"
+    DEFAULT      : /[a-zA-Z1-9._-]+/
     %import common.CNAME            -> STRING
     %import common.SIGNED_NUMBER    -> NUMBER
     %import common.WS
@@ -42,25 +46,6 @@ x = parser.parse(data)
 localTypeNames=[]
 localEnums=[]
 
-def get_encoding(name):
-    xtype = {'fixed32': 'Protobuf::Walker::FIXED',
-             'sint32' : 'Protobuf::Walker::ZIGZAG'
-    }
-    if name in xtype:
-        return xtype[name]
-    return None
-
-def fix_type(name):
-    xtype = {'string' : 'std::string',
-             'int32'  : 'int32_t',
-             'fixed32': 'int32_t',
-             'sint32' : 'int32_t',
-             'float'  : 'float'
-    }
-    if name in xtype:
-        return xtype[name]
-    return name
-
 def get_by_name(name, x):
     for i in x.children:
         if i == ";":
@@ -69,12 +54,104 @@ def get_by_name(name, x):
             return i.children[0]
     return None
 
+class Entry:
+    def __init__(self, i):
+        self.id         = get_by_name('id', i)
+        self.name       = get_by_name('name', i)
+        self.value      = get_by_name('value', i)
+        self.default    = get_by_name("default", i)
+        self.kind       = get_by_name("kind", i)
+        self.proto_type = get_by_name("type", i)
+        self.packed     = get_by_name("packed", i) == "true"
+        self.cxx_type   = self._type(self.proto_type)
+        self.encoding   = self._encoding(self.proto_type)
+        self.container  = 'std::pmr::list' if self.kind == "repeated" else 'std::optional'
+        self.pmr        = True if self.proto_type == "string" or self.proto_type == "bytes" or self._customType() else False
+
+    def _customType(self):
+        global localTypeNames
+        return self.proto_type in localTypeNames
+
+    def _encoding(self, name):
+        xtype = {'fixed32': 'Protobuf::Walker::FIXED',
+                 'sint32' : 'Protobuf::Walker::ZIGZAG',
+                 'fixed64': 'Protobuf::Walker::FIXED',
+                 'sint64' : 'Protobuf::Walker::ZIGZAG'
+        }
+        if name in xtype:
+            return xtype[name]
+        return None
+
+    def _type(self, name):
+        xtype = {'string' : 'std::pmr::string',
+                 'bytes'  : 'std::pmr::string',
+                 'int32'  : 'int32_t',
+                 'uint32' : 'uint32_t',
+                 'fixed32': 'int32_t',
+                 'sint32' : 'int32_t',
+                 'int64'  : 'int64_t',
+                 'uint64' : 'uint64_t',
+                 'fixed64': 'int64_t',
+                 'sint64' : 'int64_t',
+                 'float'  : 'float'
+        }
+        if name in xtype:
+            return xtype[name]
+        return name
+
+    def make_decl(self):
+        return f"{self.container}<{self.cxx_type}> {self.name}; // id = {self.id}"
+
+    def make_init(self):
+        if self.kind == "repeated":
+            return f", {self.name}(m_Pool)"
+        if self.default:
+            return f", {self.name}({self.default})"
+        return ''
+
+    def make_clear(self):
+        c = ".clear()" if self.kind == "repeated" else ".reset()"
+        if self.default:
+            c = f" = {self.default}"
+        return f"{self.name} {c};"
+
+    def make_parse(self):
+        buf = io.StringIO()
+        print (f"case {self.id}:", file=buf)
+        #print (f"std::cout << \"parse \" << {self.id} << std::endl; ", file=buf)
+
+        if self._customType() and self.kind == "repeated":
+            print (f"{{ Protobuf::Buffer sTmpBuf; aWalker->read(sTmpBuf); {self.name}.push_back({self.cxx_type}(m_Pool)); {self.name}.back().ParseFromString(sTmpBuf); return Protobuf::ACT_USED;}}", file=buf)
+        elif self._customType():
+            print (f"{{ Protobuf::Buffer sTmpBuf; aWalker->read(sTmpBuf); {self.cxx_type} sTmp(m_Pool); sTmp.ParseFromString(sTmpBuf); {self.name} = std::move(sTmp); return Protobuf::ACT_USED;}}", file=buf)
+        else:
+            cp = "std::move(sTmp)"
+            if self.proto_type in localEnums:
+                cp = f"static_cast<{self.cxx_type}>(sTmp)"
+                self.cxx_type = "uint32_t" # Enumerator constants must be in the range of a 32-bit integer.
+            init = "(m_Pool)" if self.pmr else '{}'
+            enc  = f", {self.encoding}" if self.encoding else ''
+
+            if self.kind == "repeated":
+                if self.packed:
+                    print (f"{{ Protobuf::Buffer sTmpBuf; aWalker->read(sTmpBuf); ", file=buf)
+                    print (f"Protobuf::Walker sWalker(sTmpBuf);", file=buf)
+                    print (f"while (!sWalker.empty()) ", file=buf)
+                    print (f"{{ {self.cxx_type} sTmp{init}; sWalker.read(sTmp{enc}); {self.name}.push_back({cp});}}", file=buf)
+                    print (f"return Protobuf::ACT_USED; }}", file=buf)
+                else:
+                    print (f"{{ {self.cxx_type} sTmp{init}; aWalker->read(sTmp{enc}); {self.name}.push_back({cp}); return Protobuf::ACT_USED; }}", file=buf)
+            else:
+                print (f"{{ {self.cxx_type} sTmp{init}; aWalker->read(sTmp{enc}); {self.name} = {cp}; return Protobuf::ACT_USED; }}", file=buf)
+        return buf.getvalue()
+
 def step_enum(i):
     global localTypeNames
     localEnums.append(get_by_name('name', i))
     print (f"enum {get_by_name('name', i)} {{")
     for x in i.children[1:]:
-        print (f"{get_by_name('name', x)} = {get_by_name('value', x)},")
+        e = Entry(x)
+        print (f"{e.name} = {e.value},")
     print ("};")
 
 def step_message(i):
@@ -87,32 +164,30 @@ def step_message(i):
             messageName = x.children[0]
             localTypeNames.append(messageName)
             print (f"struct {messageName} {{")
+            print (f"std::pmr::memory_resource* m_Pool;") # FIXME: create only if really used
         elif x.data == "entry":
-            t = 'std::list' if get_by_name("kind", x) == "repeated" else 'std::optional'
-            print (f"{t}<{fix_type(get_by_name('type', x))}> {get_by_name('name', x)}; // id = {get_by_name('id', x)}")
+            e = Entry(x)
+            print (e.make_decl())
         elif x.data == "enum":
             step_enum(x)
         elif x.data == "message":
             step_message(x.children)
 
     # Constructor
-    print (f"{messageName}() ")
+    print (f"{messageName}(std::pmr::memory_resource* aPool) ")
+    print (f": m_Pool(aPool)")
     for x in i:
         if x.data == "entry":
-            d = get_by_name("default", x)
-            if d:
-                print (f": {get_by_name('name', x)}{{ {d} }}")
+            e = Entry(x)
+            print (e.make_init())
     print ("{}")
 
     # Clear
     print ("void Clear() {")
     for x in i:
         if x.data == "entry":
-            d = get_by_name("default", x)
-            c = ".clear()" if get_by_name("kind", x) == "repeated" else ".reset()"
-            if d:
-                c = f" = {d}"
-            print (f"{get_by_name('name', x)} {c};")
+            e = Entry(x)
+            print (e.make_clear())
     print ("}")
 
     # ParseFromString
@@ -122,19 +197,9 @@ def step_message(i):
     print ("switch (aField.id) {")
     for x in i:
         if x.data == "entry":
-            n   = get_by_name('name', x)
-            t   = fix_type(get_by_name('type', x))
-            enc = get_encoding(get_by_name('type', x))
-            enc = f", {enc}" if enc else ''
-            print (f"case {get_by_name('id', x)}:")
-            if t in localTypeNames:
-                print (f"{{ Protobuf::Buffer sTmpBuf; aWalker->read(sTmpBuf); {n}.push_back({t}{{}}); {n}.back().ParseFromString(sTmpBuf); }}")
-            else:
-                cp = "std::move(sTmp)"
-                if t in localEnums:
-                    cp = f"static_cast<{t}>(sTmp)"
-                    t = "uint32_t" # Enumerator constants must be in the range of a 32-bit integer.
-                print (f"{{ {t} sTmp; aWalker->read(sTmp{enc}); {n} = {cp}; return Protobuf::ACT_USED; }}")
+            e = Entry(x)
+            print (e.make_parse())
+    print ("default: return Protobuf::ACT_SKIP;")
     print ("} return Protobuf::ACT_BREAK; });")
     print ("}")
     print ("};")
@@ -146,6 +211,7 @@ def step(i):
         step_message(i.children[0].children)
 
 print ("#include <list>")
+print ("#include <memory_resource>")
 print ("#include <optional>")
 print ("#include <string>")
 for i in x.children:

@@ -23,7 +23,7 @@ some information about stuff
 - mpl - some template magic
 - msgpack - incomplete msgpack serialization
 - networking - epoll based networking
-- protobuf - fast protobuf parser
+- protobuf - fast protobuf parser with polymorphic allocator support
 - rpc - simple rpc over udp
 - ssl - openssl wrapper
 - stats - graphite metrics proof of concept
