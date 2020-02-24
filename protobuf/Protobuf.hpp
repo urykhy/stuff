@@ -164,9 +164,8 @@ namespace Protobuf
         : m_Buffer(aBuffer)
         { }
 
-
         enum IntType {
-            NORMAL = 0, // standard variable-length encoding
+            VARIANT = 0, // standard variable-length encoding
             FIXED,      // fixed/sfixed
             ZIGZAG,     // sint
         };
@@ -184,12 +183,12 @@ namespace Protobuf
         typename std::enable_if<
             std::is_integral<T>::value, void
         >::type
-        read(T& aDest, IntType mode = NORMAL) {
+        read(T& aDest, IntType mode = VARIANT) {
             switch (mode)
             {
-            case NORMAL: aDest = readVarInt<T>(); break;
-            case FIXED: readFixed(aDest); break;
-            case ZIGZAG: aDest = readVarInt<T>(); aDest = ZigZagDecode(aDest); break;
+            case VARIANT: aDest = readVarInt<T>(); break;
+            case FIXED  : readFixed(aDest); break;
+            case ZIGZAG : aDest = readVarInt<T>(); aDest = ZigZagDecode(aDest); break;
             }
         }
 
