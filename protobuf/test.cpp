@@ -6,6 +6,7 @@
 #include "tutorial.pb.h"
 
 #include <../parser/Hex.hpp>
+#include "tutorial.hpp"
 
 struct MyPerson
 {
@@ -100,6 +101,22 @@ BOOST_AUTO_TEST_CASE(xdecode)
     const auto sTag1 = sWalker.readTag(); BOOST_CHECK_EQUAL(1, sTag1.id); sWalker.read(i32, Protobuf::Walker::FIXED); BOOST_CHECK_EQUAL(sMessage.i32(), i32);
     const auto sTag2 = sWalker.readTag(); BOOST_CHECK_EQUAL(2, sTag2.id); sWalker.read(s32, Protobuf::Walker::ZIGZAG); BOOST_CHECK_EQUAL(sMessage.s32(), s32);
     const auto sTag3 = sWalker.readTag(); BOOST_CHECK_EQUAL(3, sTag3.id); sWalker.read(f32); BOOST_CHECK_EQUAL(sMessage.f32(), f32);
+}
+BOOST_AUTO_TEST_CASE(generated)
+{
+    tutorial::xtest sMessage;
+    sMessage.set_i32(123);  // fixed
+    sMessage.set_s32(-45);  // zz
+    sMessage.set_f32(-4.6); // fixed float
+
+    std::string sBuf;
+    sMessage.SerializeToString(&sBuf);
+
+    pmr_tutorial::xtest sCustom;
+    sCustom.ParseFromString(sBuf);
+    BOOST_CHECK_EQUAL(sMessage.i32(), *sCustom.i32);
+    BOOST_CHECK_EQUAL(sMessage.s32(), *sCustom.s32);
+    BOOST_CHECK_EQUAL(sMessage.f32(), *sCustom.f32);
 }
 /*BOOST_AUTO_TEST_CASE(person)
 {

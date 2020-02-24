@@ -33,14 +33,14 @@ parser = Lark(r"""
     %ignore WS
 """)
 
-with open('tutorial.proto', 'r') as file:
-    data = file.read()
+data = sys.stdin.read()
 
 x = parser.parse(data)
 #print ( x.pretty() )
 #print ("-"*120)
 
 localTypeNames=[]
+localEnums=[]
 
 def get_encoding(name):
     xtype = {'fixed32': 'Protobuf::Walker::FIXED',
@@ -71,10 +71,10 @@ def get_by_name(name, x):
 
 def step_enum(i):
     global localTypeNames
-    localTypeNames.append(get_by_name('name', i))
+    localEnums.append(get_by_name('name', i))
     print (f"enum {get_by_name('name', i)} {{")
     for x in i.children[1:]:
-        print (f"{get_by_name('name', x)} = {get_by_name('value', x)};")
+        print (f"{get_by_name('name', x)} = {get_by_name('value', x)},")
     print ("};")
 
 def step_message(i):
@@ -109,7 +109,7 @@ def step_message(i):
     for x in i:
         if x.data == "entry":
             d = get_by_name("default", x)
-            c = ".clear()" if get_by_name("kind", x) == "repeated" else " = std::nullopt_t"
+            c = ".clear()" if get_by_name("kind", x) == "repeated" else ".reset()"
             if d:
                 c = f" = {d}"
             print (f"{get_by_name('name', x)} {c};")
@@ -124,23 +124,30 @@ def step_message(i):
         if x.data == "entry":
             n   = get_by_name('name', x)
             t   = fix_type(get_by_name('type', x))
-            enc = get_encoding(t)
+            enc = get_encoding(get_by_name('type', x))
             enc = f", {enc}" if enc else ''
             print (f"case {get_by_name('id', x)}:")
             if t in localTypeNames:
                 print (f"{{ Protobuf::Buffer sTmpBuf; aWalker->read(sTmpBuf); {n}.push_back({t}{{}}); {n}.back().ParseFromString(sTmpBuf); }}")
             else:
-                print (f"{{ {t} sTmp; aWalker->read(sTmp{enc}); {n} = std::move(sTmp); return Protobuf::ACT_USED; }}")
+                cp = "std::move(sTmp)"
+                if t in localEnums:
+                    cp = f"static_cast<{t}>(sTmp)"
+                    t = "uint32_t" # Enumerator constants must be in the range of a 32-bit integer.
+                print (f"{{ {t} sTmp; aWalker->read(sTmp{enc}); {n} = {cp}; return Protobuf::ACT_USED; }}")
     print ("} return Protobuf::ACT_BREAK; });")
     print ("}")
     print ("};")
 
 def step(i):
     if i.data == "package":
-        print ("namespace",get_by_name("name", i),"{")
+        print ("namespace","pmr_" + get_by_name("name", i),"{")
     if i.data == "message":
         step_message(i.children[0].children)
 
+print ("#include <list>")
+print ("#include <optional>")
+print ("#include <string>")
 for i in x.children:
     step(i)
 print ("} // namespace")

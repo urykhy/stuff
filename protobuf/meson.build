@@ -1,20 +1,25 @@
 project('protobuf', 'cpp', version : '0.1')
 
-add_project_arguments('-ggdb', '-O3', '-std=c++14', language: 'cpp')
+add_project_arguments('-ggdb', '-O3', '-std=c++17', language: 'cpp')
 protoc    = find_program('protoc', required : true)
 protobuf  = dependency('protobuf', required : true)
 benchmark = dependency('benchmark', required : true)
 boost     = dependency('boost', modules : ['unit_test_framework', 'system'])
 threads   = dependency('threads')
+clangformat = find_program('clang-format', required : true)
+pmr_gen   = find_program('generator.sh', required : true)
 
-generator = generator(protoc, \
-  output    : ['@BASENAME@.pb.cc', '@BASENAME@.pb.h'],
-  arguments : ['--proto_path=@CURRENT_SOURCE_DIR@', '--cpp_out=@BUILD_DIR@', '@INPUT@'])
-tutorial_src  = generator.process('tutorial.proto')
-tutorial_lib = static_library('tutorial_lib', tutorial_src)
-tutorial_dep = declare_dependency(link_with : tutorial_lib, include_directories: tutorial_lib.private_dir_include())
+protoc        = generator(protoc, output : ['@BASENAME@.pb.cc', '@BASENAME@.pb.h'], arguments : ['--proto_path=@CURRENT_SOURCE_DIR@', '--cpp_out=@BUILD_DIR@', '@INPUT@'])
+tutorial_src  = protoc.process('tutorial.proto')
+tutorial_lib  = static_library('tutorial', tutorial_src)
+tutorial_dep  = declare_dependency(link_with : tutorial_lib, include_directories: tutorial_lib.private_dir_include())
 
-a = executable('a.out', 'test.cpp',      dependencies : [tutorial_dep, protobuf, boost])
+pmr_gen          = generator(pmr_gen, output : ['@BASENAME@.hpp'], arguments : ['@INPUT@','@OUTPUT@'])
+pmr_tutorial_src = pmr_gen.process('tutorial.proto')
+pmr_tutorial_lib = static_library('pmr_tutorial', pmr_tutorial_src)
+pmr_tutorial_dep = declare_dependency(link_with : pmr_tutorial_lib, include_directories: pmr_tutorial_lib.private_dir_include())
+
+a = executable('a.out', 'test.cpp',      dependencies : [tutorial_dep, pmr_tutorial_dep, protobuf, boost])
 b = executable('b.out', 'benchmark.cpp', dependencies : [tutorial_dep, protobuf, boost, benchmark])
 test('basic test', a, args : ['-l', 'all'])
 benchmark('protobuf', b)
