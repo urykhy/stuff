@@ -202,7 +202,17 @@ namespace Protobuf
             if (sSize > m_Buffer.size())
                 throw BadInput();
 
-            aDest = T(m_Buffer.data(), sSize);
+            aDest.assign(m_Buffer.data(), sSize);
+            m_Buffer.remove_prefix(sSize);
+        }
+
+        void read(Buffer& aDest)
+        {
+            const auto sSize = readVarInt<size_t>();
+            if (sSize > m_Buffer.size())
+                throw BadInput();
+
+            aDest = Buffer(m_Buffer.data(), sSize);
             m_Buffer.remove_prefix(sSize);
         }
 

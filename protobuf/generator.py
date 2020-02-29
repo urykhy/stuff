@@ -30,7 +30,7 @@ parser = Lark(r"""
     REQUIRED     : "required"
     OPTIONAL     : "optional"
     REPEATED     : "repeated"
-    DEFAULT      : /[a-zA-Z1-9._-]+/
+    DEFAULT      : /[a-zA-Z0-9._-]+/
     %import common.CNAME            -> STRING
     %import common.SIGNED_NUMBER    -> NUMBER
     %import common.WS
@@ -87,11 +87,11 @@ class Entry:
                  'bytes'  : 'std::pmr::string',
                  'int32'  : 'int32_t',
                  'uint32' : 'uint32_t',
-                 'fixed32': 'int32_t',
+                 'fixed32': 'uint32_t',
                  'sint32' : 'int32_t',
                  'int64'  : 'int64_t',
                  'uint64' : 'uint64_t',
-                 'fixed64': 'int64_t',
+                 'fixed64': 'uint64_t',
                  'sint64' : 'int64_t',
                  'float'  : 'float'
         }
@@ -120,29 +120,35 @@ class Entry:
         print (f"case {self.id}:", file=buf)
         #print (f"std::cout << \"parse \" << {self.id} << std::endl; ", file=buf)
 
-        if self._customType() and self.kind == "repeated":
-            print (f"{{ Protobuf::Buffer sTmpBuf; aWalker->read(sTmpBuf); {self.name}.push_back({self.cxx_type}(m_Pool)); {self.name}.back().ParseFromString(sTmpBuf); return Protobuf::ACT_USED;}}", file=buf)
-        elif self._customType():
-            print (f"{{ Protobuf::Buffer sTmpBuf; aWalker->read(sTmpBuf); {self.cxx_type} sTmp(m_Pool); sTmp.ParseFromString(sTmpBuf); {self.name} = std::move(sTmp); return Protobuf::ACT_USED;}}", file=buf)
-        else:
-            cp = "std::move(sTmp)"
-            if self.proto_type in localEnums:
-                cp = f"static_cast<{self.cxx_type}>(sTmp)"
-                self.cxx_type = "uint32_t" # Enumerator constants must be in the range of a 32-bit integer.
-            init = "(m_Pool)" if self.pmr else '{}'
-            enc  = f", {self.encoding}" if self.encoding else ''
+        print ("{", file=buf)
 
-            if self.kind == "repeated":
-                if self.packed:
-                    print (f"{{ Protobuf::Buffer sTmpBuf; aWalker->read(sTmpBuf); ", file=buf)
-                    print (f"Protobuf::Walker sWalker(sTmpBuf);", file=buf)
-                    print (f"while (!sWalker.empty()) ", file=buf)
-                    print (f"{{ {self.cxx_type} sTmp{init}; sWalker.read(sTmp{enc}); {self.name}.push_back({cp});}}", file=buf)
-                    print (f"return Protobuf::ACT_USED; }}", file=buf)
-                else:
-                    print (f"{{ {self.cxx_type} sTmp{init}; aWalker->read(sTmp{enc}); {self.name}.push_back({cp}); return Protobuf::ACT_USED; }}", file=buf)
+        enc  = f", {self.encoding}" if self.encoding else ''
+        cp = "sTmp"
+        if self.proto_type in localEnums:
+            cp = f"static_cast<{self.cxx_type}>(sTmp)"
+            self.cxx_type = "uint32_t" # Enumerator constants must be in the range of a 32-bit integer.
+
+        if self._customType() and self.kind == "repeated":
+            print (f"Protobuf::Buffer sTmpBuf; aWalker->read(sTmpBuf); {self.name}.emplace_back(m_Pool); {self.name}.back().ParseFromString(sTmpBuf);", file=buf)
+        elif self._customType():
+            print (f"Protobuf::Buffer sTmpBuf; aWalker->read(sTmpBuf); {self.name}.emplace(m_Pool); {self.name}->ParseFromString(sTmpBuf);", file=buf)
+        elif self.pmr and self.kind == "repeated":
+            print (f"{self.name}.emplace_back({self.cxx_type}(m_Pool)); aWalker->read({self.name}.back());", file=buf)
+        elif self.pmr:
+            print (f"{self.name}.emplace(m_Pool); aWalker->read(*{self.name});", file=buf)
+        elif self.kind == "repeated":
+            if self.packed:
+                print (f"Protobuf::Buffer sTmpBuf; aWalker->read(sTmpBuf); ", file=buf)
+                print (f"Protobuf::Walker sWalker(sTmpBuf);", file=buf)
+                print (f"while (!sWalker.empty()) ", file=buf)
+                print (f"{{ {self.cxx_type} sTmp{{}}; sWalker.read(sTmp{enc}); {self.name}.push_back({cp});}}", file=buf)
             else:
-                print (f"{{ {self.cxx_type} sTmp{init}; aWalker->read(sTmp{enc}); {self.name} = {cp}; return Protobuf::ACT_USED; }}", file=buf)
+                print (f"{self.cxx_type} sTmp{{}}; aWalker->read(sTmp{enc}); {self.name}.push_back({cp});", file=buf)
+        else:
+            print (f"{self.cxx_type} sTmp{{}}; aWalker->read(sTmp{enc}); {self.name} = {cp};", file=buf)
+
+        print ("return Protobuf::ACT_USED; }", file=buf)
+
         return buf.getvalue()
 
 def step_enum(i):
