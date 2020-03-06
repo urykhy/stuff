@@ -24,6 +24,8 @@ class TestBar:
     @allure.link('https://linux.org.ru', name='Link name')
     def test_bar(self):
         assert True
+        with allure.step("replace"):
+            assert False
 
     @pytest.mark.parametrize('param', [True], ids=['boolean parameter id'])
     @allure.description('TestBar description')
