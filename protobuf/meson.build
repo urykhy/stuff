@@ -1,7 +1,6 @@
-project('protobuf', 'cpp', version : '0.1')
+project('protobuf', 'cpp', version : '0.1', default_options : ['cpp_std=c++17'])
 
 includes = include_directories('..')
-add_project_arguments('-ggdb', '-O3', '-std=c++17', language: 'cpp')
 protoc    = find_program('protoc', required : true)
 protobuf  = dependency('protobuf', required : true)
 benchmark = dependency('benchmark', required : true)
