@@ -67,6 +67,7 @@ class Entry:
         self.encoding   = self._encoding(self.proto_type)
         self.container  = 'std::pmr::list' if self.kind == "repeated" else 'std::optional'
         self.pmr        = True if self.proto_type == "string" or self.proto_type == "bytes" or self._customType() else False
+        self.jsonType   = self._jsonType(self.proto_type)
 
     def _customType(self):
         global localTypeNames
@@ -86,18 +87,32 @@ class Entry:
         xtype = {'string' : 'std::pmr::string',
                  'bytes'  : 'std::pmr::string',
                  'int32'  : 'int32_t',
+                 'sint32' : 'int32_t',
                  'uint32' : 'uint32_t',
                  'fixed32': 'uint32_t',
-                 'sint32' : 'int32_t',
                  'int64'  : 'int64_t',
+                 'sint64' : 'int64_t',
                  'uint64' : 'uint64_t',
                  'fixed64': 'uint64_t',
-                 'sint64' : 'int64_t',
                  'float'  : 'float'
         }
         if name in xtype:
             return xtype[name]
         return name
+
+    def _jsonType(self, name):
+        xtype = {'int32'  : 'Json::Int',
+                 'sint32' : 'Json::Int',
+                 'uint32' : 'Json::UInt',
+                 'fixed32': 'Json::UInt',
+                 'int64'  : 'Json::Int64',
+                 'sint64' : 'Json::Int64',
+                 'uint64' : 'Json::UInt64',
+                 'fixed64': 'Json::UInt64',
+        }
+        if name in xtype:
+            return xtype[name]
+        return 'Json::Value'
 
     def make_decl(self):
         return f"{self.container}<{self.cxx_type}> {self.name}; // id = {self.id}"
@@ -150,6 +165,33 @@ class Entry:
         print ("return Protobuf::ACT_USED; }", file=buf)
 
         return buf.getvalue()
+
+    def make_json(self):
+        buf = io.StringIO()
+
+        if self._customType() and self.kind == "repeated":
+            print (f"if (!{self.name}.empty()) {{"
+                   f"auto& sItem = sRoot[\"{self.name}\"];"
+                   f"for (auto& x : {self.name}) {{ sItem.append(x.toJson()); }}"
+                   "}", file=buf)
+        elif self._customType():
+            print (f"if ({self.name}) {{ sRoot[\"{self.name}\"] = {self.name}->toJson(); }}", file=buf)
+        elif self.pmr and self.kind == "repeated":
+            print (f"if (!{self.name}.empty()) {{"
+                   f"auto& sItem = sRoot[\"{self.name}\"];"
+                   f"for (auto& x : {self.name}) {{ sItem.append(Json::Value(x.c_str())); }}"
+                   "}", file=buf)
+        elif self.pmr:
+            print (f"if ({self.name}) {{ sRoot[\"{self.name}\"] = {self.name}->c_str(); }}", file=buf)
+        elif self.kind == "repeated":
+            print (f"if (!{self.name}.empty()) {{"
+                   f"auto& sItem = sRoot[\"{self.name}\"];"
+                   f"for (auto& x : {self.name}) {{ sItem.append({self.jsonType}(x)); }}"
+                   "}", file=buf)
+        else:
+            print (f"if ({self.name}) {{ sRoot[\"{self.name}\"] = {self.jsonType}(*{self.name}); }}", file=buf)
+        return buf.getvalue()
+
 
 def step_enum(i):
     global localTypeNames
@@ -208,6 +250,18 @@ def step_message(i):
     print ("default: return Protobuf::ACT_SKIP;")
     print ("} return Protobuf::ACT_BREAK; });")
     print ("}")
+
+    # toJson
+    print ("#ifdef WITH_JSON")
+    print ("Json::Value toJson() const {")
+    print ("Json::Value sRoot;")
+    for x in i:
+        if x.data == "entry":
+            e = Entry(x)
+            print (e.make_json())
+    print ("return sRoot;")
+    print ("}")
+    print ("#endif")
     print ("};")
 
 def step(i):
@@ -220,6 +274,9 @@ print ("#include <list>")
 print ("#include <memory_resource>")
 print ("#include <optional>")
 print ("#include <string>")
+print ("#ifdef WITH_JSON")
+print ("#include <json/json.h>")
+print ("#endif")
 for i in x.children:
     step(i)
 print ("} // namespace")

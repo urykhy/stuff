@@ -131,7 +131,7 @@ BOOST_AUTO_TEST_CASE(generated)
     }
     BOOST_CHECK_EQUAL(sMessage.binary(), sCustom.binary->c_str());
 }
-/*BOOST_AUTO_TEST_CASE(person)
+BOOST_AUTO_TEST_CASE(person)
 {
     GOOGLE_PROTOBUF_VERIFY_VERSION;
     tutorial::Person sPerson;
@@ -148,7 +148,16 @@ BOOST_AUTO_TEST_CASE(generated)
     std::string sBuf;
     BOOST_CHECK_EQUAL(true, sPerson.SerializeToString(&sBuf));
 
-    std::cout << "X: " << Parser::to_hex_c_string(sBuf);
-    std::cout << "Size: " << sBuf.size() << std::endl;
-}*/
+    BOOST_TEST_MESSAGE("hex : " << Parser::to_hex_c_string(sBuf));
+    BOOST_TEST_MESSAGE("size: " << sBuf.size());
+
+    char sBuffer[1024] = {};
+    std::pmr::monotonic_buffer_resource sPool{std::data(sBuffer), std::size(sBuffer)};
+    pmr_tutorial::Person sCustom(&sPool);
+    sCustom.ParseFromString(sBuf);
+
+    // print in json
+    Json::FastWriter sWriter;
+    BOOST_TEST_MESSAGE("json: " << sWriter.write(sCustom.toJson()));
+}
 BOOST_AUTO_TEST_SUITE_END()
