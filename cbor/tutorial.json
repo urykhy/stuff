@@ -1,0 +1,11 @@
+{
+    "namespace": "test",
+    "name": "Vary",
+    "vary": true,
+    "fields": [
+        {"name": "name",  "type": "std::string",                     "id": "1"},
+        {"name": "age",   "type": "uint8_t",                         "id": "2"},
+        {"name": "phone", "type": "std::map<unsigned, std::string>", "id": "10"},
+        {"name": "city"  ,"type": "std::vector<std::string>",        "id": "11"}
+    ]
+}
