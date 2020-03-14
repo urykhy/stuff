@@ -137,6 +137,12 @@ class Entry:
 
         print ("{", file=buf)
 
+        # small sanity check
+        if self.pmr or self.packed:
+            print ("if (aField.tag != Protobuf::FieldInfo::TAG_LENGTH) { m_Error = true; return Protobuf::ACT_SKIP; }", file=buf)
+        else:
+            print ("if (aField.tag == Protobuf::FieldInfo::TAG_LENGTH) { m_Error = true; return Protobuf::ACT_SKIP; }", file=buf)
+
         enc  = f", {self.encoding}" if self.encoding else ''
         cp = "sTmp"
         if self.proto_type in localEnums:
@@ -144,9 +150,9 @@ class Entry:
             self.cxx_type = "uint32_t" # Enumerator constants must be in the range of a 32-bit integer.
 
         if self._customType() and self.kind == "repeated":
-            print (f"Protobuf::Buffer sTmpBuf; aWalker->read(sTmpBuf); {self.name}.emplace_back(m_Pool); {self.name}.back().ParseFromString(sTmpBuf);", file=buf)
+            print (f"Protobuf::Buffer sTmpBuf; aWalker->read(sTmpBuf); {self.name}.emplace_back(m_Pool); {self.name}.back().ParseFromString(sTmpBuf); m_Error |= {self.name}.back().m_Error;", file=buf)
         elif self._customType():
-            print (f"Protobuf::Buffer sTmpBuf; aWalker->read(sTmpBuf); {self.name}.emplace(m_Pool); {self.name}->ParseFromString(sTmpBuf);", file=buf)
+            print (f"Protobuf::Buffer sTmpBuf; aWalker->read(sTmpBuf); {self.name}.emplace(m_Pool); {self.name}->ParseFromString(sTmpBuf); m_Error |= {self.name}->m_Error;", file=buf)
         elif self.pmr and self.kind == "repeated":
             print (f"{self.name}.emplace_back({self.cxx_type}(m_Pool)); aWalker->read({self.name}.back());", file=buf)
         elif self.pmr:
@@ -213,6 +219,7 @@ def step_message(i):
             localTypeNames.append(messageName)
             print (f"struct {messageName} {{")
             print (f"std::pmr::memory_resource* m_Pool;") # FIXME: create only if really used
+            print ("bool m_Error {false};")
         elif x.data == "entry":
             e = Entry(x)
             print (e.make_decl())
