@@ -6,10 +6,32 @@
 #include <Multi.hpp>
 #include <threads/Periodic.hpp> // for sleep
 #include <time/Meter.hpp>
+#include <unsorted/Process.hpp>
+#include <chrono>
+using namespace std::chrono_literals;
 
-// g++ test.cpp -I. -lboost_unit_test_framework -lcurl
+namespace bp = boost::process;
+class WithServer
+{
+    bp::ipstream m_Stream;
+    bp::child m_Server;
+public:
+    WithServer()
+    : m_Server(Util::Spawn(bp::search_path("httpd.py", {".",".."}), bp::std_in.close(), bp::std_out > bp::null, bp::std_err > m_Stream))
+    {
+        BOOST_TEST_MESSAGE("server running as " << m_Server.id());
+        bool sReady = false;
+        std::string sLine;
+        while (!sReady and m_Server.running() and std::getline(m_Stream, sLine) and !sLine.empty())
+        {
+            BOOST_TEST_MESSAGE(sLine);
+            if (std::string::npos != sLine.find("Bus STARTED"))
+                sReady = true;
+        }
+    }
+};
 
-BOOST_AUTO_TEST_SUITE(Curl)
+BOOST_FIXTURE_TEST_SUITE(Curl, WithServer)
 BOOST_AUTO_TEST_CASE(Basic)
 {
     Curl::Client::Params sParams;
@@ -103,7 +125,7 @@ BOOST_AUTO_TEST_CASE(Mass)
     // run against nginx/apache. cherry py is slow
     Time::Meter sMeter;
     auto spawn = [&sDone, &sClient](){
-        sClient.GET("http://127.0.0.1:80/local.html", [&sDone](Curl::Multi::Result&& aResult){
+        sClient.GET("http://127.0.0.1:2080/local.html", [&sDone](Curl::Multi::Result&& aResult){
             try {
                 const auto sResult = aResult.get();
                 BOOST_CHECK_EQUAL(sResult.first, 200);

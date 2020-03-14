@@ -2,7 +2,7 @@ project('curl', 'cpp', version : '0.1')
 
 includes = include_directories('..')
 add_project_arguments('-ggdb', '-O0', '-std=c++17', language: 'cpp')
-boost     = dependency('boost', modules : ['unit_test_framework', 'system'])
+boost     = dependency('boost', modules : ['unit_test_framework', 'system', 'filesystem'])
 threads   = dependency('threads')
 curl      = dependency('libcurl')
 

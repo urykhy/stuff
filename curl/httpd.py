@@ -21,7 +21,7 @@ conf = {
        'tools.auth_basic.on': True,
        'tools.auth_basic.realm': 'localhost',
        'tools.auth_basic.checkpassword': validate_password,
-    }
+    },
 }
 
 class App(object):
@@ -69,7 +69,3 @@ class App(object):
 
 if __name__ == '__main__':
     cherrypy.quickstart(App(), '/', conf)
-else:
-    cherrypy.config.update({'environment': 'embedded'})
-    application = cherrypy.Application(App(), script_name=None, config=None)
-
