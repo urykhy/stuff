@@ -31,4 +31,7 @@ message xtest {
     optional float   f32 = 3; // fixed, float32
     repeated uint32  packed_list = 4 [packed = true]; // test packed
     optional bytes   binary = 2042; // test large id
+
+    optional fixed64 i64 = 10; // fixed
+    optional sint64  s64 = 11; // zigzag
 }

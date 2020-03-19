@@ -84,23 +84,46 @@ BOOST_AUTO_TEST_CASE(xdecode)
 {
     GOOGLE_PROTOBUF_VERIFY_VERSION;
 
-    tutorial::xtest sMessage;
-    sMessage.set_i32(123);  // fixed
-    sMessage.set_s32(-45);  // zz
-    sMessage.set_f32(-4.6); // fixed float
+    auto xTest = [](auto p, auto v)
+    {
+        tutorial::xtest sMessage;
+        p(sMessage);
 
-    std::string sBuf;
-    sMessage.SerializeToString(&sBuf);
+        std::string sBuf;
+        sMessage.SerializeToString(&sBuf);
+        Protobuf::Buffer sInput(sBuf);
+        Protobuf::Walker sWalker(sInput);
+        v(sWalker);
+    };
 
-    Protobuf::Buffer sInput(sBuf);
-    Protobuf::Walker sWalker(sInput);
+    xTest([](auto& x){ x.set_i32(0); },
+          [](auto& x){ BOOST_CHECK_EQUAL(1, x.readTag().id); uint32_t tmp = 0; x.read(tmp, Protobuf::Walker::FIXED); BOOST_CHECK_EQUAL(tmp, 0); });
+    xTest([](auto& x){ x.set_i32(UINT32_MAX); },
+          [](auto& x){ BOOST_CHECK_EQUAL(1, x.readTag().id); uint32_t tmp = 0; x.read(tmp, Protobuf::Walker::FIXED); BOOST_CHECK_EQUAL(tmp, UINT32_MAX); });
 
-    uint32_t i32 = 0;
-    int32_t  s32 = 0;
-    float    f32 = 0;
-    const auto sTag1 = sWalker.readTag(); BOOST_CHECK_EQUAL(1, sTag1.id); sWalker.read(i32, Protobuf::Walker::FIXED); BOOST_CHECK_EQUAL(sMessage.i32(), i32);
-    const auto sTag2 = sWalker.readTag(); BOOST_CHECK_EQUAL(2, sTag2.id); sWalker.read(s32, Protobuf::Walker::ZIGZAG); BOOST_CHECK_EQUAL(sMessage.s32(), s32);
-    const auto sTag3 = sWalker.readTag(); BOOST_CHECK_EQUAL(3, sTag3.id); sWalker.read(f32); BOOST_CHECK_EQUAL(sMessage.f32(), f32);
+    xTest([](auto& x){ x.set_s32(0); },
+          [](auto& x){ BOOST_CHECK_EQUAL(2, x.readTag().id); int32_t tmp = 0; x.read(tmp, Protobuf::Walker::ZIGZAG); BOOST_CHECK_EQUAL(tmp, 0); });
+    xTest([](auto& x){ x.set_s32(-450); },
+          [](auto& x){ BOOST_CHECK_EQUAL(2, x.readTag().id); int32_t tmp = 0; x.read(tmp, Protobuf::Walker::ZIGZAG); BOOST_CHECK_EQUAL(tmp, -450); });
+    xTest([](auto& x){ x.set_s32(INT32_MAX); },
+          [](auto& x){ BOOST_CHECK_EQUAL(2, x.readTag().id); int32_t tmp = 0; x.read(tmp, Protobuf::Walker::ZIGZAG); BOOST_CHECK_EQUAL(tmp, INT32_MAX); });
+    xTest([](auto& x){ x.set_s32(INT32_MIN); },
+          [](auto& x){ BOOST_CHECK_EQUAL(2, x.readTag().id); int32_t tmp = 0; x.read(tmp, Protobuf::Walker::ZIGZAG); BOOST_CHECK_EQUAL(tmp, INT32_MIN); });
+
+    xTest([](auto& x){ x.set_f32(-4.6); },
+          [](auto& x){ BOOST_CHECK_EQUAL(3, x.readTag().id); float tmp = 0; x.read(tmp); BOOST_CHECK_CLOSE(tmp, -4.6, 0.001); });
+
+    xTest([](auto& x){ x.set_i64(0); },
+          [](auto& x){ BOOST_CHECK_EQUAL(10, x.readTag().id); uint64_t tmp = 0; x.read(tmp, Protobuf::Walker::FIXED); BOOST_CHECK_EQUAL(tmp, 0); });
+    xTest([](auto& x){ x.set_i64(UINT64_MAX); },
+          [](auto& x){ BOOST_CHECK_EQUAL(10, x.readTag().id); uint64_t tmp = 0; x.read(tmp, Protobuf::Walker::FIXED); BOOST_CHECK_EQUAL(tmp, UINT64_MAX); });
+
+    xTest([](auto& x){ x.set_s64(0); },
+          [](auto& x){ BOOST_CHECK_EQUAL(11, x.readTag().id); int64_t tmp = 0; x.read(tmp, Protobuf::Walker::ZIGZAG); BOOST_CHECK_EQUAL(tmp, 0); });
+    xTest([](auto& x){ x.set_s64(INT64_MAX); },
+          [](auto& x){ BOOST_CHECK_EQUAL(11, x.readTag().id); int64_t tmp = 0; x.read(tmp, Protobuf::Walker::ZIGZAG); BOOST_CHECK_EQUAL(tmp, INT64_MAX); });
+    xTest([](auto& x){ x.set_s64(INT64_MIN); },
+          [](auto& x){ BOOST_CHECK_EQUAL(11, x.readTag().id); int64_t tmp = 0; x.read(tmp, Protobuf::Walker::ZIGZAG); BOOST_CHECK_EQUAL(tmp, INT64_MIN); });
 }
 BOOST_AUTO_TEST_CASE(generated)
 {

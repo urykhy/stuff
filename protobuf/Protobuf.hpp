@@ -188,7 +188,7 @@ namespace Protobuf
             {
             case VARIANT: aDest = readVarInt<T>(); break;
             case FIXED  : readFixed(aDest); break;
-            case ZIGZAG : aDest = readVarInt<T>(); aDest = ZigZagDecode(aDest); break;
+            case ZIGZAG : aDest = ZigZagDecode(readVarInt<typename std::make_unsigned<T>::type>()); break;
             }
         }
 
