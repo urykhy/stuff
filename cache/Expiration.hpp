@@ -17,6 +17,8 @@ namespace Cache
             K key;
             V value;
             time_t ts;
+
+            // tags
             struct _key {};
             struct _ts {};
 
@@ -43,7 +45,7 @@ namespace Cache
 
         const V* Get(const K& k) const
         {
-            auto& ks = get<0>(m_Store);
+            auto& ks = get<typename Rec::_key>(m_Store);
             auto it = ks.find(k);
             if ( it != ks.end() )
             {
@@ -57,7 +59,7 @@ namespace Cache
         {
             if (size() + 1 > m_Max)
             {
-                auto& ks = get<1>(m_Store);
+                auto& ks = get<typename Rec::_ts>(m_Store);
                 auto it = ks.begin();
                 ks.erase(it);
             }
