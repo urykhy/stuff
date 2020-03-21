@@ -15,8 +15,8 @@ namespace Threads
         typedef std::unique_lock<std::mutex> Lock;
 
         std::string                   m_Buffer;
-        Handler                       m_Next;
         boost::asio::deadline_timer   m_WriteTimer;
+        Handler                       m_Next;
 
         void write_collected()
         {

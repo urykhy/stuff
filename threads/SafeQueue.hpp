@@ -31,6 +31,7 @@ namespace Threads
         Q          m_List;
         std::condition_variable m_Cond;
         bool       m_Stop = false;
+        uint64_t   m_Counter = 0;
 
         void wakeup_one() { m_Cond.notify_one(); }
         void wakeup_all() { m_Cond.notify_all(); }
@@ -50,6 +51,7 @@ namespace Threads
         {
             Lock lk(m_Mutex);
             m_List.push(aItem);
+            m_Counter++;
             wakeup_one();
         }
 
@@ -63,6 +65,12 @@ namespace Threads
         {
             Lock lk(m_Mutex);
             return m_List.empty();
+        }
+
+        uint64_t count() const
+        {
+            Lock lk(m_Mutex);
+            return m_Counter;
         }
 
         std::optional<Node> try_get()
@@ -107,6 +115,7 @@ namespace Threads
     {
         const std::function<void(T& t)> m_Handler;
         SafeQueue<T, Q> m_Queue;
+        std::atomic<uint64_t> m_Done{0};
     public:
         template<class F> SafeQueueThread(F aHandler)
         : m_Handler(aHandler) { }
@@ -118,45 +127,16 @@ namespace Threads
                 {
                     T sItem;
                     if (m_Queue.wait(sItem, aCheck))
+                    {
                         m_Handler(sItem);
+                        m_Done++;
+                    }
                 }
             }, count);
             aGroup.at_stop([this](){ m_Queue.stop(); });
         }
 
         void insert(const T& aItem) { m_Queue.insert(aItem); }
-        bool idle() const           { return m_Queue.idle(); }
-    };
-
-    // queue to process tasks at specific moments
-    template<class T>
-    class DelayQueueThread
-    {
-        const std::function<void(T& t)> m_Handler;
-        struct Node {
-            time_t moment = 0;
-            T data;
-        };
-        struct NodeCmp {
-            bool operator()(const Node& l, const Node& r) const {
-                return l.moment > r.moment;
-            }
-        };
-        using Q = std::priority_queue<Node, std::vector<Node>, NodeCmp>;
-        SafeQueueThread<Node, Q> m_Queue;
-    public:
-        template<class F> DelayQueueThread(F aHandler)
-        : m_Handler(aHandler)
-        , m_Queue([this](auto& x){ m_Handler(x.data); }) {}
-
-        void start(Group& aGroup, unsigned count = 1)
-        {
-            m_Queue.start(aGroup, count, [this](const auto& x) -> bool {
-                return x.moment < ::time(nullptr);
-            });
-        }
-
-        void insert(time_t ts, const T& aItem) { m_Queue.insert({ts + ::time(nullptr), aItem}); }
-        bool idle() const                      { return m_Queue.idle(); }
+        bool idle() const           { return m_Done == m_Queue.count(); }
     };
 }

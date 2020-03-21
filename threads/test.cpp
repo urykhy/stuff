@@ -10,6 +10,7 @@
 #include "Collect.hpp"
 #include "Asio.hpp"
 #include "WaitGroup.hpp"
+#include "DelayQueue.hpp"
 #include "OrderedWorker.hpp"
 
 // g++ test.cpp -I. -I.. -lboost_system -lboost_unit_test_framework -pthread
