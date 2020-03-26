@@ -83,6 +83,11 @@ namespace Udp
             return checkCall([&](){ return ::sendto(m_Fd, aPtr, aSize, 0, (struct sockaddr *)&m_Peer, sLen); }, "send");
         }
 
+        ssize_t write(const std::string& aData)
+        {
+            return write(aData.data(), aData.size());
+        }
+
         ssize_t write(const Msg& aMessage)
         {
             socklen_t sLen = sizeof(aMessage.addr);

@@ -1,118 +1,118 @@
 #pragma once
 
-#include <mutex>
 #include <atomic>
-#include <string>
 #include <time.h>
+
+#include "Manager.hpp"
+#include "Histogramm.hpp"
 
 namespace Stat
 {
-
-    struct Count
+    template<class T = uint64_t>
+    class Counter : public MetricFace
     {
-        std::atomic<size_t> value {0};
-        void update(size_t v) { value += v; }
-        void set(size_t v) { value = v; }
-        void format(std::ostream& os, const std::string& prefix) const { os << prefix << ' ' << value << ' ' << time(0) << std::endl; }
+        std::atomic<T> m_Value{0};
+    public:
+
+        Counter(const std::string& aGraphiteName, const std::string& aPrometheusName)
+        : MetricFace(aGraphiteName, aPrometheusName)
+        { }
+
+        void tick() { m_Value ++; }
+        void inc(T v) { m_Value += v; }
+        void set(T v) { m_Value = v; }
+
+        std::string format() const override { return std::to_string(m_Value); }
     };
 
-    // flags: RPS, AGO
-    struct Time
+    class Age : public MetricFace
     {
-        enum FLAGS {RPS = 1, AGO};
-        const size_t flags = 0;
+        std::atomic<time_t> m_Value {::time(nullptr)};
+    public:
 
-        std::mutex mutex;
-        using Lock = std::unique_lock<std::mutex>;
-        double min = 0;
-        double max = 0;
-        double time = 0;
-        size_t count = 0;
-        time_t last = 0;
+        Age(const std::string& aGraphiteName, const std::string& aPrometheusName)
+        : MetricFace(aGraphiteName, aPrometheusName)
+        { }
 
-        Time() {}
-        Time(FLAGS f) : flags(f) {}
+        void set(time_t v) { m_Value = v; }
 
-        void update(double v) { Lock lk(mutex); count++; time+=v; min = (min == 0 ? v : std::min(min, v));  max = std::max(max, v); }
-        void set(double v) { Lock lk(mutex);  count=1; time = v;  min = v;  max = v; }
-
-        void format(std::ostream& os, const std::string& prefix)
+        std::string format() const override
         {
-            Lock lk(mutex);
-            time_t now = ::time(0);
-            if (flags == 0)
-                os << prefix << ' ' << time << ' ' << now << std::endl;
-            else if (flags == AGO)
-                os << prefix << "_ago" << ' ' << now - time << ' ' << now << std::endl;
-            else if (flags == RPS)
-            {
-                double avg = count > 0 ? time/(float)count : 0;
-                os << prefix << "_min" << ' ' << min << ' ' << now << std::endl;
-                os << prefix << "_max" << ' ' << max << ' ' << now << std::endl;
-                os << prefix << "_avg" << ' ' << avg << ' ' << now << std::endl;
-                auto ela = now - last;
-                if (last > 0 and ela > 0)
-                    os << prefix << "_rps" << ' ' << count / float(ela) << ' ' << now << std::endl;
-                else
-                    os << prefix << "_rps" << ' ' << count << ' ' << now << std::endl;
-                last = now;
-                clear();
-            }
-        }
-        void clear() { min = 0; max = 0; time = 0; count = 0; }
-    };
-
-    // no flags
-    struct Bool
-    {
-        std::atomic<bool> flag {0};
-
-        void set() { flag = true; }
-        void clear() { flag = false; }
-        void format(std::ostream& os, const std::string& prefix) const {
-            os << prefix << ' ' << flag << ' ' << time(0) << std::endl;
+            const time_t sNow = ::time(nullptr);
+            return sNow > m_Value ? std::to_string(sNow - m_Value) : "0";
         }
     };
 
-#ifdef STAT_ENABLE_TAGS
-
-    template<class T> struct dependent_false : std::false_type {};
-
-    template <typename T>
-    void set(size_t v)
+    class Time : public ComplexFace
     {
-        if constexpr (std::is_same_v<Stat::Count, typename T::S>
-                   or std::is_same_v<Stat::Time, typename T::S>
-                   or std::is_same_v<Stat::Bool, typename T::S>)
-            T::m_Element->set(v);
-        else
-            static_assert(dependent_false<T>::value);
-    }
-    template <typename T>
-    void update(size_t v)
-    {
-        if constexpr (std::is_same_v<Stat::Count, typename T::S>
-                   or std::is_same_v<Stat::Time, typename T::S>)
-            T::m_Element->update(v);
-        else
-            static_assert(dependent_false<T>::value);
-    }
-    template <typename T>
-    void clear()
-    {
-        if constexpr (std::is_same_v<Stat::Bool, typename T::S>)
-            T::m_Element->clear();
-        else
-            static_assert(dependent_false<T>::value);
-    }
+        using Lock = std::unique_lock<std::mutex>;
+        mutable std::mutex m_Mutex;
 
-#define STAT_DECLARE_TAG(element, tag_name)                     \
-    struct tag_name {                                           \
-        using S = decltype(element);                            \
-        constexpr static S* m_Element = &element;               \
-    };                                                          \
-    constexpr decltype(element)* tag_name::m_Element
+        using H = Histogramm<10000>;    // 10K buckets with 10 second max. 1ms accuracy
+        H m_Data1;
+        H m_Data2;
+        bool m_Actual1 = true;
 
-#endif
+        Counter<float> m_50;
+        Counter<float> m_90;
+        Counter<float> m_99;
+        Counter<float> m_00;
 
+        std::string graphiteName(const std::string& aName, const std::string& aTail) const
+        {
+            if (aName.empty())
+                return aName;
+            return aName + '.' + aTail;
+        }
+
+        std::string prometheusName(const std::string& aName, const std::string& aTag) const
+        {
+            if (aName.empty())
+                return aName;
+            if (aName.back() != '}')
+                return aName + "{" + aTag + "}";
+
+            // alreay have tags
+            auto sName = aName;
+            sName.pop_back();
+            return sName + ", " + aTag + "}";
+        }
+
+    public:
+
+        Time(const std::string& aGraphiteName, const std::string& aPrometheusName, float aMax = 10)
+        : m_Data1(aMax)
+        , m_Data2(aMax)
+        , m_50(graphiteName(aGraphiteName, "quantile_50"),  prometheusName(aPrometheusName, "quantile=\"0.5\""))
+        , m_90(graphiteName(aGraphiteName, "quantile_90"),  prometheusName(aPrometheusName, "quantile=\"0.9\""))
+        , m_99(graphiteName(aGraphiteName, "quantile_99"),  prometheusName(aPrometheusName, "quantile=\"0.99\""))
+        , m_00(graphiteName(aGraphiteName, "quantile_100"), prometheusName(aPrometheusName, "quantile=\"1.0\""))
+        { }
+
+        void account(float v)
+        {
+            auto sBucket = m_Data1.bucket(v);
+            Lock lk(m_Mutex);
+            m_Data1.tick(sBucket);
+            m_Data2.tick(sBucket);
+        }
+
+        void update() override
+        {
+            const std::array<float, 4> m_Prob{0.5,0.9,0.99,1.0}; // 1.0 must be last one
+            Lock lk(m_Mutex);
+            H& sActual = m_Actual1 ? m_Data1 : m_Data2;
+            sActual.quantile(m_Prob, [this](unsigned aIndex, float aValue){
+                switch (aIndex)
+                {
+                case 0: m_50.set(aValue); break;
+                case 1: m_90.set(aValue); break;
+                case 2: m_99.set(aValue); break;
+                case 3: m_00.set(aValue); break;
+                }
+            });
+            sActual.clear();
+            m_Actual1 = !m_Actual1;
+        }
+    };
 }

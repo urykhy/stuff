@@ -8,6 +8,11 @@ namespace Time
 {
     struct time_val : public ::timeval
     {
+        time_val(const ::timeval& t)
+        {
+            tv_sec = t.tv_sec;
+            tv_usec = t.tv_usec;
+        }
         time_val(time_t t = 0, suseconds_t us = 0) {
             tv_sec = t;
             tv_usec = us;

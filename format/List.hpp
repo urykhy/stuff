@@ -1,9 +1,15 @@
 #pragma once
 
+#include <type_traits>
+
 namespace Format
 {
     template<class L, class F>
-    std::ostream& List(std::ostream& aStream, const L& aList, const F& aFunc, const std::string& aSeparator = ", ")
+    typename std::enable_if<
+        std::is_invocable<F, typename L::value_type>::value
+      , std::ostream&
+    >::type
+    List(std::ostream& aStream, const L& aList, const F& aFunc, const std::string& aSeparator = ", ")
     {
         bool aSecond = false;
         for (const auto& x : aList)

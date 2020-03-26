@@ -15,6 +15,18 @@ namespace File
 
     using FileList = std::vector<std::string>;
 
+    size_t CountDir(const std::string& aPath)
+    {
+        namespace fs = boost::filesystem;
+        uint64_t sCount = 0;
+
+        const fs::directory_iterator sEnd;
+        for (fs::directory_iterator sIter(aPath) ; sIter != sEnd ; ++sIter)
+            sCount++;
+
+        return sCount;
+    }
+
     FileList ReadDir(const std::string& aPath, const std::string& aExt)
     {
         namespace fs = boost::filesystem;
@@ -39,10 +51,10 @@ namespace File
         glob_t sGlob;
         Util::Raii sCleanup([&sGlob](){ globfree(&sGlob); });
 
-        if ( 0 != glob(aPattern.c_str(), GLOB_ERR | GLOB_MARK | GLOB_TILDE_CHECK, nullptr, &sGlob))
+        if ( 0 != ::glob(aPattern.c_str(), GLOB_ERR | GLOB_MARK | GLOB_TILDE_CHECK, nullptr, &sGlob))
             throw std::runtime_error("File::Glob failed");
 
-        for (int i = 0; i < sGlob.gl_pathc; i++)
+        for (unsigned i = 0; i < sGlob.gl_pathc; i++)
             sResult.push_back(sGlob.gl_pathv[i]);
 
         return sResult;
