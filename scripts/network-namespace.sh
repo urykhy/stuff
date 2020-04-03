@@ -24,4 +24,4 @@ ip netns exec $NAME iptables -A INPUT -p udp -m multiport --dports 6771,6881 -j 
 ip netns exec $NAME iptables -A INPUT -j REJECT
 
 # ip netns exec protonvpn /bin/bash
-ip netns exec $NAME /etc/init.d/openvpn start protonvpn
+ip netns exec $NAME /etc/init.d/openvpn start proton
