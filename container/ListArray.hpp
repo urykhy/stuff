@@ -6,10 +6,11 @@
 namespace Container
 {
     template<class T>
-    class ListArray
+    struct ListArray
     {
         using Array = std::vector<T>;
         using List = std::list<Array>;
+    private:
 
         List m_List;
         const size_t m_Size;
@@ -31,6 +32,9 @@ namespace Container
 
         void clear() { m_List.clear(); }
         size_t size() const { return m_List.empty() ? 0 : m_Size * (m_List.size() - 1) + m_List.back().size(); }
+
+        template<class F>
+        void for_chunks(F f) const { for(auto& x : m_List) f(x); }
 
         class const_iterator
         {

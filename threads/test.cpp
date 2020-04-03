@@ -13,6 +13,9 @@
 #include "DelayQueue.hpp"
 #include "OrderedWorker.hpp"
 
+#include "MapReduce.hpp"
+#include <container/ListArray.hpp>
+
 // g++ test.cpp -I. -I.. -lboost_system -lboost_unit_test_framework -pthread
 using namespace std::chrono_literals;
 
@@ -129,5 +132,25 @@ BOOST_AUTO_TEST_CASE(sw)
 
     std::this_thread::sleep_for(500ms);
     sGroup.wait();
+}
+BOOST_AUTO_TEST_CASE(map_reduce)
+{
+    using C = Container::ListArray<unsigned>;
+    C sList(100);
+    for (unsigned i = 0; i <= 1000; i++)
+        sList.push_back(i);
+
+    unsigned sResult = Threads::MapReduce<unsigned>(sList, [](const auto t){
+        unsigned sSum = 0;
+        for (auto& x : t)
+        {
+            std::this_thread::sleep_for(1ms);
+            sSum += x;
+        }
+        return sSum;
+    }, [](auto& sSum, auto sData){
+        sSum += sData;
+    });
+    BOOST_CHECK_EQUAL(500500, sResult);
 }
 BOOST_AUTO_TEST_SUITE_END()

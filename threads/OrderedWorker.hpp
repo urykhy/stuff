@@ -30,15 +30,15 @@ namespace Threads
     public:
 
         using Handler = std::function<void(T&)>;
-        using Next    = std::function<void(T&)>;
+        using Joiner  = std::function<void(T&)>;
 
-        OrderedWorker(Handler aHandler, Next aNext)
+        OrderedWorker(Handler aHandler, Joiner aJoiner)
         : m_Worker([this, aHandler](Task& t){
             aHandler(t.data);
             m_Join.insert(std::move(t));
         })
-        , m_Join([this, aNext](Task& t){
-            aNext(t.data);
+        , m_Join([this, aJoiner](Task& t){
+            aJoiner(t.data);
             m_NextJoin++;
         })
         { }
