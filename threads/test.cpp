@@ -16,6 +16,8 @@
 #include "MapReduce.hpp"
 #include <container/ListArray.hpp>
 
+#include "ForEach.hpp"
+
 // g++ test.cpp -I. -I.. -lboost_system -lboost_unit_test_framework -pthread
 using namespace std::chrono_literals;
 
@@ -150,6 +152,20 @@ BOOST_AUTO_TEST_CASE(map_reduce)
         return sSum;
     }, [](auto& sSum, auto sData){
         sSum += sData;
+    });
+    BOOST_CHECK_EQUAL(500500, sResult);
+}
+BOOST_AUTO_TEST_CASE(for_each)
+{
+    std::list<unsigned> sList;
+    for (unsigned i = 0; i <= 1000; i++)
+        sList.push_back(i);
+
+    std::atomic_uint32_t sResult = 0;
+    Threads::ForEach(sList, [](unsigned a){ return a; }, [&sResult](unsigned a) mutable
+    {
+        std::this_thread::sleep_for(1ms);
+        sResult += a;
     });
     BOOST_CHECK_EQUAL(500500, sResult);
 }
