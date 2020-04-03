@@ -14,8 +14,7 @@ case "$1" in
             # create ipset rules for tor
             ipset create TOR hash:net
             ipset add TOR 195.82.146.0/24 # rutracker, web
-            ipset add TOR 209.99.40.227   # booktracker
-            ipset add TOR 46.21.250.43    # booktracker
+            ipset add TOR 45.82.70.214    # booktracker
             ipset add TOR 5.79.86.208     # coollib
             ipset add TOR 81.17.19.227    # flibusta
             ipset add TOR 104.24.106.53   # kinozal
@@ -42,6 +41,8 @@ case "$1" in
             ipset add TOR 104.31.78.144   # rutor
             ipset add TOR 185.176.192.248 # rutor
             ipset add TOR 91.132.60.14    # rutor
+            ipset add TOR 185.70.41.130   # mail.protonmail.com
+            ipset add TOR 185.70.41.35    # protonmail.com
 
             # privoxy
             ipset create PROXY hash:net
@@ -76,13 +77,19 @@ case "$1" in
 
             # IPv4
             # forward
-            $ipt -A FORWARD -i tun* -j REJECT # drop from open vpn networks
+            $ipt -A FORWARD -i tun*    -j REJECT # drop from open vpn networks
+            $ipt -A FORWARD -i mru     -j REJECT # drop from open vpn networks
+            $ipt -A FORWARD -i proton  -j REJECT # drop from open vpn networks
+            $ipt -A FORWARD -i cameron -j REJECT # drop from open vpn networks
             $ipt -P FORWARD ACCEPT
 
             # input
             $ipt -A INPUT -m conntrack --ctstate established,related -j ACCEPT
             $ipt -A INPUT -m conntrack --ctstate invalid -j REJECT
-            $ipt -A INPUT -i tun* -m conntrack --ctstate new -j REJECT # drop from open vpn networks
+            $ipt -A INPUT -i tun*    -m conntrack --ctstate new -j REJECT # drop from open vpn networks
+            $ipt -A INPUT -i mru     -m conntrack --ctstate new -j REJECT # drop from open vpn networks
+            $ipt -A INPUT -i proton  -m conntrack --ctstate new -j REJECT # drop from open vpn networks
+            $ipt -A INPUT -i cameron -m conntrack --ctstate new -j REJECT # drop from open vpn networks
             # allow good local
             $ipt -A INPUT -i lo -j ACCEPT
             $ipt -A INPUT -p icmp -j ACCEPT
@@ -113,10 +120,10 @@ case "$1" in
             #$ipt -t nat -A PREROUTING -i br0 -p tcp --dport 80 -j REDIRECT --to-ports 3128
 
             # redirect to local caddy on 3080 port
-            $ipt -t nat -A PREROUTING -p tcp --dport 80  -d 192.168.1.70          -j REDIRECT --to-ports 3080
-            $ipt -t nat -A OUTPUT     -p tcp --dport 80  -d 127.0.0.1,10.103.10.3 -j REDIRECT --to-ports 3080 # catch access from localhost
-            $ipt -t nat -A PREROUTING -p tcp --dport 443 -d 192.168.1.70          -j REDIRECT --to-ports 3081
-            $ipt -t nat -A OUTPUT     -p tcp --dport 443 -d 127.0.0.1,10.103.10.3 -j REDIRECT --to-ports 3081 # catch access from localhost
+            #$ipt -t nat -A PREROUTING -p tcp --dport 80  -d 192.168.1.70          -j REDIRECT --to-ports 3080
+            #$ipt -t nat -A OUTPUT     -p tcp --dport 80  -d 127.0.0.1,10.103.10.3 -j REDIRECT --to-ports 3080 # catch access from localhost
+            #$ipt -t nat -A PREROUTING -p tcp --dport 443 -d 192.168.1.70          -j REDIRECT --to-ports 3081
+            #$ipt -t nat -A OUTPUT     -p tcp --dport 443 -d 127.0.0.1,10.103.10.3 -j REDIRECT --to-ports 3081 # catch access from localhost
 
             #$ipt -t nat -A PREROUTING -i wlan1 -p tcp --dport 81 -j DNAT --to-destination 10.103.10.1:80 # nextcloud
 
