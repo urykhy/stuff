@@ -66,7 +66,7 @@ BOOST_AUTO_TEST_CASE(real)
 
     Threads::Group sGroup;
     Stat::start(sGroup, sConfig);
-    sAsio.start(1, sGroup);
+    sAsio.start(sGroup);
 
     sleep(600);
 }

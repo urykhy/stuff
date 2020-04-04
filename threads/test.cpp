@@ -55,7 +55,7 @@ BOOST_AUTO_TEST_CASE(collect)
 {
     Threads::Group tg;
     Threads::Asio q;
-    q.start(1, tg);
+    q.start(tg);
     Threads::Collect c(q.service(), [](std::string&& a){
         BOOST_CHECK_EQUAL(a, "123asdiop");
     });
@@ -74,7 +74,7 @@ BOOST_AUTO_TEST_CASE(wg)
 {
     Threads::Group tg;
     Threads::Asio q;
-    q.start(1, tg);
+    q.start(tg);
 
     int counter = 0;
     Threads::WaitGroup wg(10);

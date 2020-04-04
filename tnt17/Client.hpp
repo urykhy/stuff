@@ -68,7 +68,7 @@ namespace tnt17
 
         void start()
         {
-            m_Strand.get_io_service().post(resume_reader());
+            m_Strand.post(resume_reader());
         }
 
         bool is_alive() { return m_State.is_alive(); }
@@ -144,7 +144,7 @@ namespace tnt17
         template<class X> auto wrap(X&& x) -> decltype(m_Strand.wrap(std::move(x))) { return m_Strand.wrap(std::move(x)); }
         template<class X> void post(X&& x) { m_Strand.post(std::move(x)); }
 
-        boost::asio::io_service& io_service() { return m_Strand.get_io_service(); }
+        boost::asio::io_service& io_service() { return m_Strand.context(); }
 
     private:
 

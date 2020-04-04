@@ -49,7 +49,7 @@ BOOST_AUTO_TEST_CASE(simple)
 {
     Threads::Asio  sLoop;
     Threads::Group sGroup;
-    sLoop.start(4, sGroup); // 4 asio threads
+    sLoop.start(sGroup, 4); // 4 asio threads
 
     const auto sAddr = tnt17::endpoint("127.0.0.1", 2090);
     using C = tnt17::Client<DataEntry>;
@@ -78,7 +78,7 @@ BOOST_AUTO_TEST_CASE(fetch)
 {
     Threads::Asio  sLoop;
     Threads::Group sGroup;
-    sLoop.start(4, sGroup); // 4 asio threads
+    sLoop.start(sGroup, 4); // 4 asio threads
 
     const auto sAddr = tnt17::endpoint("127.0.0.1", 2090);
     using C = tnt17::Client<DataEntry>;
@@ -123,7 +123,7 @@ BOOST_AUTO_TEST_CASE(cache)
 {
     Threads::Asio  sLoop;
     Threads::Group sGroup;
-    sLoop.start(1, sGroup);
+    sLoop.start(sGroup);
 
     const auto sAddr = tnt17::endpoint("127.0.0.1", 2090);
     auto sClient = tnt17::cache::Engine(sLoop.service(), sAddr, 513 /*space id*/);

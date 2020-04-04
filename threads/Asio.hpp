@@ -9,7 +9,7 @@ namespace Threads
     {
         asio::io_service io_service;
     public:
-        void start(size_t n, Group& tg) {
+        void start(Group& tg, size_t n = 1) {
             tg.start([this]{
                 asio::io_service::work work(io_service);
                 io_service.run();

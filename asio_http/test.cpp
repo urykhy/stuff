@@ -28,7 +28,7 @@ BOOST_AUTO_TEST_CASE(simple)
     Threads::Asio sAsio;
     Threads::Group sGroup;
     asio_http::startServer(sAsio, 2081, sRouter);
-    sAsio.start(1, sGroup);
+    sAsio.start(sGroup);
 
     std::this_thread::sleep_for(100ms);
 
