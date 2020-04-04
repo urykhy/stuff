@@ -89,7 +89,7 @@ BOOST_AUTO_TEST_CASE(wg)
     wg.wait();
     BOOST_CHECK_EQUAL(counter, 10);
 }
-BOOST_AUTO_TEST_CASE(sw)
+BOOST_AUTO_TEST_CASE(ordered)
 {
     struct Task {
         int duration;
