@@ -1,4 +1,4 @@
-project('httpd', 'cpp', version : '0.1', default_options : ['cpp_std=c++17'])
+project('http', 'cpp', version : '0.1', default_options : ['cpp_std=c++17'])
 add_languages('c')
 
 includes = include_directories('..')

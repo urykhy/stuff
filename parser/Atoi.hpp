@@ -24,6 +24,23 @@ namespace Parser
     }
 
     template<class T>
+    T Atoi8(const boost::string_ref aString)
+    {
+        T sResult = 0;
+
+        for (auto& x : aString)
+        {
+            if (x == '\0')
+                break;
+            if (x > '7' or x < '0')
+                throw NotNumber();
+            sResult = sResult * 8 + x - '0';
+        }
+
+        return sResult;
+    }
+
+    template<class T>
     T Atof(boost::string_ref aString)
     {
         T sResult = 0;
