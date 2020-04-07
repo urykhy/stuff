@@ -15,6 +15,8 @@ some information about stuff
 
 ### experiments:
 - aio - linux native async io
+- asio_http - asio http server and client
+- asio_mysqld - asio mysql server
 - avx - bit of simd
 - gzip - decompress archives
 - iconv - c++ wrapper for iconv
@@ -24,9 +26,10 @@ some information about stuff
 - msgpack - incomplete msgpack serialization
 - networking - epoll based networking
 - protobuf - fast protobuf parser with polymorphic allocator support
+- resource - embed binary data into elf, tar file for example.
 - rpc - simple rpc over udp
 - ssl - openssl wrapper
-- stats - graphite metrics proof of concept
+- stats - graphite/prometheus metrics proof of concept
 - time - cctz wrapper
 - utf8 - utf8 validator
 
