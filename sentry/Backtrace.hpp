@@ -1,6 +1,7 @@
 #pragma once
 
-#define BACKWARD_HAS_BFD 1
+//#define BACKWARD_HAS_BFD 1 - broken since binutils 2.33
+#define BACKWARD_HAS_DW 1
 #include "backward.hpp"
 
 namespace Sentry
