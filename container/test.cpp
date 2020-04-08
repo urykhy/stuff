@@ -51,7 +51,7 @@ BOOST_AUTO_TEST_CASE(ioc)
 BOOST_AUTO_TEST_SUITE(request_queue)
 BOOST_AUTO_TEST_CASE(timeout_on_get)
 {
-	container::RequestQueue<std::string> sQueue([](const std::string& aRequest){
+	container::RequestQueue<std::string> sQueue([](std::string& aRequest){
 		BOOST_CHECK_EQUAL(aRequest, "first");
 	});
 	sQueue.insert("first", 10);
@@ -60,24 +60,27 @@ BOOST_AUTO_TEST_CASE(timeout_on_get)
 }
 BOOST_AUTO_TEST_CASE(timeout_on_timer)
 {
-	container::RequestQueue<std::string> sQueue([](const std::string& aRequest){
+	container::RequestQueue<std::string> sQueue([](std::string& aRequest){
 		BOOST_CHECK_EQUAL(aRequest, "first");
 	});
-	sQueue.insert("first", 10);
-	std::this_thread::sleep_for(20ms);
+	sQueue.insert("first", 10);	// timeout is 10 ms
+	std::this_thread::sleep_for(5ms);
+	BOOST_CHECK_CLOSE((float)sQueue.eta(100), 5.0, 30);
+	std::this_thread::sleep_for(15ms);
 	sQueue.on_timer();
 	BOOST_CHECK_EQUAL(sQueue.empty(), true);
 	BOOST_CHECK_EQUAL(sQueue.size(), 0);
 	BOOST_CHECK_EQUAL((bool)sQueue.get(), false);
+	BOOST_CHECK_EQUAL(sQueue.eta(100), 100);
 }
 BOOST_AUTO_TEST_CASE(no_timeouts)
 {
-	container::RequestQueue<std::string> sQueue([](const std::string& aRequest){
+	container::RequestQueue<std::string> sQueue([](std::string& aRequest){
 		BOOST_CHECK(false);
 	});
-	sQueue.insert("first");
-	sQueue.insert("second");
-	sQueue.insert("third");
+	sQueue.insert("first", 10);
+	sQueue.insert("second", 10);
+	sQueue.insert("third", 10);
 	BOOST_CHECK_EQUAL(sQueue.empty(), false);
 	BOOST_CHECK_EQUAL(sQueue.size(), 3);
 	BOOST_CHECK_EQUAL(*sQueue.get(), "first");

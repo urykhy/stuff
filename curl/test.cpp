@@ -92,7 +92,7 @@ BOOST_AUTO_TEST_CASE(Async)
     Curl::Multi::Params sParams;
     Curl::Multi sClient(sParams);
     Threads::Group tg;
-    sClient.Start(tg);
+    sClient.start(tg);
 
     sClient.GET("http://127.0.0.1:8080/hello", [&ok](Curl::Multi::Result&& aResult){
         try {
@@ -110,6 +110,42 @@ BOOST_AUTO_TEST_CASE(Async)
     }
     BOOST_CHECK(ok);
 }
+BOOST_AUTO_TEST_CASE(InQueueTimeout)
+{
+    std::atomic_bool ok1{false};
+    std::atomic_bool ok2{false};
+
+    Curl::Multi::Params sParams;
+    sParams.max_connections = 1;
+    sParams.queue_timeout_ms = 1000;
+    Curl::Multi sClient(sParams);
+    Threads::Group tg;
+    sClient.start(tg);
+
+    sClient.GET("http://127.0.0.1:8080/slow", [&ok1](Curl::Multi::Result&& aResult){
+        try {
+            aResult.get();
+        } catch (const Curl::Client::Error& e) {
+            BOOST_REQUIRE_EQUAL(e.what(), "Timeout was reached");
+            ok1 = 1;
+        }
+    });
+
+    sClient.GET("http://127.0.0.1:8080/hello", [&ok2](Curl::Multi::Result&& aResult){
+        try {
+            aResult.get();
+        } catch (const Curl::Client::Error& e) {
+            BOOST_REQUIRE_EQUAL(e.what(), "timeout in queue");
+            ok2 = 1;
+        }
+    });
+
+    for (int i = 0; i < 50 and (!ok1 or !ok2); i++) {
+        Threads::sleep(0.1);
+    }
+    BOOST_CHECK_MESSAGE(ok1, "first call with request timeout");
+    BOOST_CHECK_MESSAGE(ok2, "second call in-queue timeout");
+}
 BOOST_AUTO_TEST_CASE(Mass)
 {
     Curl::Client::GlobalInit();
@@ -120,7 +156,7 @@ BOOST_AUTO_TEST_CASE(Mass)
     Curl::Multi::Params sParams;    // default 3 sec per request, 32 connections
     Curl::Multi sClient(sParams);
     Threads::Group tg;
-    sClient.Start(tg);
+    sClient.start(tg);
 
     // run against nginx/apache. cherry py is slow
     Time::Meter sMeter;

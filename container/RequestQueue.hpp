@@ -16,14 +16,14 @@ namespace container
     template<class V>
     struct RequestQueue
     {
-        using Handler = std::function<void(const V&)>;
+        using Handler = std::function<void(V&)>;
 
     private:
         struct Rec
         {
             uint64_t serial;
             uint64_t deadline;
-            V        value;
+            mutable V value; // pass not const value to handler
         };
         struct by_serial {};
         struct by_deadline {};
@@ -68,12 +68,25 @@ namespace container
             return std::nullopt;
         }
 
-        uint64_t insert(V&& aValue, uint64_t aTimeoutMs = 10)
+        uint64_t insert(V&& aValue, uint64_t aTimeoutMs)
         {
             Lock lk(m_Mutex);
             uint64_t sID = m_Serial++;
             m_Store.insert(Rec{sID, Time::get_time().to_ms() + aTimeoutMs, std::move(aValue)});
             return sID;
+        }
+
+        // get time in ms until next expiration or aDefault
+        uint64_t eta(uint64_t aDefault) const
+        {
+            Lock lk(m_Mutex);
+            auto sNow = Time::get_time().to_ms();
+            auto& sStore = boost::multi_index::get<by_deadline>(m_Store);
+            if (sStore.empty())
+                return aDefault;
+            auto sIt = sStore.begin();
+            uint64_t sTimeout = sIt->deadline > sNow ? sIt->deadline - sNow : 0;
+            return std::min(aDefault, sTimeout);
         }
 
         void on_timer()

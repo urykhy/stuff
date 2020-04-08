@@ -4,7 +4,8 @@
 #include <map>
 #include <mutex>
 
-#include <Curl.hpp>
+#include "Curl.hpp"
+#include <container/RequestQueue.hpp>
 #include <threads/Group.hpp>
 #include <threads/SafeQueue.hpp>
 
@@ -20,21 +21,35 @@ namespace Curl
         struct Params : Client::Params
         {
             unsigned max_connections = 32;
+            unsigned queue_timeout_ms = 1000;
         };
-        using Result = std::future<Client::Result>;
+
+        using Promise = std::promise<Client::Result>;
+        using PromisePtr = std::shared_ptr<Promise>;
+
+        using Result  = std::future<Client::Result>;
         using CB = std::function<void(Result&&)>;
         using EasyPtr = std::shared_ptr<Client>;
 
-        struct Query
-        {
+        struct Request {    // pending request
+            std::string url;
+            CB callback;
+        };
+
+        struct Active {     // running request + curl handle
             EasyPtr easy;
             CB callback;
         };
 
-        // no timeout while request in queue
-        struct Request {
-            std::string url;
+        struct Tail {       // completed request + result
+            PromisePtr promise;
             CB callback;
+
+            Tail() {}
+            Tail(CB&& aCallback)
+            : promise(std::make_shared<Promise>())
+            , callback(std::move(aCallback))
+            {}
         };
 
     private:
@@ -44,13 +59,24 @@ namespace Curl
 
         using Lock = std::unique_lock<std::mutex>;
         mutable std::mutex m_Mutex;
-        std::map<CURL*, Query> m_Active;
-        Threads::SafeQueue<Request> m_Waiting;
+        std::map<CURL*, Active> m_Active;           // current requests
+        container::RequestQueue<Request> m_Waiting; // pending requests + expiration
+        Threads::SafeQueueThread<Tail> m_Next;      // call handlers from this thread
 
     public:
         Multi(const Params& aParams)
         : m_Params(aParams)
         , m_Handle(curl_multi_init())
+        , m_Waiting([this](auto& aRequest)
+        {   // in queue request timeout. called with mutex held
+            Tail sTail(std::move(aRequest.callback));
+            sTail.promise->set_exception(std::make_exception_ptr(Error("timeout in queue")));
+            m_Next.insert(sTail);
+        })
+        , m_Next([](Tail& aTail)
+        {
+            aTail.callback(aTail.promise->get_future());
+        })
         {
             if (m_Handle == nullptr) {
                 throw Error("Curl: fail to create multi handle");
@@ -63,70 +89,73 @@ namespace Curl
         }
 
         void GET(const std::string& aUrl, CB&& aCallback) {
-            if (activeCount() <= m_Params.max_connections and m_Waiting.idle()) {
+            if (activeCount() < m_Params.max_connections and m_Waiting.empty()) {
                 startRequest(aUrl, std::move(aCallback));
             } else {
-                m_Waiting.insert({aUrl, aCallback});
+                m_Waiting.insert({aUrl, aCallback}, m_Params.queue_timeout_ms);
             }
         }
 
-        void Start(Threads::Group& tg) {
+        void start(Threads::Group& tg) {
             tg.start([this]() {
                 int transfers = 0;
                 int queue = 0;
                 while (!m_Stopping)
                 {
+                    const uint64_t sTimeout = m_Waiting.eta(100);
                     // naive: no epoll, no errors
-                    curl_multi_wait(m_Handle, 0, 0, 100, 0);
+                    curl_multi_wait(m_Handle, 0, 0, sTimeout, 0);
                     curl_multi_perform(m_Handle, &transfers);
                     while (auto x = curl_multi_info_read(m_Handle, &queue)) {
                         if (x->msg == CURLMSG_DONE)
                             notify(x->easy_handle, x->data.result);
                     }
+                    m_Waiting.on_timer();
                 }
             });
             tg.at_stop([this]() {
                 m_Stopping = true;
             });
+            m_Next.start(tg);
         }
 
     private:
         void notify(CURL* aEasy, CURLcode rc) {
-            Query sQuery;
+            Active sActive;
             {
                 Lock lk(m_Mutex);
                 auto sIt = m_Active.find(aEasy);
                 if (sIt == m_Active.end())
                     return; // WTF
-                sQuery = std::move(sIt->second);
+                sActive = std::move(sIt->second);
                 m_Active.erase(sIt);
             }
 
-            std::promise<Client::Result> sPromise;
+            Tail sTail(std::move(sActive.callback));
             if (rc != CURLE_OK) {
-                sPromise.set_exception(std::make_exception_ptr(Error(curl_easy_strerror(rc))));
+                sTail.promise->set_exception(std::make_exception_ptr(Error(curl_easy_strerror(rc))));
             } else {
-                sPromise.set_value(Client::Result{sQuery.easy->get_http_code(), std::move(sQuery.easy->m_Buffer)});
+                sTail.promise->set_value(Client::Result{sActive.easy->get_http_code(), std::move(sActive.easy->m_Buffer)});
             }
-            sQuery.callback(sPromise.get_future());
+            m_Next.insert(sTail);
             startWaiting();
         }
 
         void startRequest(const std::string& aUrl, CB&& aCallback) {
             auto sEasy = std::make_shared<Client>(m_Params);
             sEasy->assign(m_Handle);
-            Query sQuery{sEasy, std::move(aCallback)};
+            Active sActive{sEasy, std::move(aCallback)};
             {
                 Lock lk(m_Mutex);
-                m_Active.emplace(sEasy->m_Curl, std::move(sQuery));
+                m_Active.emplace(sEasy->m_Curl, std::move(sActive));
             }
             sEasy->GET(aUrl);
         }
 
         void startWaiting() {
-            while (activeCount() < m_Params.max_connections and !m_Waiting.idle())
+            while (activeCount() < m_Params.max_connections and !m_Waiting.empty())
             {
-                auto sNew = m_Waiting.try_get();
+                auto sNew = m_Waiting.get();
                 if (sNew)
                     startRequest(sNew->url, std::move(sNew->callback));
             }
