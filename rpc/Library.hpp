@@ -4,7 +4,7 @@
 #include <map>
 #include <string>
 #include "rpc.pb.h"
-#include <event/Error.hpp>
+#include "Error.hpp"
 
 namespace RPC
 {
