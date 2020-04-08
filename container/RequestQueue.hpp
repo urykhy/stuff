@@ -60,7 +60,7 @@ namespace container
                     sStore.erase(sIt);
                     continue;
                 }
-                Value sResult = sIt->value;
+                Value sResult = std::move(sIt->value);
                 sStore.erase(sIt);
                 return sResult;
             }

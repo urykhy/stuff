@@ -15,6 +15,7 @@ namespace Threads
     {
         std::list<T> m_List;
 
+        void push(T&& t)      { m_List.push_back(std::move(t)); }
         void push(const T& t) { m_List.push_back(t); }
         bool empty() const    { return m_List.empty(); }
         T&   top()            { return m_List.front(); }
@@ -51,6 +52,14 @@ namespace Threads
         {
             Lock lk(m_Mutex);
             m_List.push(aItem);
+            m_Counter++;
+            wakeup_one();
+        }
+
+        void insert(Node&& aItem)
+        {
+            Lock lk(m_Mutex);
+            m_List.push(std::move(aItem));
             m_Counter++;
             wakeup_one();
         }
@@ -100,11 +109,10 @@ namespace Threads
                 return false;
             }
 
-            auto sItem = m_List.top();
+            aItem = std::move(m_List.top());
             m_List.pop();
             if (!m_List.empty())
                 wakeup_one();   // cond var can miss wakeups, so we try to wakeup next thread from here
-            aItem = std::move(sItem);
             return true;
         }
     };
@@ -137,6 +145,7 @@ namespace Threads
         }
 
         void insert(const T& aItem) { m_Queue.insert(aItem); }
+        void insert(T&& aItem)      { m_Queue.insert(std::move(aItem)); }
         bool idle() const           { return m_Done == m_Queue.count(); }
     };
 }

@@ -29,6 +29,7 @@ namespace Curl
         using Result     = std::future<Client::Result>;
         using CB         = std::function<void(Result&&)>;
         using EasyPtr    = std::shared_ptr<Client>;
+    private:
 
         struct Request
         {
@@ -43,6 +44,10 @@ namespace Curl
             , promise(std::make_shared<Promise>())
             , callback(std::move(aCallback))
             {}
+            Request(Request&&) = default;
+            Request(const Request&) = delete;
+            Request& operator=(Request&&) = default;
+            Request& operator=(Request&) = delete;
 
             void set_exception(CURLcode rc)
             {
@@ -55,7 +60,6 @@ namespace Curl
             }
         };
 
-    private:
         std::atomic_bool m_Stopping{false};
         const Params& m_Params;
         CURLM* m_Handle = nullptr;
@@ -65,15 +69,15 @@ namespace Curl
         std::map<CURL*, Request> m_Active;          // current requests
         container::RequestQueue<Request> m_Waiting; // pending requests + expiration
         Threads::SafeQueueThread<Request> m_Next;   // call handlers from this thread
-
     public:
+
         Multi(const Params& aParams)
         : m_Params(aParams)
         , m_Handle(curl_multi_init())
         , m_Waiting([this](auto& aRequest)
         {   // in queue request timeout. called with mutex held
             aRequest.promise->set_exception(std::make_exception_ptr(Error("timeout in queue")));
-            m_Next.insert(aRequest);
+            m_Next.insert(std::move(aRequest));
         })
         , m_Next([](Request& aRequest)
         {
@@ -120,8 +124,8 @@ namespace Curl
             });
             m_Next.start(tg);
         }
-
     private:
+
         void notify(CURL* aEasy, CURLcode rc) {
             Request sRequest;
             {
@@ -139,7 +143,7 @@ namespace Curl
                 sRequest.set_value();
             }
             sRequest.easy.reset();
-            m_Next.insert(sRequest);
+            m_Next.insert(std::move(sRequest));
             startWaiting();
         }
 
