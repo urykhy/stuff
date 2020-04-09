@@ -88,7 +88,6 @@ namespace Curl
                 throw Error("Curl: fail to create multi handle");
             }
             curl_multi_setopt(m_Handle, CURLMOPT_MAX_TOTAL_CONNECTIONS , m_Params.max_connections);
-            curl_multi_setopt(m_Handle, CURLMOPT_PIPELINING, CURLPIPE_HTTP1);
         }
         ~Multi() {
             curl_multi_cleanup(m_Handle);
