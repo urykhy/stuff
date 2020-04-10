@@ -1,9 +1,9 @@
 X_INC      = $(shell pkg-config --cflags liblzma liblz4 libzstd)
 X_LIB      = $(shell PKG_CONFIG_PATH="../pkgconfig" pkg-config --libs liblzma liblz4 libzstd)
 BOOST_LIB  = $(shell PKG_CONFIG_PATH="../pkgconfig" pkg-config --libs boost_unit_test_framework boost_iostreams)
-STD_FLAGS  = -pthread -ggdb -std=c++14 -O3
+STD_FLAGS  = -pthread -ggdb -std=c++17 -O3
 
-CXXFLAGS   = $(X_INC) $(STD_FLAGS) -I.
+CXXFLAGS   = $(X_INC) $(STD_FLAGS) -I. -I..
 LDFLAGS    = $(X_LIB) $(BOOST_LIB)
 .PHONY: test clean
 

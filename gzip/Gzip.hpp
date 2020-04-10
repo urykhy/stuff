@@ -3,46 +3,17 @@
 #include <boost/iostreams/filtering_stream.hpp>
 #include <boost/iostreams/filter/gzip.hpp>
 #include <boost/iostreams/filter/bzip2.hpp>
+#include <boost/iostreams/device/file.hpp>
 #include <boost/utility/string_ref.hpp>
+#include <string_view>
 
-#include <Lzma.hpp>
-#include <LZ4.hpp>
-#include <Zstd.hpp>
+#include "Lzma.hpp"
+#include "LZ4.hpp"
+#include "Zstd.hpp"
+#include <file/File.hpp>
 
 namespace Gzip
 {
-    enum {BUFFER_SIZE = 1024 * 64};
-
-    class Decompress
-    {
-        std::string                         m_Result;
-        boost::iostreams::filtering_ostream m_Filter;
-        bool                                m_Active = true;
-
-    public:
-        Decompress() : m_Active(false) {}
-
-        template<class T>
-        Decompress(T t)
-        {
-            m_Filter.push(t, BUFFER_SIZE);
-            m_Filter.push(boost::iostreams::back_inserter(m_Result));
-        }
-
-        boost::string_ref operator()(const boost::string_ref compressed)
-        {
-            if (!m_Active)
-                return compressed;
-            m_Result.clear();
-            if (compressed.empty())
-                m_Filter.reset();
-            else
-                boost::iostreams::write(m_Filter, &compressed[0], compressed.size());
-            return m_Result;
-        }
-    };
-    using DecompressPtr = std::shared_ptr<Decompress>;
-
     enum FORMAT
     {
         PLAIN
@@ -52,20 +23,6 @@ namespace Gzip
       , LZ4
       , ZSTD
     };
-
-    inline DecompressPtr make_unpacker(FORMAT aFormat)
-    {
-        switch (aFormat)
-        {
-            case FORMAT::PLAIN: return std::make_unique<Decompress>();
-            case FORMAT::GZIP:  return std::make_unique<Decompress>(boost::iostreams::gzip_decompressor(boost::iostreams::gzip::default_window_bits, BUFFER_SIZE));
-            case FORMAT::BZ2:   return std::make_unique<Decompress>(boost::iostreams::bzip2_decompressor(false, BUFFER_SIZE));
-            case FORMAT::XZ:    return std::make_unique<Decompress>(LzmaDecompressorFilter(BUFFER_SIZE));
-            case FORMAT::LZ4:   return std::make_unique<Decompress>(Lz4DecompressorFilter(BUFFER_SIZE));
-            case FORMAT::ZSTD:  return std::make_unique<Decompress>(ZstdDecompressorFilter(BUFFER_SIZE));
-        }
-        throw std::runtime_error("unexpected format");
-    }
 
     inline FORMAT get_format(const std::string& aExtension)
     {
@@ -84,14 +41,86 @@ namespace Gzip
         return sFormat;
     }
 
+    template<class T>
+    inline void add_decompressor(T& aStream, FORMAT aFormat, size_t aBufferSize)
+    {
+        namespace io = boost::iostreams;
+        switch (aFormat)
+        {
+            case FORMAT::PLAIN: break;
+            case FORMAT::GZIP:  aStream.push(io::gzip_decompressor(io::gzip::default_window_bits, aBufferSize));
+                                break;
+            case FORMAT::BZ2:   aStream.push(io::bzip2_decompressor(false, aBufferSize), aBufferSize);
+                                break;
+            case FORMAT::XZ:    aStream.push(LzmaDecompressorFilter(aBufferSize), aBufferSize);
+                                break;
+            case FORMAT::LZ4:   aStream.push(Lz4DecompressorFilter(aBufferSize), aBufferSize);
+                                break;
+            case FORMAT::ZSTD:  aStream.push(ZstdDecompressorFilter(aBufferSize), aBufferSize);
+                                break;
+        }
+    }
+
+    // aHandler must return number of bytes processed
+    template<class T>
+    inline void by_chunk(const std::string& aName, T aHandler, size_t aBufferSize = 1024 * 1024)
+    {
+        namespace io = boost::iostreams;
+        io::filtering_istream sStream;
+        add_decompressor(sStream, get_format(File::get_extension(aName)), aBufferSize);
+
+        std::ifstream sFile(aName);
+        sFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+        sStream.push(sFile);
+
+        uint64_t sOffset = 0;
+        std::string sBuffer(aBufferSize, '\0');
+        while (sStream.good())
+        {
+            sStream.read(sBuffer.data() + sOffset, aBufferSize - sOffset);
+            auto sLen = sStream.gcount();
+            auto sUsed = aHandler(std::string_view(sBuffer.data(), sLen + sOffset));
+            sOffset = sLen + sOffset - sUsed;
+            memmove(sBuffer.data(), sBuffer.data() + sUsed, sOffset);
+        }
+    }
+
+    class Decompress
+    {
+        std::string                         m_Result;
+        boost::iostreams::filtering_ostream m_Filter;
+        bool                                m_Active = true;
+
+    public:
+        Decompress() : m_Active(false) {}
+
+        Decompress(FORMAT aFormat, size_t aBufferSize = 1024 * 1024)
+        {
+            add_decompressor(m_Filter, aFormat, aBufferSize);
+            m_Filter.push(boost::iostreams::back_inserter(m_Result));
+        }
+
+        boost::string_ref operator()(const boost::string_ref compressed)
+        {
+            if (!m_Active)
+                return compressed;
+            m_Result.clear();
+            if (compressed.empty())
+                m_Filter.reset();
+            else
+                boost::iostreams::write(m_Filter, &compressed[0], compressed.size());
+            return m_Result;
+        }
+    };
+
     inline std::string decode_buffer(FORMAT aFormat, boost::string_ref aInput)
     {
         std::string sResult;
-        auto sUnpacker = make_unpacker(aFormat);
+        Decompress sUnpacker(aFormat);
 
-        auto sChunk = (*sUnpacker)(aInput);
+        auto sChunk = sUnpacker(aInput);
         sResult.append(sChunk.data(), sChunk.size());
-        sChunk = (*sUnpacker)(""); /* EOF marker */
+        sChunk = sUnpacker(""); /* EOF marker */
         sResult.append(sChunk.data(), sChunk.size());
 
         return sResult;
