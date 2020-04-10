@@ -3,13 +3,13 @@
 #include <boost/iostreams/filtering_stream.hpp>
 #include <boost/iostreams/filter/gzip.hpp>
 #include <boost/iostreams/filter/bzip2.hpp>
+#include <boost/iostreams/filter/lzma.hpp>
+#include <boost/iostreams/filter/zstd.hpp>
 #include <boost/iostreams/device/file.hpp>
 #include <boost/utility/string_ref.hpp>
 #include <string_view>
 
-#include "Lzma.hpp"
 #include "LZ4.hpp"
-#include "Zstd.hpp"
 #include <file/File.hpp>
 
 namespace Gzip
@@ -52,11 +52,11 @@ namespace Gzip
                                 break;
             case FORMAT::BZ2:   aStream.push(io::bzip2_decompressor(false, aBufferSize), aBufferSize);
                                 break;
-            case FORMAT::XZ:    aStream.push(LzmaDecompressorFilter(aBufferSize), aBufferSize);
+            case FORMAT::XZ:    aStream.push(io::lzma_decompressor(aBufferSize), aBufferSize);
                                 break;
             case FORMAT::LZ4:   aStream.push(Lz4DecompressorFilter(aBufferSize), aBufferSize);
                                 break;
-            case FORMAT::ZSTD:  aStream.push(ZstdDecompressorFilter(aBufferSize), aBufferSize);
+            case FORMAT::ZSTD:  aStream.push(io::zstd_decompressor(aBufferSize), aBufferSize);
                                 break;
         }
     }

@@ -1,5 +1,5 @@
-X_INC      = $(shell pkg-config --cflags liblzma liblz4 libzstd)
-X_LIB      = $(shell PKG_CONFIG_PATH="../pkgconfig" pkg-config --libs liblzma liblz4 libzstd)
+X_INC      = $(shell pkg-config --cflags liblz4)
+X_LIB      = $(shell PKG_CONFIG_PATH="../pkgconfig" pkg-config --libs liblz4)
 BOOST_LIB  = $(shell PKG_CONFIG_PATH="../pkgconfig" pkg-config --libs boost_unit_test_framework boost_iostreams)
 STD_FLAGS  = -pthread -ggdb -std=c++17 -O3
 
