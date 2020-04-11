@@ -2,8 +2,10 @@
 #define BOOST_TEST_MODULE Suites
 #include <boost/test/unit_test.hpp>
 
-#include <Curl.hpp>
-#include <Multi.hpp>
+#include "Curl.hpp"
+#include "Multi.hpp"
+#include "Util.hpp"
+
 #include <threads/Periodic.hpp> // for sleep
 #include <time/Meter.hpp>
 #include <unsorted/Process.hpp>
@@ -145,6 +147,13 @@ BOOST_AUTO_TEST_CASE(InQueueTimeout)
     }
     BOOST_CHECK_MESSAGE(ok1, "first call with request timeout");
     BOOST_CHECK_MESSAGE(ok2, "second call in-queue timeout");
+}
+BOOST_AUTO_TEST_CASE(Tmp)
+{
+    Curl::Client::Params sParams;
+    auto sTmp = Curl::download("http://127.0.0.1:8080/hello", sParams);
+    BOOST_TEST_MESSAGE("downloaded to " << sTmp.filename());
+    BOOST_CHECK_EQUAL(sTmp.size(), 12);
 }
 BOOST_AUTO_TEST_CASE(Mass)
 {

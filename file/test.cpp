@@ -46,9 +46,7 @@ BOOST_AUTO_TEST_CASE(tmp)
         sTmp.write("some data", 10);
         sTmpName = sTmp.filename();
         BOOST_TEST_MESSAGE("tmp filename is " << sTmpName);
-
-        auto sSize = std::filesystem::file_size(sTmpName);
-        BOOST_CHECK_EQUAL(sSize, 10);
+        BOOST_CHECK_EQUAL(sTmp.size(), 10);
     }
     BOOST_CHECK_EQUAL(std::filesystem::exists(sTmpName), false);
 }

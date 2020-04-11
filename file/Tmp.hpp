@@ -74,5 +74,10 @@ namespace File
             sTmp.resize(sSize);
             return sTmp;
         }
+
+        uint64_t size() const
+        {
+            return std::filesystem::file_size(filename());
+        }
     };
 } // namespace File
