@@ -66,6 +66,18 @@ class App(object):
         else:
             return "ERR"
 
+    @cherrypy.expose
+    def auto_index(self):
+        cherrypy.response.headers['Last-Modified'] = os.path.getmtime(os.path.realpath(__file__))
+        cherrypy.lib.cptools.validate_since()
+        return """<html>
+<head><title>Index of /auto_index/</title></head>
+<body bgcolor="white">
+<h1>Index of /auto_index/</h1><hr><pre><a href="../">../</a>
+<a href="20200331">20200331</a> 01-Apr-2020 10:10           123
+<a href="20200401">20200401</a> 01-Apr-2020 10:10           234
+</pre><hr></body>
+</html>"""
 
 if __name__ == '__main__':
     cherrypy.quickstart(App(), '/', conf)

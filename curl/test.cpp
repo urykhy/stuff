@@ -155,6 +155,17 @@ BOOST_AUTO_TEST_CASE(Tmp)
     BOOST_TEST_MESSAGE("downloaded to " << sTmp.filename());
     BOOST_CHECK_EQUAL(sTmp.size(), 12);
 }
+BOOST_AUTO_TEST_CASE(Index)
+{
+    Curl::Client::Params sParams;
+    auto sFiles = Curl::index("http://127.0.0.1:8080/auto_index", sParams);
+    Curl::FileList sExpected = {{"../"},{"20200331"},{"20200401"}};
+    BOOST_CHECK_EQUAL_COLLECTIONS(sExpected.begin(), sExpected.end(), sFiles.begin(), sFiles.end());
+
+    // check IMS
+    sFiles = Curl::index("http://127.0.0.1:8080/auto_index", sParams, ::time(nullptr));
+    BOOST_CHECK(sFiles.empty());
+}
 BOOST_AUTO_TEST_CASE(Mass)
 {
     Curl::Client::GlobalInit();
