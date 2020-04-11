@@ -232,9 +232,9 @@ namespace Curl
 
         ssize_t get_content_length()
         {
-            double sFilesize = 0.0;
-            int res = curl_easy_getinfo(m_Curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &sFilesize);
-            if (CURLE_OK == res && sFilesize > 0.0)
+            curl_off_t sFilesize = 0;
+            int res = curl_easy_getinfo(m_Curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD_T, &sFilesize);
+            if (CURLE_OK == res && sFilesize > 0)
                 return sFilesize;
             return -1;
         }
