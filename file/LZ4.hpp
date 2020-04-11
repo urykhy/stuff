@@ -3,7 +3,7 @@
 #include <boost/iostreams/filtering_stream.hpp>
 #include <lz4frame.h>
 
-namespace Gzip
+namespace File
 {
     // read files after lz4 tool
     // LZ4IO_decompressLZ4F

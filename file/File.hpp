@@ -1,50 +1,55 @@
 #pragma once
 
 #include <string>
+#include <string_view>
 #include <fstream>
+
+#include "Decompress.hpp"
 
 namespace File
 {
-    inline std::string to_string(const std::string& aFilename)
+    inline std::string to_string(const std::string& aFilename, size_t aBufferSize = 1024 * 1024)
     {
-        std::ifstream sFile(aFilename);
-        sFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
-        std::string sBuf((std::istreambuf_iterator<char>(sFile)), std::istreambuf_iterator<char>());
+        std::string sBuf;
+        with_file(aFilename, [&sBuf](auto& aStream)
+        {
+            sBuf.assign((std::istreambuf_iterator<char>(aStream)), std::istreambuf_iterator<char>());
+        }, aBufferSize);
         return sBuf;
     }
 
-    template<class F>
-    void by_string(const std::string& aFilename, F aFunc)
+    template<class T>
+    void by_string(const std::string& aFilename, T aHandler, size_t aBufferSize = 1024 * 1024)
     {
-        std::ifstream sFile(aFilename);
-        sFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
-        std::string sBuf;
-
-        try
+        with_file(aFilename, [aHandler = std::move(aHandler)](auto& aStream) mutable
         {
-            while (std::getline(sFile, sBuf))
-                aFunc(sBuf);
-        } catch (...) {
-            if (!sFile.eof())
-                throw;
-        }
+            std::string sBuf;
+            try {
+                while (std::getline(aStream, sBuf))
+                    aHandler(sBuf);
+            } catch (...) {
+                if (!aStream.eof())
+                    throw;
+            }
+        }, aBufferSize);
     }
 
-    inline std::string get_filename(const std::string& str)
+    // aHandler must return number of bytes processed
+    template<class T>
+    inline void by_chunk(const std::string& aName, T aHandler, size_t aBufferSize = 1024 * 1024)
     {
-        size_t found = str.find_last_of("/");
-        return str.substr(found + 1);
-    }
-
-    inline std::string get_basename(const std::string& str)
-    {
-        size_t found = str.find_last_of("/");
-        return str.substr(0, found);
-    }
-
-    inline std::string get_extension(const std::string& aFilename)
-    {
-        size_t found = aFilename.find_last_of(".");
-        return aFilename.substr(found + 1);
+        with_file(aName, [aHandler = std::move(aHandler), aBufferSize](auto& aStream)
+        {
+            uint64_t sOffset = 0;
+            std::string sBuffer(aBufferSize, '\0');
+            while (aStream.good())
+            {
+                aStream.read(sBuffer.data() + sOffset, aBufferSize - sOffset);
+                auto sLen = aStream.gcount();
+                auto sUsed = aHandler(std::string_view(sBuffer.data(), sLen + sOffset));
+                sOffset = sLen + sOffset - sUsed;
+                memmove(sBuffer.data(), sBuffer.data() + sUsed, sOffset);
+            }
+        }, aBufferSize);
     }
 }

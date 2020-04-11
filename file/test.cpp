@@ -8,13 +8,15 @@
 BOOST_AUTO_TEST_SUITE(File)
 BOOST_AUTO_TEST_CASE(read)
 {
-    BOOST_CHECK_EQUAL(File::to_string("../__test_data1"), "123\nasd\n");
+    BOOST_CHECK_EQUAL(File::to_string("../__test.lz4"), "123\n123\n321\n\n");
 
-    File::by_string("../__test_data1", [i = 0](const std::string& a) mutable {
+    File::by_string("../__test.lz4", [i = 0](const std::string& a) mutable {
         switch(i)
         {
         case 0: BOOST_CHECK_EQUAL(a, "123"); break;
-        case 1: BOOST_CHECK_EQUAL(a, "asd"); break;
+        case 1: BOOST_CHECK_EQUAL(a, "123"); break;
+        case 2: BOOST_CHECK_EQUAL(a, "321"); break;
+        case 3: BOOST_CHECK_EQUAL(a, ""); break;
         default:
                 BOOST_CHECK(false);
         }
@@ -26,7 +28,7 @@ BOOST_AUTO_TEST_CASE(list)
     auto sList = File::ReadDir("..", ".cpp");
     BOOST_CHECK(sList == File::FileList{"../test.cpp"});
 }
-BOOST_AUTO_TEST_CASE(name)
+BOOST_AUTO_TEST_CASE(util)
 {
     const std::string sPath="/usr/bin/ls";
     BOOST_CHECK_EQUAL(File::get_filename(sPath), "ls");
