@@ -1,20 +1,16 @@
-/*
- *
- * g++ test.cpp -I. -I.. -lboost_unit_test_framework -lboost_system -lboost_filesystem
- */
-
 #define BOOST_TEST_DYN_LINK
 #define BOOST_TEST_MODULE Suites
 #include <boost/test/unit_test.hpp>
-#include <File.hpp>
-#include <List.hpp>
+#include "File.hpp"
+#include "List.hpp"
+#include "Tmp.hpp"
 
 BOOST_AUTO_TEST_SUITE(File)
 BOOST_AUTO_TEST_CASE(read)
 {
-    BOOST_CHECK_EQUAL(File::to_string("__test_data1"), "123\nasd\n");
+    BOOST_CHECK_EQUAL(File::to_string("../__test_data1"), "123\nasd\n");
 
-    File::by_string("__test_data1", [i = 0](const std::string& a) mutable {
+    File::by_string("../__test_data1", [i = 0](const std::string& a) mutable {
         switch(i)
         {
         case 0: BOOST_CHECK_EQUAL(a, "123"); break;
@@ -27,8 +23,8 @@ BOOST_AUTO_TEST_CASE(read)
 }
 BOOST_AUTO_TEST_CASE(list)
 {
-    auto sList = File::ReadDir(".", ".cpp");
-    BOOST_CHECK(sList == File::FileList{"./test.cpp"});
+    auto sList = File::ReadDir("..", ".cpp");
+    BOOST_CHECK(sList == File::FileList{"../test.cpp"});
 }
 BOOST_AUTO_TEST_CASE(name)
 {
@@ -39,7 +35,21 @@ BOOST_AUTO_TEST_CASE(name)
 }
 BOOST_AUTO_TEST_CASE(glob)
 {
-    auto sList = File::Glob("./*.cpp");
-    BOOST_CHECK(sList == File::FileList{"./test.cpp"});
+    auto sList = File::Glob("../*.cpp");
+    BOOST_CHECK(sList == File::FileList{"../test.cpp"});
+}
+BOOST_AUTO_TEST_CASE(tmp)
+{
+    std::string sTmpName;
+    {
+        File::Tmp sTmp("some_test_file");
+        sTmp.write("some data", 10);
+        sTmpName = sTmp.filename();
+        BOOST_TEST_MESSAGE("tmp filename is " << sTmpName);
+
+        auto sSize = std::filesystem::file_size(sTmpName);
+        BOOST_CHECK_EQUAL(sSize, 10);
+    }
+    BOOST_CHECK_EQUAL(std::filesystem::exists(sTmpName), false);
 }
 BOOST_AUTO_TEST_SUITE_END()
