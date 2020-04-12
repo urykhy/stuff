@@ -13,6 +13,8 @@ namespace File
     inline std::string get_basename(const std::string& str)
     {
         size_t found = str.find_last_of("/");
+        if (found == std::string::npos)
+            return "";
         return str.substr(0, found);
     }
 

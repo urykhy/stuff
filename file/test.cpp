@@ -4,6 +4,7 @@
 #include "File.hpp"
 #include "List.hpp"
 #include "Tmp.hpp"
+#include "Block.hpp"
 
 BOOST_AUTO_TEST_SUITE(File)
 BOOST_AUTO_TEST_CASE(read)
@@ -33,6 +34,7 @@ BOOST_AUTO_TEST_CASE(util)
     const std::string sPath="/usr/bin/ls";
     BOOST_CHECK_EQUAL(File::get_filename(sPath), "ls");
     BOOST_CHECK_EQUAL(File::get_basename(sPath), "/usr/bin");
+    BOOST_CHECK_EQUAL(File::get_basename("ls"), "");
     BOOST_CHECK_EQUAL(File::get_extension("test.gif"), "gif");
 }
 BOOST_AUTO_TEST_CASE(glob)
@@ -51,5 +53,34 @@ BOOST_AUTO_TEST_CASE(tmp)
         BOOST_CHECK_EQUAL(sTmp.size(), 10);
     }
     BOOST_CHECK_EQUAL(std::filesystem::exists(sTmpName), false);
+}
+BOOST_AUTO_TEST_CASE(block)
+{
+    const std::vector<std::string> sData = {{"Lorem Ipsum is simply dummy text of the printing and typesetting industry."},
+                                            {"Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, "},
+                                            {"when an unknown printer took a galley of type and scrambled it to make a type specimen book. "},
+                                            {"It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged."},
+                                            {" It was popularised in the 1960s with the release of Letraset sheets containing Lorem Ipsum passages, "},
+                                            {"and more recently with desktop publishing software like Aldus PageMaker including versions of Lorem Ipsum."}
+                                           };
+    std::string sExpected;
+    const std::string sName = "__test_data.zst";
+    File::Block::Writer sWriter(sName);
+    for (auto& x : sData)
+    {
+        sExpected += x;
+        sWriter(0, x);
+    }
+    sWriter.close();
+    BOOST_CHECK(std::filesystem::exists(sName));
+
+    std::string sActual;
+    File::Block::Reader(sName, [&sActual](uint8_t aType, std::string_view aData){
+        BOOST_CHECK_EQUAL(aType, 0);
+        sActual += aData;
+    });
+    BOOST_CHECK_EQUAL(sExpected, sActual);
+
+    std::filesystem::remove(sName);
 }
 BOOST_AUTO_TEST_SUITE_END()

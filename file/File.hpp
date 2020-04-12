@@ -8,18 +8,18 @@
 
 namespace File
 {
-    inline std::string to_string(const std::string& aFilename, size_t aBufferSize = 1024 * 1024)
+    inline std::string to_string(const std::string& aFilename)
     {
         std::string sBuf;
         with_file(aFilename, [&sBuf](auto& aStream)
         {
             sBuf.assign((std::istreambuf_iterator<char>(aStream)), std::istreambuf_iterator<char>());
-        }, aBufferSize);
+        });
         return sBuf;
     }
 
     template<class T>
-    void by_string(const std::string& aFilename, T aHandler, size_t aBufferSize = 1024 * 1024)
+    void by_string(const std::string& aFilename, T aHandler)
     {
         with_file(aFilename, [aHandler = std::move(aHandler)](auto& aStream) mutable
         {
@@ -31,7 +31,7 @@ namespace File
                 if (!aStream.eof())
                     throw;
             }
-        }, aBufferSize);
+        });
     }
 
     // aHandler must return number of bytes processed
@@ -47,9 +47,11 @@ namespace File
                 aStream.read(sBuffer.data() + sOffset, aBufferSize - sOffset);
                 auto sLen = aStream.gcount();
                 auto sUsed = aHandler(std::string_view(sBuffer.data(), sLen + sOffset));
+                if (sUsed == 0 and sLen + sOffset == aBufferSize)
+                    throw std::runtime_error("File::by_chunk: no progress");
                 sOffset = sLen + sOffset - sUsed;
                 memmove(sBuffer.data(), sBuffer.data() + sUsed, sOffset);
             }
-        }, aBufferSize);
+        });
     }
 }

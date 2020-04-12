@@ -15,6 +15,8 @@
 
 namespace File
 {
+    namespace io = boost::iostreams;
+
     enum FORMAT
     {
         PLAIN
@@ -43,34 +45,52 @@ namespace File
     }
 
     template<class T>
-    inline void add_decompressor(T& aStream, FORMAT aFormat, size_t aBufferSize)
+    inline void add_decompressor(T& aStream, FORMAT aFormat)
     {
-        namespace io = boost::iostreams;
         switch (aFormat)
         {
             case FORMAT::PLAIN: break;
-            case FORMAT::GZIP:  aStream.push(io::gzip_decompressor(io::gzip::default_window_bits, aBufferSize));
+            case FORMAT::GZIP:  aStream.push(io::gzip_decompressor(io::gzip::default_window_bits));
                                 break;
-            case FORMAT::BZ2:   aStream.push(io::bzip2_decompressor(false, aBufferSize), aBufferSize);
+            case FORMAT::BZ2:   aStream.push(io::bzip2_decompressor(false));
                                 break;
-            case FORMAT::XZ:    aStream.push(io::lzma_decompressor(aBufferSize), aBufferSize);
+            case FORMAT::XZ:    aStream.push(io::lzma_decompressor());
                                 break;
-            case FORMAT::LZ4:   aStream.push(Lz4DecompressorFilter(aBufferSize), aBufferSize);
+            case FORMAT::LZ4:   aStream.push(Lz4DecompressorFilter(65536));
                                 break;
-            case FORMAT::ZSTD:  aStream.push(io::zstd_decompressor(aBufferSize), aBufferSize);
+            case FORMAT::ZSTD:  aStream.push(io::zstd_decompressor());
                                 break;
         }
     }
 
     template<class T>
-    inline void with_file(const std::string& aName, T aHandler, size_t aBufferSize)
+    inline void add_compressor(T& aStream, FORMAT aFormat)
     {
-        namespace io = boost::iostreams;
-        io::filtering_istream sStream;
-        add_decompressor(sStream, get_format(get_extension(aName)), aBufferSize);
+        switch (aFormat)
+        {
+            case FORMAT::PLAIN: break;
+            case FORMAT::GZIP:  aStream.push(io::gzip_compressor(io::gzip::default_window_bits));
+                                break;
+            case FORMAT::BZ2:   aStream.push(io::bzip2_compressor(false));
+                                break;
+            case FORMAT::XZ:    aStream.push(io::lzma_compressor());
+                                break;
+            case FORMAT::LZ4:   throw std::runtime_error("LZ4 compressor not implemented");
+                                //aStream.push(Lz4CompressorFilter());
+                                break;
+            case FORMAT::ZSTD:  aStream.push(io::zstd_compressor());
+                                break;
+        }
+    }
 
+    template<class T>
+    inline void with_file(const std::string& aName, T aHandler)
+    {
         std::ifstream sFile(aName);
         sFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+
+        io::filtering_istream sStream;
+        add_decompressor(sStream, get_format(get_extension(aName)));
         sStream.push(sFile);
 
         aHandler(sStream);

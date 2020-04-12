@@ -1,16 +1,18 @@
 #define BOOST_TEST_DYN_LINK
 #define BOOST_TEST_MODULE Suites
 #include <boost/test/unit_test.hpp>
-#include <SSL.hpp>
+#include "Digest.hpp"
+#include "GCM.hpp"
+#include "HMAC.hpp"
 
 BOOST_AUTO_TEST_SUITE(SSLxx)
 BOOST_AUTO_TEST_CASE(hash)
 {
-    BOOST_CHECK_EQUAL(SSLxx::DigestStr("qwerty", EVP_sha256()), "65e84be33532fb784c48129675f9eff3a682b27168c0ea744b2cf58ee02337c5");
-    BOOST_CHECK_EQUAL(SSLxx::DigestStr("qwerty", EVP_md5()), "d8578edf8458ce06fbc5bb76a58c5ca4");
-    BOOST_CHECK_EQUAL(SSLxx::DigestHash("qwerty", EVP_md5()), 0xA45C8CA576BBC5FBULL);
-    BOOST_CHECK_EQUAL(SSLxx::DigestNth("qwerty10", EVP_md5(), 10), false);
-    BOOST_CHECK_EQUAL(SSLxx::DigestNth("qwerty99", EVP_md5(), 10), true);
+    BOOST_CHECK_EQUAL(SSLxx::DigestStr(EVP_sha256(), std::string_view("qwerty")), "65e84be33532fb784c48129675f9eff3a682b27168c0ea744b2cf58ee02337c5");
+    BOOST_CHECK_EQUAL(SSLxx::DigestStr(EVP_md5(), std::string_view("qwerty")), "d8578edf8458ce06fbc5bb76a58c5ca4");
+    BOOST_CHECK_EQUAL(SSLxx::DigestHash(EVP_md5(), std::string_view("qwerty")), 0xA45C8CA576BBC5FBULL);
+    BOOST_CHECK_EQUAL(SSLxx::DigestNth(EVP_md5(), 10, std::string_view("qwerty10")), false);
+    BOOST_CHECK_EQUAL(SSLxx::DigestNth(EVP_md5(), 10, std::string_view("qwerty99")), true);
 }
 BOOST_AUTO_TEST_CASE(encrypt_aes_gcm)
 {
@@ -33,8 +35,8 @@ BOOST_AUTO_TEST_CASE(hmac)
     const std::string sData = "qwerty";
     const Key sKey("secret");
 
-    const std::string sTmp = Sign(sData, sKey, EVP_sha256());
-    BOOST_CHECK(Verify(sData, sTmp, sKey, EVP_sha256()));
-    BOOST_CHECK_EQUAL(Verify(sData + "x", sTmp, sKey, EVP_sha256()), false);
+    const std::string sTmp = Sign(EVP_sha256(), sKey, sData);
+    BOOST_CHECK(Verify(EVP_sha256(), sKey, sTmp, sData));
+    BOOST_CHECK_EQUAL(Verify(EVP_sha256(), sKey, sTmp, sData + "x"), false);
 }
 BOOST_AUTO_TEST_SUITE_END()
