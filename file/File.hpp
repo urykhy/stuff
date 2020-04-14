@@ -11,7 +11,7 @@ namespace File
     inline std::string to_string(const std::string& aFilename)
     {
         std::string sBuf;
-        with_file(aFilename, [&sBuf](auto& aStream)
+        read_file(aFilename, [&sBuf](auto& aStream)
         {
             sBuf.assign((std::istreambuf_iterator<char>(aStream)), std::istreambuf_iterator<char>());
         });
@@ -21,7 +21,7 @@ namespace File
     template<class T>
     void by_string(const std::string& aFilename, T aHandler)
     {
-        with_file(aFilename, [aHandler = std::move(aHandler)](auto& aStream) mutable
+        read_file(aFilename, [aHandler = std::move(aHandler)](auto& aStream) mutable
         {
             std::string sBuf;
             try {
@@ -38,7 +38,7 @@ namespace File
     template<class T>
     inline void by_chunk(const std::string& aName, T aHandler, size_t aBufferSize = 1024 * 1024)
     {
-        with_file(aName, [aHandler = std::move(aHandler), aBufferSize](auto& aStream)
+        read_file(aName, [aHandler = std::move(aHandler), aBufferSize](auto& aStream)
         {
             uint64_t sOffset = 0;
             std::string sBuffer(aBufferSize, '\0');

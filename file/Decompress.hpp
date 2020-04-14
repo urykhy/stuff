@@ -56,7 +56,7 @@ namespace File
                                 break;
             case FORMAT::XZ:    aStream.push(io::lzma_decompressor());
                                 break;
-            case FORMAT::LZ4:   aStream.push(Lz4DecompressorFilter(65536));
+            case FORMAT::LZ4:   aStream.push(Lz4DecompressorFilter(65536), 65536);
                                 break;
             case FORMAT::ZSTD:  aStream.push(io::zstd_decompressor());
                                 break;
@@ -75,8 +75,7 @@ namespace File
                                 break;
             case FORMAT::XZ:    aStream.push(io::lzma_compressor());
                                 break;
-            case FORMAT::LZ4:   throw std::runtime_error("LZ4 compressor not implemented");
-                                //aStream.push(Lz4CompressorFilter());
+            case FORMAT::LZ4:   aStream.push(Lz4CompressorFilter(65536, 65536), 65536);
                                 break;
             case FORMAT::ZSTD:  aStream.push(io::zstd_compressor());
                                 break;
@@ -84,13 +83,27 @@ namespace File
     }
 
     template<class T>
-    inline void with_file(const std::string& aName, T aHandler)
+    inline void read_file(const std::string& aName, T aHandler)
     {
         std::ifstream sFile(aName);
         sFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
 
         io::filtering_istream sStream;
         add_decompressor(sStream, get_format(get_extension(aName)));
+        sStream.push(sFile);
+
+        aHandler(sStream);
+    }
+
+    template<class T>
+    inline void write_file(const std::string& aName, T aHandler)
+    {
+        std::ofstream sFile;
+        sFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+        sFile.open(aName, std::ofstream::out | std::ofstream::trunc | std::ofstream::binary);
+
+        io::filtering_ostream sStream;
+        add_compressor(sStream, get_format(get_extension(aName)));
         sStream.push(sFile);
 
         aHandler(sStream);

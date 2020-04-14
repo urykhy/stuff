@@ -38,7 +38,7 @@ namespace Container
 
         class const_iterator
         {
-            friend class ListArray;
+            friend struct ListArray;
             using a_iterator = typename ListArray::Array::const_iterator;
             using l_iterator = typename ListArray::List::const_iterator;
             l_iterator b;

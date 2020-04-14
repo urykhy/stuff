@@ -34,7 +34,7 @@ namespace File
         Tmp(const std::string& aName)
         {
             auto sPath = std::filesystem::temp_directory_path();
-            sPath /= aName + ".XXXXXX";
+            sPath /= aName + ".tmp-XXXXXX";
             std::string sTmp = sPath.native();
 
             m_FD = mkstemp(sTmp.data());

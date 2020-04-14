@@ -55,7 +55,7 @@ namespace Sentry
     }
 }
 
-extern "C" void __cxa_throw (void* aObject, void* aInfo, void (*aDtor) (void *))
+extern "C" void __cxa_throw (void* aObject, void* aInfo, void (*aDtor) (void*))
 {
     Sentry::hook(aObject, aInfo);
     if (!Sentry::gInitDone)

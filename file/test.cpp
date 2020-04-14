@@ -36,6 +36,9 @@ BOOST_AUTO_TEST_CASE(util)
     BOOST_CHECK_EQUAL(File::get_basename(sPath), "/usr/bin");
     BOOST_CHECK_EQUAL(File::get_basename("ls"), "");
     BOOST_CHECK_EQUAL(File::get_extension("test.gif"), "gif");
+    BOOST_CHECK_EQUAL(File::get_extension("test.gif.tmp-123456"), "gif");
+    BOOST_CHECK_EQUAL(File::get_extension("gif.tmp-123456"), "gif");
+    BOOST_CHECK_EQUAL(File::get_extension("gif.tmp-123456", false), "tmp-123456");
 }
 BOOST_AUTO_TEST_CASE(glob)
 {
@@ -46,10 +49,11 @@ BOOST_AUTO_TEST_CASE(tmp)
 {
     std::string sTmpName;
     {
-        File::Tmp sTmp("some_test_file");
+        File::Tmp sTmp("some_test_file.txt");
         sTmp.write("some data", 10);
         sTmpName = sTmp.filename();
         BOOST_TEST_MESSAGE("tmp filename is " << sTmpName);
+        BOOST_CHECK_EQUAL(File::get_extension(sTmpName), "txt");
         BOOST_CHECK_EQUAL(sTmp.size(), 10);
     }
     BOOST_CHECK_EQUAL(std::filesystem::exists(sTmpName), false);
@@ -82,5 +86,21 @@ BOOST_AUTO_TEST_CASE(block)
     BOOST_CHECK_EQUAL(sExpected, sActual);
 
     std::filesystem::remove(sName);
+}
+BOOST_AUTO_TEST_SUITE_END()
+
+BOOST_AUTO_TEST_SUITE(LZ4)
+BOOST_AUTO_TEST_CASE(large_file)
+{
+    const std::string sExpected(10 * 1000 * 1000, ' ');
+    const std::string sName = "__large_data.lz4";
+
+    File::write_file(sName, [&sExpected](auto& aStream) {
+        aStream.write(sExpected.data(), sExpected.size());
+    });
+
+    const auto sActual = File::to_string(sName);
+    BOOST_CHECK_EQUAL(sActual.size(), sExpected.size());
+    BOOST_CHECK_EQUAL(sActual, sExpected);
 }
 BOOST_AUTO_TEST_SUITE_END()

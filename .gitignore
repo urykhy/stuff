@@ -37,5 +37,5 @@ cmake_install.cmake
 rpc.pb.*
 *.beam
 erl_crash.dump
-build
+build*
 .vscode
