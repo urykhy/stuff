@@ -42,9 +42,10 @@ namespace File::Block
         , m_TmpName(std::filesystem::path(get_basename(aName)) /= (".tmp." + get_filename(aName)))
         {
             m_File.exceptions(std::ofstream::failbit | std::ofstream::badbit);
-            m_File.open(m_TmpName, std::ofstream::out | std::ofstream::app | std::ofstream::binary);
+            m_File.open(m_TmpName, std::ofstream::out | std::ofstream::trunc | std::ofstream::binary);
             add_compressor(m_Stream, get_format(get_extension(aName)));
             m_Stream.push(m_File);
+            m_Stream.exceptions(std::ofstream::failbit | std::ofstream::badbit);
         }
 
         void operator()(uint8_t aType, std::string_view aData)
@@ -57,9 +58,8 @@ namespace File::Block
 
         void close()
         {
-            io::close(m_Stream);
+            m_Stream.flush();
             m_Stream.reset();
-            m_File.close();
             std::filesystem::rename(m_TmpName, m_Name);
         }
     };

@@ -44,7 +44,12 @@ namespace File
             std::string sBuffer(aBufferSize, '\0');
             while (aStream.good())
             {
-                aStream.read(sBuffer.data() + sOffset, aBufferSize - sOffset);
+                try {
+                    aStream.read(sBuffer.data() + sOffset, aBufferSize - sOffset);
+                } catch (...) {
+                    if (!aStream.eof())
+                        throw;
+                }
                 auto sLen = aStream.gcount();
                 auto sUsed = aHandler(std::string_view(sBuffer.data(), sLen + sOffset));
                 if (sUsed == 0 and sLen + sOffset == aBufferSize)

@@ -91,6 +91,7 @@ namespace File
         io::filtering_istream sStream;
         add_decompressor(sStream, get_format(get_extension(aName)));
         sStream.push(sFile);
+        sStream.exceptions(std::ifstream::failbit | std::ifstream::badbit);
 
         aHandler(sStream);
     }
@@ -105,7 +106,10 @@ namespace File
         io::filtering_ostream sStream;
         add_compressor(sStream, get_format(get_extension(aName)));
         sStream.push(sFile);
+        sStream.exceptions(std::ifstream::failbit | std::ifstream::badbit);
 
         aHandler(sStream);
+        sStream.flush();
+        sStream.reset();
     }
 } // namespace File

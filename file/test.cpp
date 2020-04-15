@@ -100,7 +100,7 @@ BOOST_AUTO_TEST_CASE(large_file)
     });
 
     const auto sActual = File::to_string(sName);
-    BOOST_CHECK_EQUAL(sActual.size(), sExpected.size());
+    BOOST_REQUIRE_EQUAL(sActual.size(), sExpected.size());
     BOOST_CHECK_EQUAL(sActual, sExpected);
 }
 BOOST_AUTO_TEST_SUITE_END()
