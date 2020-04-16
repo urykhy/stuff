@@ -20,8 +20,7 @@ namespace SSLxx
     inline std::string Digest(const EVP_MD* aKind, T&&... aInput)
     {
         unsigned int sLen = EVP_MD_size(aKind);
-        std::string sResult;
-        sResult.resize(sLen);
+        std::string sResult(sLen, '\0');
 
         EVP_MD_CTX* sCtx = nullptr;
         Util::Raii sCleanup([&sCtx](){
