@@ -43,19 +43,20 @@ namespace Curl
         return sResult;
     }
 
-    inline FileList index(const std::string& aUrl, const Curl::Client::Params& aParams, time_t aIMS = 0)
+    // pair.first is false if not modified
+    inline std::pair<bool, FileList> index(const std::string& aUrl, const Curl::Client::Params& aParams, time_t aIMS = 0)
     {
         Client sClient(aParams);
         auto [sCode, sStr] = sClient.GET(aUrl, aIMS);
 
         if (sCode == 304)
-            return FileList{};
+            return std::make_pair(false, FileList{});
         if (sCode != 200)
             throw Client::Error("fail to index: http code: " + std::to_string(sCode));
         if (sStr.empty())
-            return FileList{};
+            return std::make_pair(true, FileList{});
 
-        return parse_autoindex(sStr);
+        return std::make_pair(true, parse_autoindex(sStr));
     }
 
 } // namespace Curl

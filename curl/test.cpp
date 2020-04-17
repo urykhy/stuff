@@ -158,13 +158,17 @@ BOOST_AUTO_TEST_CASE(Tmp)
 BOOST_AUTO_TEST_CASE(Index)
 {
     Curl::Client::Params sParams;
-    auto sFiles = Curl::index("http://127.0.0.1:8080/auto_index", sParams);
-    Curl::FileList sExpected = {{"../"},{"20200331"},{"20200401"}};
-    BOOST_CHECK_EQUAL_COLLECTIONS(sExpected.begin(), sExpected.end(), sFiles.begin(), sFiles.end());
-
-    // check IMS
-    sFiles = Curl::index("http://127.0.0.1:8080/auto_index", sParams, ::time(nullptr));
-    BOOST_CHECK(sFiles.empty());
+    {
+        auto [sValid, sFiles] = Curl::index("http://127.0.0.1:8080/auto_index", sParams);
+        Curl::FileList sExpected = {{"../"},{"20200331"},{"20200401"}};
+        BOOST_CHECK_EQUAL(sValid, true);
+        BOOST_CHECK_EQUAL_COLLECTIONS(sExpected.begin(), sExpected.end(), sFiles.begin(), sFiles.end());
+    }
+    {   // check IMS
+        auto [sValid, sFiles] = Curl::index("http://127.0.0.1:8080/auto_index", sParams, ::time(nullptr));
+        BOOST_CHECK_EQUAL(sValid, false);
+        BOOST_CHECK_EQUAL(sFiles.empty(), true);
+    }
 }
 BOOST_AUTO_TEST_CASE(Mass)
 {
