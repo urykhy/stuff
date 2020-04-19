@@ -8,6 +8,7 @@
 #include <cbor-tuple.hpp>
 #include <cbor-proxy.hpp>
 
+#include "tutorial.hpp"
 
 BOOST_AUTO_TEST_SUITE(Cbor)
 BOOST_AUTO_TEST_CASE(list)
@@ -98,5 +99,36 @@ BOOST_AUTO_TEST_CASE(proxy)
     float result_value = 0;
     cbor::read(in, result_value);
     BOOST_CHECK_CLOSE(result_value, 10.4, 0.1);
+}
+BOOST_AUTO_TEST_CASE(generated)
+{
+    cbor::binary tmp;
+    {
+        test::Vary sTmp;
+        sTmp.name = "test";
+        sTmp.age  = 12;
+        sTmp.phone.emplace();
+        sTmp.phone->insert(std::make_pair(1, "some number"));
+        sTmp.city.emplace();
+        sTmp.city->push_back("some city");
+
+        cbor::omemstream out(tmp);
+        sTmp.write(out);
+        BOOST_TEST_MESSAGE(Parser::to_hex(std::string(tmp.begin(), tmp.end())));
+    }
+    {
+        cbor::imemstream in(tmp);
+        test::Vary sTmp;
+        sTmp.read(in);
+
+        BOOST_CHECK_EQUAL(*sTmp.name, "test");
+        BOOST_CHECK_EQUAL(*sTmp.age, 12);
+        auto sIt = sTmp.phone->find(1);
+        BOOST_REQUIRE(sIt != sTmp.phone->end());
+        BOOST_CHECK_EQUAL(sIt->second, "some number");
+        auto sXt = sTmp.city->begin();
+        BOOST_REQUIRE(sXt != sTmp.city->end());
+        BOOST_CHECK_EQUAL(*sXt, "some city");
+    }
 }
 BOOST_AUTO_TEST_SUITE_END()
