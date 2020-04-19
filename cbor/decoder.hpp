@@ -30,34 +30,31 @@ namespace cbor {
         throw std::runtime_error("invalid integer type");
     }
 
-    // type, size
-    typedef std::pair<uint8_t, uint8_t> TypeInfo;
+    struct TypeInfo
+    {
+        uint8_t minor : 5;  // size. (type & 31)
+        uint8_t major : 3;  // type. (type >> 5)
+    };
 
     inline TypeInfo get_type(imemstream& s, const bool skip_tags = true) {
-        uint8_t type;
-        uint8_t majorType;
-        uint8_t minorType;
-
+        TypeInfo info{0};
         do {
-            s.read(&type, sizeof(type));
-            majorType = type >> 5;
-            minorType = (uint8_t) (type & 31);
-            if (skip_tags && majorType == CBOR_TAG) {   // skip unexpected tags
-                get_uint(s, minorType);
+            s.read(&info, sizeof(info));
+            if (skip_tags && info.major == CBOR_TAG) {   // skip unexpected tags
+                get_uint(s, info.minor);
             }
-        } while (skip_tags && majorType == CBOR_TAG);
-
-        return TypeInfo(majorType, minorType);
+        } while (skip_tags && info.major == CBOR_TAG);
+        return info;
     }
 
     inline uint8_t ensure_type(imemstream& s, uint8_t needType)
     {
         TypeInfo t = get_type(s);
         //BOOST_TEST_MESSAGE("ensure type " << (int)t.first << " vs required " << (int)needType << ", special: " << (int)t.second);
-        if (t.first != needType) {
+        if (t.major != needType) {
             throw std::runtime_error("unexpected type");
         }
-        return t.second;
+        return t.minor;
     }
 
     // only positive int
@@ -76,9 +73,9 @@ namespace cbor {
     >::type
     read(imemstream& s, T& val) {
         const auto t = get_type(s);
-        switch (t.first) {
-            case CBOR_UINT: val = get_uint<T>(s, t.second); return;
-            case CBOR_NINT: val = -1 -get_uint<T>(s, t.second); return;
+        switch (t.major) {
+            case CBOR_UINT: val = get_uint<T>(s, t.minor); return;
+            case CBOR_NINT: val = -1 -get_uint<T>(s, t.minor); return;
             default: throw std::runtime_error("unexpected type");
         }
     }
@@ -170,8 +167,8 @@ namespace cbor {
 
     inline bool read_tag(imemstream& s, uint64_t& tag) {
         const auto t = get_type(s, false);
-        if (t.first == CBOR_TAG) {
-            tag = get_uint(s, t.second);
+        if (t.major == CBOR_TAG) {
+            tag = get_uint(s, t.minor);
             return true;
         }
         s.unget();

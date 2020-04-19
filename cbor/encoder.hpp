@@ -27,7 +27,7 @@ namespace cbor {
     }
 
     inline void write_special(omemstream& out, uint8_t special) {
-        out.put((uint8_t) ( 7 << 5 | special));
+        out.put((uint8_t) ( CBOR_X << 5 | special));
     }
 
     // API
