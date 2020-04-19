@@ -17,6 +17,6 @@ namespace Mpl
     template<typename F, typename Tuple>
     void for_each_element(F&& f, Tuple&& aTuple)
     {
-        std::apply([f = std::move(f)] (auto... x) {(f(x),...);}, aTuple);
+        std::apply([f = std::move(f)] (auto&... x) {(f(x),...);}, aTuple);
     }
 }

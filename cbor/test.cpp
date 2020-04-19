@@ -78,14 +78,18 @@ BOOST_AUTO_TEST_CASE(container)
 }
 BOOST_AUTO_TEST_CASE(proxy)
 {
-    auto sCall = cbor::make_proxy([](int a, std::string b, double c) -> float {
-        return a + b.size() * c;
+    auto sCall = cbor::make_proxy([](int a, std::string b, double c) -> float
+    {
+        BOOST_TEST_MESSAGE("args " << a << ", " << b << ", " << c);
+        float rc = a + b.size() * c;
+        BOOST_TEST_MESSAGE("return " << rc);
+        return rc;
     });
 
     cbor::binary buffer;
     cbor::omemstream out(buffer);
-    cbor::write(out, 10, boost::string_ref("some"), 0.1);
-    //cbor::write(out, std::make_tuple(10, boost::string_ref("some"), 0.1));
+    //cbor::write(out, 10, boost::string_ref("some"), 0.1);
+    cbor::write(out, std::make_tuple(10, boost::string_ref("some"), 0.1));
 
     cbor::binary result;
     sCall->run(cbor::imemstream(buffer), cbor::omemstream(result));
