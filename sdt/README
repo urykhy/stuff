@@ -1,0 +1,11 @@
+use SDT event
+
+perf buildid-cache --add ./a.out
+perf list sdt
+sudo perf probe sdt_simple:enter
+sudo perf probe sdt_simple:exit
+perf probe --list
+perf record -e sdt_simple:enter -e sdt_simple:exit ./a.out
+perf script
+sudo perf probe --del sdt_simple:enter
+sudo perf probe --del sdt_simple:exit
