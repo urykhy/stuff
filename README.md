@@ -18,7 +18,10 @@ some information about stuff
 - asio_http - asio http server and client
 - asio_mysqld - asio mysql server
 - avx - bit of simd
-- gzip - decompress archives
+- cache - some caching
+- cbor - cbor format implementation
+- container - containers, IoC.
+- file - file operations
 - iconv - c++ wrapper for iconv
 - logger - logger which can be enabled/disabled per function/log-level
 - ml - machine learning: FTRL, LR.
@@ -30,6 +33,7 @@ some information about stuff
 - rpc - simple rpc over udp
 - ssl - openssl wrapper
 - stats - graphite/prometheus metrics proof of concept
+- threads - thread group, and thread related stuff.
 - time - cctz wrapper
 - utf8 - utf8 validator
 
