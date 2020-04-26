@@ -3,7 +3,6 @@
  * g++ test.cpp -I. -lboost_unit_test_framework -lboost_system -lboost_filesystem
  */
 
-#define BOOST_TEST_DYN_LINK
 #define BOOST_TEST_MODULE Suites
 #include <boost/test/unit_test.hpp>
 #include <String.hpp>

@@ -1,6 +1,5 @@
-project('parser', 'cpp', version : '0.1')
+project('parser', 'cpp', version : '0.1', default_options : ['cpp_std=c++17'])
 
-add_project_arguments('-ggdb', '-O0', '-std=c++17', language: 'cpp')
 boost     = dependency('boost', modules : ['unit_test_framework', 'system'])
 threads   = dependency('threads')
 

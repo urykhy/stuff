@@ -4,7 +4,6 @@
  * g++ test.cpp -I. -lboost_unit_test_framework -lcctz -I/usr/include/cctz
  */
 
-#define BOOST_TEST_DYN_LINK
 #define BOOST_TEST_MODULE Suites
 #include <boost/test/unit_test.hpp>
 

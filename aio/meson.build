@@ -1,7 +1,6 @@
-project('aio', 'cpp', version : '0.1')
+project('aio', 'cpp', version : '0.1', default_options : ['cpp_std=c++17'])
 
 includes = include_directories('..')
-add_project_arguments('-ggdb', '-O0', '-std=c++14', language: 'cpp')
 boost     = dependency('boost', modules : ['unit_test_framework', 'system'])
 threads   = dependency('threads')
 

@@ -3,7 +3,6 @@
  * g++ test-cache.cpp -I. -lboost_unit_test_framework
  */
 
-#define BOOST_TEST_DYN_LINK
 #define BOOST_TEST_MODULE Suites
 #include <boost/test/unit_test.hpp>
 #include <LRU.hpp>
