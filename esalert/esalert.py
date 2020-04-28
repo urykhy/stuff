@@ -16,7 +16,7 @@ import logging
 logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', level=logging.ERROR)
 
 with open("esalert.yaml", 'r') as stream:
-    C = yaml.load(stream)
+    C = yaml.load(stream, Loader=yaml.FullLoader)
 
 from elasticsearch import Elasticsearch
 from elasticsearch_dsl import Search, Q
