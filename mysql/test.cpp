@@ -1,24 +1,22 @@
 #define BOOST_TEST_MODULE Suites
 #include <boost/test/unit_test.hpp>
 
-#include <Client.hpp>
-#include <Pool.hpp>
-#include <Updateable.hpp>
-#include <Upload.hpp>
-#include <Quote.hpp>
-#include <Format.hpp>
+#include "Client.hpp"
+#include "Pool.hpp"
+#include "Updateable.hpp"
+#include "Upload.hpp"
+#include "Quote.hpp"
+#include "Format.hpp"
+#include "TaskQueue.hpp"
 
 #include <time/Meter.hpp>
 #include <iostream>
 #include <cassert>
 
-// g++ test.cpp -I. `mariadb_config --include` `mariadb_config --libs` -lcctz -I/usr/include/cctz -I../threads/ -lboost_filesystem -lboost_system -lboost_unit_test_framework -pthread -ggdb -std=c++14 -O3
-// ./a.out -l all -t MySQL/prepare
-
 struct Entry
 {
-    int emp_no = 0;
-    int salary = 0;
+    int64_t emp_no = 0;
+    int64_t salary = 0;
     std::string from_date;
     std::string to_date;
 };
@@ -29,7 +27,7 @@ BOOST_AUTO_TEST_SUITE(MySQL)
 BOOST_AUTO_TEST_CASE(simple)
 {
     MySQL::Connection c(cfg);
-    std::cout << "connected" << std::endl;
+    BOOST_CHECK_EQUAL(c.ping(), true);  // connected
     std::list<Entry> sData;
     Time::XMeter m1;
     c.Query("select emp_no, salary, from_date, to_date from salaries");
@@ -39,6 +37,9 @@ BOOST_AUTO_TEST_CASE(simple)
     });
     std::cout << "elapsed " << m1.duration().count()/1000/1000.0 << " ms" << std::endl;
     std::cout << "got " << sData.size() << " rows" << std::endl;
+
+    c.close();
+    BOOST_CHECK_EQUAL(c.ping(), false);  // not connected
 }
 BOOST_AUTO_TEST_CASE(pool)
 {
@@ -53,8 +54,8 @@ BOOST_AUTO_TEST_CASE(pool)
         std::cout << aRow.as_str(0) << std::endl;
     });
     sPool.release(xc);
-    assert(nullptr == xc);
-    std::cout << "pool size " << sPool.size() << std::endl;
+    BOOST_CHECK_EQUAL(xc, nullptr);
+    BOOST_CHECK_EQUAL(sPool.size(), 1);
 }
 BOOST_AUTO_TEST_CASE(updateable)
 {
@@ -157,5 +158,42 @@ BOOST_AUTO_TEST_CASE(format)
                                      {"INSERT INTO newdata (id, name) VALUES (4, 'four') ON DUPLICATE KEY UPDATE name=name"}};
     const auto sResult = MySQL::Format<FormatPolicy>(sData);
     BOOST_CHECK_EQUAL_COLLECTIONS(sResult.begin(), sResult.end(), sExpected.begin(), sExpected.end());
+}
+BOOST_AUTO_TEST_CASE(task_queue)
+{
+    // insert tasks:  INSERT INTO task_queue(task) VALUES ('one'),('two'),('three');
+    // refresh tasks: UPDATE task_queue SET status='new';
+    size_t sCount = 0;
+    using namespace std::chrono_literals;
+    struct TestHandler : MySQL::TaskQueue::HandlerFace
+    {
+        size_t&     m_Count;
+        TestHandler(size_t& aCount) : m_Count(aCount) {}
+
+        std::string prepare(const std::string& task) noexcept override {
+            BOOST_TEST_MESSAGE("prepare task " << task);
+            return task;
+        }
+        bool process(const std::string& task, const std::string& hint) override {
+            BOOST_TEST_MESSAGE("process task " << task << " with hint " << hint);
+            m_Count++;
+            return true;
+        }
+        void report(const char* e) noexcept override {
+            BOOST_TEST_MESSAGE("exception: " << e);
+        }
+        virtual    ~TestHandler() {}
+    };
+    TestHandler sHandler(sCount);
+
+    MySQL::TaskQueue::Config sQueueCfg;
+    sQueueCfg.mysql = MySQL::Config{"sql1.mysql", 3306, "root", "", "test"};
+
+    MySQL::TaskQueue::Manager sQueue(sQueueCfg, &sHandler);
+    Threads::Group sGroup;
+    sQueue.start(sGroup);
+
+    std::this_thread::sleep_for(1s);
+    BOOST_CHECK_EQUAL(sCount, 3);
 }
 BOOST_AUTO_TEST_SUITE_END()

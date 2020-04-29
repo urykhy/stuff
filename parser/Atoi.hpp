@@ -12,15 +12,21 @@ namespace Parser
     T Atoi(const boost::string_ref aString)
     {
         T sResult = 0;
+        bool sNegative = false;
 
         for (auto& x : aString)
         {
+            if (x == '-')
+            {
+                sNegative = true;
+                continue;
+            }
             if (x > '9' or x < '0')
                 throw NotNumber();
             sResult = sResult * 10 + x - '0';
         }
 
-        return sResult;
+        return sNegative ? -sResult : sResult;
     }
 
     template<class T>

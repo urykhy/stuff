@@ -5,6 +5,9 @@
 #include <list>
 #include <stdexcept>
 
+#include <parser/Atoi.hpp>
+#include <mpl/Mpl.hpp>
+
 namespace MySQL
 {
     struct Config
@@ -36,10 +39,10 @@ namespace MySQL
         Row(const MYSQL_ROW& aRow, const unsigned aSize)
         : m_Row(aRow), m_Size(aSize) {}
 
-        int as_int(unsigned id) const
+        int64_t as_int(unsigned id) const
         {
             validate(id);
-            return std::atoi(m_Row[id]);
+            return Parser::Atoi<int64_t>(m_Row[id]);
         }
 
         std::string as_str(unsigned id) const
@@ -51,11 +54,6 @@ namespace MySQL
 
     namespace aux
     {
-        template <class F, class... Ts>
-        void for_each_argument(F f, Ts&&... a) {
-            (void)std::initializer_list<int>{(f(std::forward<Ts>(a)), 0)...};
-        }
-
         class Buffer
         {
             std::array<unsigned char, 4096> m_Buffer;
@@ -177,7 +175,7 @@ namespace MySQL
             MYSQL_BIND sBind[sizeof...(t)];
             memset(sBind, 0, sizeof(sBind));
 
-            aux::for_each_argument([this, &sBind, index = 0](const auto& x) mutable {
+            Mpl::for_each_argument([this, &sBind, index = 0](const auto& x) mutable {
                 this->bind_one(sBind[index++], x);
             }, t...);
 
@@ -234,36 +232,83 @@ namespace MySQL
 
     class Connection
     {
+        const Config m_Cfg;
         MYSQL m_Handle;
+        bool m_Closed = true;
         Connection(const Connection& ) = delete;
         Connection& operator=(const Connection& ) = delete;
-    public:
-        Connection(const Config& aCfg)
+
+        void report(const char* aMsg)
         {
+            throw Error(std::string(aMsg) + ": " + mysql_error(&m_Handle));
+        }
+    public:
+
+        using Error = std::runtime_error;
+
+        Connection(const Config& aCfg)
+        : m_Cfg(aCfg)
+        {
+            open();
+        }
+
+        void open()
+        {
+            if (!m_Closed)
+                throw Error("connection already open");
+
             int sReconnectTimeout = 1;
             mysql_init(&m_Handle);
             mysql_options(&m_Handle, MYSQL_OPT_CONNECT_TIMEOUT, &sReconnectTimeout);
-            mysql_options(&m_Handle, MYSQL_OPT_READ_TIMEOUT, &aCfg.timeout);
-            mysql_options(&m_Handle, MYSQL_OPT_WRITE_TIMEOUT, &aCfg.timeout);
-            if (!mysql_real_connect(&m_Handle, aCfg.host.data(), aCfg.username.data(), aCfg.password.data(), aCfg.database.data(), aCfg.port, NULL, 0))
-                throw std::runtime_error("mysql_real_connect");
+            mysql_options(&m_Handle, MYSQL_OPT_READ_TIMEOUT, &m_Cfg.timeout);
+            mysql_options(&m_Handle, MYSQL_OPT_WRITE_TIMEOUT, &m_Cfg.timeout);
+            if (!mysql_real_connect(&m_Handle, m_Cfg.host.data(), m_Cfg.username.data(), m_Cfg.password.data(), m_Cfg.database.data(), m_Cfg.port, NULL, 0))
+            {
+                mysql_close(&m_Handle);
+                report("mysql_real_connect");
+            }
+            m_Closed = false;
+        }
+
+        void close()
+        {
+            if (!m_Closed)
+            {
+                mysql_close(&m_Handle);
+                m_Closed = true;
+            }
+        }
+
+        void ensure()
+        {
+            if (!ping())
+            {
+                close();
+                open();
+            }
         }
 
         ~Connection()
         {
-            mysql_close(&m_Handle);
+            close();
         }
 
         Statment Prepare(const std::string& aQuery)
         {
+            if (m_Closed)
+                throw Error("attempt to use closed connection");
+
             return Statment(&m_Handle, aQuery);
         }
 
         void Query(const std::string& aQuery)
         {
+            if (m_Closed)
+                throw Error("attempt to use closed connection");
+
             int rc = mysql_query(&m_Handle, aQuery.data());
             if (rc)
-                throw std::runtime_error("mysql_query");
+                report("mysql_query");
         }
 
         template<class T>
@@ -275,7 +320,7 @@ namespace MySQL
             // initiates a result set retrieval but does not actually read the result set into the client
             MYSQL_RES* sResult = mysql_use_result(&m_Handle);
             if (sResult == NULL)
-                throw std::runtime_error("mysql_store_result");
+                report("mysql_use_result");
 
             int sFields = mysql_num_fields(sResult);
             MYSQL_ROW sRow;
@@ -284,10 +329,10 @@ namespace MySQL
             mysql_free_result(sResult);
         }
 
+        // return true if server alive
         bool ping()
         {
-            return 0 == mysql_ping(&m_Handle);
+            return m_Closed ? false : 0 == mysql_ping(&m_Handle);
         }
     };
-
 };
