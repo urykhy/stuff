@@ -230,7 +230,22 @@ namespace MySQL
         }
     };
 
-    class Connection
+    struct ConnectionFace
+    {
+        using UseCB = std::function<void(Row&&)>;
+
+        virtual void open()   = 0;
+        virtual void close()  = 0;
+        virtual bool ping()   = 0;
+        virtual void ensure() = 0;
+
+        virtual void Query(const std::string& aQuery) = 0;
+        virtual void Use(UseCB aHandler) = 0;
+
+        virtual ~ConnectionFace() {};
+    };
+
+    class Connection : public ConnectionFace
     {
         const Config m_Cfg;
         MYSQL m_Handle;
@@ -252,7 +267,7 @@ namespace MySQL
             open();
         }
 
-        void open()
+        void open() override
         {
             if (!m_Closed)
                 throw Error("connection already open");
@@ -270,7 +285,7 @@ namespace MySQL
             m_Closed = false;
         }
 
-        void close()
+        void close() override
         {
             if (!m_Closed)
             {
@@ -279,7 +294,13 @@ namespace MySQL
             }
         }
 
-        void ensure()
+        // return true if server alive
+        bool ping() override
+        {
+            return m_Closed ? false : 0 == mysql_ping(&m_Handle);
+        }
+
+        void ensure() override
         {
             if (!ping())
             {
@@ -288,7 +309,7 @@ namespace MySQL
             }
         }
 
-        ~Connection()
+        virtual ~Connection()
         {
             close();
         }
@@ -301,7 +322,7 @@ namespace MySQL
             return Statment(&m_Handle, aQuery);
         }
 
-        void Query(const std::string& aQuery)
+        void Query(const std::string& aQuery) override
         {
             if (m_Closed)
                 throw Error("attempt to use closed connection");
@@ -311,8 +332,7 @@ namespace MySQL
                 report("mysql_query");
         }
 
-        template<class T>
-        void Use(T aHandler)
+        void Use(UseCB aHandler) override
         {
             // reads the entire result of a query to the client
             //MYSQL_RES* sResult = mysql_store_result(&m_Handle);
@@ -329,10 +349,5 @@ namespace MySQL
             mysql_free_result(sResult);
         }
 
-        // return true if server alive
-        bool ping()
-        {
-            return m_Closed ? false : 0 == mysql_ping(&m_Handle);
-        }
     };
 };

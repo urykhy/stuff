@@ -11,7 +11,6 @@ namespace MySQL::TaskQueue
 {
     struct Config
     {
-        MySQL::Config mysql;
         std::string   table = "task_queue";
         std::string   instance = "test";
         time_t        period = 10;
@@ -27,9 +26,9 @@ namespace MySQL::TaskQueue
 
     class Manager
     {
-        Config       m_Config;
-        Connection   m_Connection;
-        HandlerFace* m_Handler;
+        Config           m_Config;
+        ConnectionFace*  m_Connection;
+        HandlerFace*     m_Handler;
         std::atomic_bool m_Exit{false};
 
         struct Task
@@ -48,8 +47,8 @@ namespace MySQL::TaskQueue
                                        "WHERE (status = 'new') OR (status = 'started' and updated < DATE_SUB(NOW(), INTERVAL 1 HOUR)) "
                                        "ORDER BY id ASC LIMIT 1 "
                                        "FOR UPDATE SKIP LOCKED";
-            m_Connection.Query(sQuery);
-            m_Connection.Use([&sTask](const MySQL::Row& aRow){
+            m_Connection->Query(sQuery);
+            m_Connection->Use([&sTask](const MySQL::Row& aRow){
                 sTask.emplace();
                 sTask->id     = aRow.as_int(0);
                 sTask->task   = aRow.as_str(1);
@@ -61,12 +60,12 @@ namespace MySQL::TaskQueue
 
         void one_step_i()
         {
-            m_Connection.ensure();
-            m_Connection.Query("BEGIN");    // transaction required for `SELECT FOR UPDATE`
+            m_Connection->ensure();
+            m_Connection->Query("BEGIN");    // transaction required for `SELECT FOR UPDATE`
             std::optional<Task> sTask = get_task();
             if (!sTask)
             {
-                m_Connection.Query("ROLLBACK");
+                m_Connection->Query("ROLLBACK");
                 wait(m_Config.period);
                 return;
             }
@@ -78,12 +77,12 @@ namespace MySQL::TaskQueue
                 if (!sTask->hint.empty())
                     sUpdateHint = ", hint = '" + Quote(sTask->hint) + "' ";
             }
-            m_Connection.Query("UPDATE " + m_Config.table + " SET status='started', worker='" + m_Config.instance + "'" + sUpdateHint + " WHERE id = " + std::to_string(sTask->id));
-            m_Connection.Query("COMMIT");
+            m_Connection->Query("UPDATE " + m_Config.table + " SET status='started', worker='" + m_Config.instance + "'" + sUpdateHint + " WHERE id = " + std::to_string(sTask->id));
+            m_Connection->Query("COMMIT");
 
             bool sStatusCode = m_Handler->process(sTask->task, sTask->hint);
             const std::string sStatusStr = sStatusCode ? "done" : "error";
-            m_Connection.Query("UPDATE " + m_Config.table + " SET status='" + sStatusStr + "' WHERE id = " + std::to_string(sTask->id));
+            m_Connection->Query("UPDATE " + m_Config.table + " SET status='" + sStatusStr + "' WHERE id = " + std::to_string(sTask->id));
         }
 
         void one_step()
@@ -94,7 +93,7 @@ namespace MySQL::TaskQueue
             }
             catch (const std::exception& e)
             {
-                m_Connection.close();
+                m_Connection->close();
                 m_Handler->report(e.what());
                 wait(1); // do not flood with errors
             }
@@ -108,9 +107,9 @@ namespace MySQL::TaskQueue
         }
 
     public:
-        Manager(const Config& aConfig, HandlerFace* aHandler)
+        Manager(const Config& aConfig, ConnectionFace* aConnection, HandlerFace* aHandler)
         : m_Config(aConfig)
-        , m_Connection(aConfig.mysql)
+        , m_Connection(aConnection)
         , m_Handler(aHandler)
         {}
 

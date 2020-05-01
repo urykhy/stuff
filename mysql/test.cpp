@@ -8,6 +8,7 @@
 #include "Quote.hpp"
 #include "Format.hpp"
 #include "TaskQueue.hpp"
+#include "Mock.hpp"
 
 #include <time/Meter.hpp>
 #include <iostream>
@@ -182,18 +183,68 @@ BOOST_AUTO_TEST_CASE(task_queue)
         void report(const char* e) noexcept override {
             BOOST_TEST_MESSAGE("exception: " << e);
         }
-        virtual    ~TestHandler() {}
+        virtual ~TestHandler() {}
     };
     TestHandler sHandler(sCount);
 
     MySQL::TaskQueue::Config sQueueCfg;
-    sQueueCfg.mysql = MySQL::Config{"sql1.mysql", 3306, "root", "", "test"};
+    MySQL::Config sCfg = MySQL::Config{"sql1.mysql", 3306, "root", "", "test"};
+    MySQL::Connection sConnection(sCfg);
 
-    MySQL::TaskQueue::Manager sQueue(sQueueCfg, &sHandler);
+    MySQL::TaskQueue::Manager sQueue(sQueueCfg, &sConnection, &sHandler);
     Threads::Group sGroup;
     sQueue.start(sGroup);
 
     std::this_thread::sleep_for(1s);
     BOOST_CHECK_EQUAL(sCount, 3);
+}
+BOOST_AUTO_TEST_CASE(task_queue_mock)
+{
+    size_t sCount = 0;
+    using namespace std::chrono_literals;
+    struct TestHandler : MySQL::TaskQueue::HandlerFace
+    {
+        size_t&     m_Count;
+        TestHandler(size_t& aCount) : m_Count(aCount) {}
+
+        std::string prepare(const std::string& task) noexcept override {
+            BOOST_CHECK_MESSAGE(false, "prepare must not be called");
+            return "";
+        }
+        bool process(const std::string& task, const std::string& hint) override {
+            BOOST_CHECK_EQUAL(task, "mock task");
+            BOOST_CHECK_EQUAL(hint, "existing hint");
+            m_Count++;
+            return true;
+        }
+        void report(const char* e) noexcept override {
+            BOOST_TEST_MESSAGE("exception: " << e);
+        }
+        virtual ~TestHandler() {}
+    };
+    TestHandler sHandler(sCount);
+
+    MySQL::Mock::SqlSet sExpectedSQL{
+        {"BEGIN", {}}
+      , {"SELECT id, task, worker, hint FROM task_queue WHERE (status = 'new') OR (status = 'started' and updated < DATE_SUB(NOW(), INTERVAL 1 HOUR)) ORDER BY id ASC LIMIT 1 FOR UPDATE SKIP LOCKED"
+            , {{"12", "mock task", "", "existing hint"}}
+        }
+      , {"UPDATE task_queue SET status='started', worker='test' WHERE id = 12", {}}
+      , {"COMMIT", {}}
+      , {"UPDATE task_queue SET status='done' WHERE id = 12", {}}
+      , {"BEGIN", {}}
+      , {"SELECT id, task, worker, hint FROM task_queue WHERE (status = 'new') OR (status = 'started' and updated < DATE_SUB(NOW(), INTERVAL 1 HOUR)) ORDER BY id ASC LIMIT 1 FOR UPDATE SKIP LOCKED"
+            , {}}
+      , {"ROLLBACK", {}}
+    };
+    MySQL::Mock sMock(sExpectedSQL);
+
+    MySQL::TaskQueue::Config  sQueueCfg;
+    MySQL::TaskQueue::Manager sQueue(sQueueCfg, sMock, &sHandler);
+    Threads::Group sGroup;
+    sQueue.start(sGroup);
+
+    std::this_thread::sleep_for(100ms);
+    BOOST_CHECK_EQUAL(sCount, 1);
 }
 BOOST_AUTO_TEST_SUITE_END()
