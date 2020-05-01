@@ -70,8 +70,8 @@ BOOST_AUTO_TEST_CASE(updateable)
     MySQL::Updateable<Departments> upd;
     upd.update(c);
     auto r = upd.find("d008");
-    if (r)
-        std::cout << "got " << r.value() << std::endl;
+    BOOST_CHECK(r);
+    BOOST_CHECK_EQUAL(r.value(), "Research");
 };
 BOOST_AUTO_TEST_CASE(upload)
 {
