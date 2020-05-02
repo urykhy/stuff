@@ -14,6 +14,7 @@ namespace Stat
         const uint64_t m_PageSize;
         Counter<>      m_RSS;
         Counter<>      m_FDS;
+        Counter<>      m_Thr;
         Counter<float> m_User;
         Counter<float> m_System;
 
@@ -21,6 +22,7 @@ namespace Stat
         : m_PageSize(sysconf(_SC_PAGESIZE))
         , m_RSS("common.rss", "rss_bytes")
         , m_FDS("common.files", "open_files_count")
+        , m_Thr("common.threads", "threads_count")
         , m_User("common.user_time", "cpu_seconds_total{mode=\"user\"}")
         , m_System("common.system_time", "cpu_seconds_total{mode=\"system\"}")
         {}
@@ -37,6 +39,7 @@ namespace Stat
             }
             m_RSS.set(sRSS * m_PageSize);
             m_FDS.set(File::CountDir("/proc/self/fd"));
+            m_Thr.set(File::CountDir("/proc/self/task"));
 
             struct rusage sUsage;
             if (getrusage(RUSAGE_SELF, &sUsage) == 0)

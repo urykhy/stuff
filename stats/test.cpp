@@ -48,6 +48,7 @@ BOOST_AUTO_TEST_CASE(common)
     BOOST_TEST_MESSAGE("  user: " << sCommon.m_User.format());
     BOOST_TEST_MESSAGE("system: " << sCommon.m_System.format());
     BOOST_TEST_MESSAGE("    fd: " << sCommon.m_FDS.format());
+    BOOST_TEST_MESSAGE("   thr: " << sCommon.m_Thr.format());
 }
 #if 0
 BOOST_AUTO_TEST_CASE(real)

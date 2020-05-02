@@ -36,6 +36,14 @@ namespace Stat
         std::set<ComplexFace*> m_Complex;
 
         Manager() {};
+
+        friend class MetricFace;
+        void MetricInsert(MetricFace* aMetric) { Lock lk(m_Mutex); m_Set.insert(aMetric); }
+        void MetricErase(MetricFace* aMetric)  { Lock lk(m_Mutex); m_Set.erase(aMetric);  }
+
+        friend class ComplexFace;
+        void ComplexInsert(ComplexFace* aMetric) { Lock lk(m_Mutex); m_Complex.insert(aMetric); }
+        void ComplexErase(ComplexFace* aMetric)  { Lock lk(m_Mutex); m_Complex.erase(aMetric);  }
     public:
 
         static Manager& instance()
@@ -43,12 +51,6 @@ namespace Stat
             static Manager sManager;
             return sManager;
         }
-
-        void MetricInsert(MetricFace* aMetric) { Lock lk(m_Mutex); m_Set.insert(aMetric); }
-        void MetricErase(MetricFace* aMetric)  { Lock lk(m_Mutex); m_Set.erase(aMetric);  }
-
-        void ComplexInsert(ComplexFace* aMetric) { Lock lk(m_Mutex); m_Complex.insert(aMetric); }
-        void ComplexErase(ComplexFace* aMetric)  { Lock lk(m_Mutex); m_Complex.erase(aMetric);  }
 
         // row set without \n
         using Set = std::list<std::string>;
@@ -74,8 +76,7 @@ namespace Stat
             return sSet;
         }
 
-        // refresh complex metrics (Time)
-        // call 2 times per interval
+        // refresh complex metrics (Time, Common)
         void onTimer()
         {
             Lock lk(m_Mutex);

@@ -65,10 +65,14 @@ namespace Stat
     {
         static Common sCommon;
         static Threads::Periodic sUpdater;
-        sUpdater.start(aGroup, aConfig.period, [aConfig](){
+
+        // run with 1/2 period, to switch buckets in Histogramm
+        sUpdater.start(aGroup, aConfig.period / 2, [&aConfig](){
+            static bool sSend = false;
             Manager::instance().onTimer();
-            if (!aConfig.host.empty())
+            if (sSend and !aConfig.host.empty())
                 pushGraphite(aConfig);
+            sSend = !sSend;
         });
     }
 
