@@ -2,7 +2,6 @@
 #include <boost/test/unit_test.hpp>
 
 #include "Client.hpp"
-#include "Pool.hpp"
 #include "Updateable.hpp"
 #include "Upload.hpp"
 #include "Quote.hpp"
@@ -10,6 +9,7 @@
 #include "TaskQueue.hpp"
 #include "Mock.hpp"
 
+#include <container/Pool.hpp>
 #include <time/Meter.hpp>
 #include <iostream>
 #include <cassert>
@@ -44,7 +44,7 @@ BOOST_AUTO_TEST_CASE(simple)
 }
 BOOST_AUTO_TEST_CASE(pool)
 {
-    Util::Pool<MySQL::Connection> sPool([](){
+    Container::Pool<MySQL::Connection> sPool([](){
         return std::make_shared<MySQL::Connection>(cfg);
     }, [](auto c) -> bool {
         return c->ping();
