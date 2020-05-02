@@ -1,13 +1,17 @@
 #pragma once
 
-#include <Client.hpp>
+#include <mutex>
 #include <optional>
+
+#include <Client.hpp>
 
 namespace MySQL
 {
     template<class Policy>
     class Updateable
     {
+        using Lock = std::unique_lock<std::mutex>;
+        mutable std::mutex m_Mutex;
         typename Policy::Container m_Data;
         using Key   = typename Policy::Container::key_type;
         using Value = typename Policy::Container::mapped_type;
@@ -18,16 +22,19 @@ namespace MySQL
             typename Policy::Container sData;
             aConnection.Query(Policy::query());
             aConnection.Use([&sData](const MySQL::Row& aRow) { Policy::parse(sData, aRow); });
+            Lock lk(m_Mutex);
             std::swap(m_Data, sData);
+            lk.unlock();
         }
         std::optional<Value> find(const Key& k) const
         {
+            Lock lk(m_Mutex);
             auto sIter = m_Data.find(k);
             if (sIter == m_Data.end())
                 return std::nullopt;
             return std::make_optional<Value>(Value{sIter->second});
         }
-        size_t size()  const { return m_Data.size(); }
-        bool   empty() const { return m_Data.empty(); }
+        size_t size()  const { Lock lk(m_Mutex); return m_Data.size(); }
+        bool   empty() const { Lock lk(m_Mutex); return m_Data.empty(); }
     };
 }
