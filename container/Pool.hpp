@@ -1,7 +1,7 @@
 #pragma once
 
 #include <functional>
-#include <map>
+#include <list>
 #include <memory>
 
 namespace Container
@@ -14,17 +14,14 @@ namespace Container
         using Check = std::function<bool(Ptr)>;
     private:
 
-        std::multimap<time_t, Ptr> m_List;
+        using Data = std::pair<time_t, Ptr>;
+        std::list<Data> m_List;
         Generate m_Gen;
         Check m_Check;
         const size_t m_IdleCount;
         const time_t m_Timeout;
 
-        bool is_timedout(time_t x)
-        {
-            return x + m_Timeout < time(nullptr);
-        }
-
+        bool is_timedout(time_t x) const { return x + m_Timeout < time(nullptr); }
     public:
 
         Pool(Generate g, Check c, size_t aIdleCount = 1, time_t aTimeout = 10)
@@ -50,7 +47,7 @@ namespace Container
 
         void release(Ptr& t)
         {
-            m_List.insert(std::make_pair(time(nullptr), std::move(t)));
+            m_List.push_back(std::make_pair(time(nullptr), std::move(t)));
             if (m_List.size() > m_IdleCount)
                 m_List.erase(m_List.begin());
         }
