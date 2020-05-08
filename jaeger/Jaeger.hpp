@@ -22,7 +22,6 @@ namespace Jaeger
             std::string name;
             std::variant<std::string, const char*, double, bool, int64_t> value;
         };
-
     private:
 
         jaegertracing::thrift::Batch m_Batch;
@@ -30,8 +29,9 @@ namespace Jaeger
         const uint64_t m_TraceIDLow;
         const size_t m_BaseSpanID;
         size_t m_SpanID = 0;
+        size_t nextSpanID() { return m_BaseSpanID + m_SpanID++; }
 
-        jaegertracing::thrift::Tag convert(const Tag& aTag)
+        static jaegertracing::thrift::Tag convert(const Tag& aTag)
         {
             using Type = jaegertracing::thrift::TagType;
             jaegertracing::thrift::Tag sTag;
@@ -45,7 +45,6 @@ namespace Jaeger
             }, aTag.value);
             return sTag;
         }
-
     public:
 
         Metric(const std::string& aName, size_t aBaseID = 0)
@@ -70,53 +69,6 @@ namespace Jaeger
             m_Batch.process.__isset.tags = true;
         }
 
-        void span_tag(size_t aID, const Tag& aTag)
-        {
-            aID -= m_BaseSpanID;
-            m_Batch.spans[aID].tags.push_back(convert(aTag));
-            m_Batch.spans[aID].__isset.tags = true;
-        }
-
-        void span_error(size_t aID)
-        {
-            span_tag(aID, Tag{"error", true});
-        }
-
-        template<class... T>
-        void span_log(size_t aID, const T&... aTag)
-        {
-            aID -= m_BaseSpanID;
-            jaegertracing::thrift::Log sLog;
-            sLog.timestamp = Time::get_time().to_us();
-
-            // convert every aTag
-            (static_cast<void>(sLog.fields.push_back(convert(aTag))), ...);
-
-            m_Batch.spans[aID].logs.push_back(sLog);
-            m_Batch.spans[aID].__isset.logs = true;
-        }
-
-        size_t start(const std::string& aName, size_t aParent = 0)
-        {
-            jaegertracing::thrift::Span sSpan;
-            sSpan.traceIdHigh = m_TraceIDHigh;
-            sSpan.traceIdLow = m_TraceIDLow;
-            sSpan.spanId = m_BaseSpanID + m_SpanID++;
-            sSpan.parentSpanId = aParent;
-            sSpan.operationName = aName;
-            sSpan.flags = 0;
-            sSpan.startTime = Time::get_time().to_us();
-            sSpan.duration = 0;
-            m_Batch.spans.push_back(sSpan);
-            return sSpan.spanId;
-        }
-
-        void stop(size_t aID)
-        {
-            aID -= m_BaseSpanID;
-            m_Batch.spans[aID].duration = Time::get_time().to_us() - m_Batch.spans[aID].startTime;
-        }
-
         std::string serialize() const
         {
             auto sBuffer = std::make_shared<apache::thrift::transport::TMemoryBuffer>();
@@ -132,22 +84,37 @@ namespace Jaeger
             Guard(const Guard&) = delete;
             Guard& operator=(const Guard&) = delete;
 
-            Guard(Guard&& aOld)
-            : m_Metric(aOld.m_Metric)
-            , m_ID(aOld.m_ID)
-            { aOld.m_Alive = false; }
-
-            const int m_XCount = std::uncaught_exceptions();
-            Metric& m_Metric;
-            size_t m_ID;
+            const int m_XCount;
+            Metric&   m_Metric;
+            jaegertracing::thrift::Span m_Span;
             bool m_Alive = true;
+
         public:
 
             Guard(Metric& aMetric, const std::string& aName, size_t aParent = 0)
-            : m_Metric(aMetric)
-            , m_ID(m_Metric.start(aName, aParent))
-            { }
-            ~Guard() { close(); }
+            : m_XCount(std::uncaught_exceptions())
+            , m_Metric(aMetric)
+            {
+                m_Span.traceIdHigh   = m_Metric.m_TraceIDHigh;
+                m_Span.traceIdLow    = m_Metric.m_TraceIDLow;
+                m_Span.spanId        = m_Metric.nextSpanID();
+                m_Span.parentSpanId  = aParent;
+                m_Span.operationName = aName;
+                m_Span.flags         = 0;
+                m_Span.startTime     = Time::get_time().to_us();
+                m_Span.duration      = 0;
+            }
+
+            Guard(Guard&& aOld)
+            : m_XCount(aOld.m_XCount)
+            , m_Metric(aOld.m_Metric)
+            , m_Span(std::move(aOld.m_Span))
+            , m_Alive(aOld.m_Alive)
+            {
+                aOld.m_Alive = false;
+            }
+
+            ~Guard() { try { close(); } catch (...) {}; }
 
             void close()
             {
@@ -155,20 +122,41 @@ namespace Jaeger
                 {
                     if (m_XCount != std::uncaught_exceptions())
                         set_error();
-                    m_Metric.stop(m_ID);
+                    m_Span.duration = Time::get_time().to_us() - m_Span.startTime;
+                    m_Metric.m_Batch.spans.push_back(std::move(m_Span));
                     m_Alive = false;
                 }
             }
 
+            uint32_t span_id() const { return m_Span.spanId; }
+
             Guard child(const std::string& aName)
             {
-                return Guard(m_Metric, aName, m_ID);
+                return Guard(m_Metric, aName, m_Span.spanId);
             }
 
-            void set_error() {  m_Metric.span_error(m_ID); }
-            void set_tag(const Tag& aTag) { m_Metric.span_tag(m_ID, aTag); }
-            template<class... T> void set_log(const T&... aTag) { m_Metric.span_log(m_ID, aTag...); }
+            void set_tag(const Tag& aTag)
+            {
+                m_Span.tags.push_back(Metric::convert(aTag));
+                m_Span.__isset.tags = true;
+            }
+
+            void set_error() { set_tag(Tag{"error", true}); }
+
+            template<class... T>
+            void set_log(const T&... aTag)
+            {
+                jaegertracing::thrift::Log sLog;
+                sLog.timestamp = Time::get_time().to_us();
+
+                // convert every aTag
+                (static_cast<void>(sLog.fields.push_back(Metric::convert(aTag))), ...);
+
+                m_Span.logs.push_back(sLog);
+                m_Span.__isset.logs = true;
+            }
         };
+        friend class Guard;
     };
 
 } // namespace Jaeger
