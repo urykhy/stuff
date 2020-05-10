@@ -14,6 +14,7 @@ some information about stuff
 - threads - thread group, work queue, pipeline.
 
 ### experiments:
+- af_alg - use AF_ALG socket on linux to avoid openssl.
 - aio - linux native async io
 - asio_http - asio http server and client
 - asio_mysqld - asio mysql server
@@ -33,7 +34,6 @@ some information about stuff
 - rpc - simple rpc over udp
 - ssl - openssl wrapper
 - stats - graphite/prometheus metrics proof of concept
-- threads - thread group, and thread related stuff.
 - time - cctz wrapper
 - utf8 - utf8 validator
 

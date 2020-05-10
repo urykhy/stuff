@@ -45,12 +45,6 @@ namespace asio_mysql
             writeLenEnc(aStr.size());
             write(aStr.data(), aStr.size());
         }
-
-        template<class T>
-        void write(const T& aValue)
-        {
-            write(&aValue, sizeof(aValue));
-        }
     };
 
     struct imemstream : Container::imemstream

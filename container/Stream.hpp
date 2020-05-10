@@ -53,5 +53,8 @@ namespace Container
         omemstream(binary& aData) : m_Data(aData) {}
         void put(uint8_t aByte) { m_Data.push_back(aByte); }
         void write(const void* aData, size_t aSize) {  m_Data.insert(m_Data.end(), (const uint8_t*)aData, (const uint8_t*)aData + aSize); }
+
+        template<class T>
+        void write(const T& t) { write(&t, sizeof(t)); }
     };
 }
