@@ -1,0 +1,5 @@
+{
+	"name": "jenkins",
+	"type": "jenkins",
+	"buildName": "build_name"
+}
