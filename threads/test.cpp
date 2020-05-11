@@ -10,46 +10,62 @@
 #include "Asio.hpp"
 #include "WaitGroup.hpp"
 #include "OrderedWorker.hpp"
-
 #include "MapReduce.hpp"
-#include <container/ListArray.hpp>
-
 #include "ForEach.hpp"
 
-// g++ test.cpp -I. -I.. -lboost_system -lboost_unit_test_framework -pthread
 using namespace std::chrono_literals;
 
 BOOST_AUTO_TEST_SUITE(Threads)
-BOOST_AUTO_TEST_CASE(pipeline)
+
+BOOST_AUTO_TEST_SUITE(pipeline)
+BOOST_AUTO_TEST_CASE(sort)
+{
+    using PL = Threads::Pipeline<int>;
+    PL::Stages stages;
+
+    {
+        PL::PriorityList list;
+        list.push(PL::Node(1, stages.end(), 1, 1)); // serial 1, step 1
+        list.push(PL::Node(2, stages.end(), 1, 2)); // serial 1, step 2
+        list.push(PL::Node(3, stages.end(), 1, 3)); // serial 1, step 3
+        BOOST_CHECK_EQUAL(list.top().data, 3);  // max step
+    }
+    {
+        PL::PriorityList list;
+        list.push(PL::Node(1, stages.end(), 1, 2)); // serial 1, step 2
+        list.push(PL::Node(2, stages.end(), 2, 2)); // serial 2, step 2
+        list.push(PL::Node(3, stages.end(), 3, 2)); // serial 3, step 2
+        BOOST_CHECK_EQUAL(list.top().data, 1); // min serial
+    }
+}
+BOOST_AUTO_TEST_CASE(impl)
 {
     std::vector<int> data = {1,2,3,4,5,6,7,8,9};
     Threads::Pipeline<int> p;
 
     p.stage([](int a){
-        std::cout<< "stage1 " << a << std::endl;
+        BOOST_TEST_MESSAGE("stage1 " << a);
         Threads::sleep(drand48());
     });
     p.stage([](int a){
-        std::cout<< "stage2 " << a << std::endl;
+        BOOST_TEST_MESSAGE("stage2 " << a);
         Threads::sleep(drand48());
     });
     p.stage([](int a){
-        std::cout<< "stage3 " << a << std::endl;
+        BOOST_TEST_MESSAGE("stage3 " << a);
     });
+
+    for (auto a : data)
+        p.insert(a);
 
     Threads::Group tg;
     p.start(tg, 3);
-    sleep(1);
-
-    for (auto a : data) {
-        p.insert(a);
-        Threads::sleep(0.1);
-    }
 
     while (!p.idle()) Threads::sleep(0.1);
-
     tg.wait();  // call stop in Pipeline/SafeQueueThread
 }
+BOOST_AUTO_TEST_SUITE_END()
+
 BOOST_AUTO_TEST_CASE(collect)
 {
     Threads::Group tg;
