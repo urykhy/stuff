@@ -26,20 +26,29 @@ namespace Container
             m_Offset += aSize;
             return sResult;
         }
+
         void read(void* aBuffer, size_t aSize) {
             ensure(aSize);
             memcpy(aBuffer, m_Data.data() + m_Offset, aSize);
             m_Offset += aSize;
         }
+
+        template<class T>
+        void read(T& aData) {
+            read(&aData, sizeof(aData));
+        }
+
         void unget() {
             if (m_Offset == 0)
                 throw EndOfBuffer();
             m_Offset--;
         }
+
         void skip(size_t aSize) {
             ensure(aSize);
             m_Offset += aSize;
         }
+
         bool empty() const { return m_Data.empty(); }
 
         boost::string_ref rest() { return substring(m_Data.size() - m_Offset); }

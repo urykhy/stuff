@@ -52,8 +52,6 @@ namespace asio_mysql
         using Container::imemstream::read;
         imemstream(const Container::binary& aData) : Container::imemstream(aData) {}
 
-        template<class T> void read(T& aData) { read(&aData, sizeof(aData)); }
-
         void readStringNul(std::string& aStr) {
             char t = 0;
             do {
