@@ -34,10 +34,9 @@ BOOST_AUTO_TEST_CASE(simple)
     c.Query("select emp_no, salary, from_date, to_date from salaries");
     c.Use([&sData](const MySQL::Row& aRow){
         sData.push_back(Entry{aRow.as_int(0), aRow.as_int(1), aRow.as_str(2), aRow.as_str(3)});
-        //std::cout << aRow.as_int(0) << " = " << aRow.as_int(1) << ", from " << aRow.as_str(2) << " to " << aRow.as_str(3) << std::endl;
     });
-    std::cout << "elapsed " << m1.duration().count()/1000/1000.0 << " ms" << std::endl;
-    std::cout << "got " << sData.size() << " rows" << std::endl;
+    BOOST_TEST_MESSAGE("elapsed " << m1.duration().count()/1000/1000.0 << " ms");
+    BOOST_TEST_MESSAGE("got " << sData.size() << " rows");
 
     c.close();
     BOOST_CHECK_EQUAL(c.ping(), false);  // not connected
@@ -52,7 +51,7 @@ BOOST_AUTO_TEST_CASE(pool)
     auto xc = sPool.get();
     xc->Query("select version()");
     xc->Use([](const MySQL::Row& aRow){
-        std::cout << aRow.as_str(0) << std::endl;
+        BOOST_TEST_MESSAGE(aRow.as_str(0));
     });
     sPool.release(xc);
     BOOST_CHECK_EQUAL(xc, nullptr);
@@ -107,7 +106,7 @@ BOOST_AUTO_TEST_CASE(prepare)
     s.Use([i = 0](const auto& aRow) mutable {
         const std::string sNumber = aRow[0];
         const std::string sName   = aRow[1];
-        std::cout << sNumber << " = " << sName << std::endl;
+        BOOST_TEST_MESSAGE(sNumber << " = " << sName);
         if (i == 0)
         {
             BOOST_CHECK_EQUAL(sNumber, "d005");
@@ -125,7 +124,7 @@ BOOST_AUTO_TEST_CASE(prepare)
     MySQL::Statment s1=c.Prepare("select * from salaries where from_date=? and emp_no > ? order by emp_no");
     s1.Execute("1997-11-28", 494301);
     s1.Use([i=0](const auto& aRow) mutable {
-        std::cout << aRow[0] << ' ' << aRow[1] << ' ' << aRow[2] << ' ' << aRow[3] << std::endl;
+        BOOST_TEST_MESSAGE(aRow[0] << ' ' << aRow[1] << ' ' << aRow[2] << ' ' << aRow[3]);
         if (i == 0)
         {
             BOOST_CHECK_EQUAL(aRow[0], "495165");
