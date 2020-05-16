@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Server.hpp"
+#include "Connection.hpp"
 
 #include <threads/SafeQueue.hpp>
 #include <threads/Group.hpp>
@@ -10,49 +10,44 @@ namespace httpd
     struct Router
     {
         using Worker = Threads::SafeQueueThread<std::function<void()>>;
-        using UserResult = Server::UserResult;
+        using UserResult = Connection::UserResult;
 
         struct Location
         {
-            std::string method;
             std::string prefix;
             bool async = true;
         };
-        using Handler = std::function<UserResult(Server::SharedPtr, const Request&)>;
+        using Handler = std::function<UserResult(Connection::SharedPtr, const Request&)>;
 
     private:
         Worker m_Worker;
         std::list<std::pair<Location, Handler>> m_Locations;
 
-        bool match(const Location& aLoc, const Request& aReq)
+        bool match(const Location& aLoc, const Request& aReq) const
         {
-            if (aReq.m_Method != aLoc.method)
-                return false;
-            if (0 != aReq.m_Url.compare(0, aLoc.prefix.size(), aLoc.prefix))
-                return false;
-            return true;
+            return 0 == aReq.m_Url.compare(0, aLoc.prefix.size(), aLoc.prefix);
         }
 
-        UserResult process(Server::SharedPtr aServer, const Request& aRequest, const Handler& aHandler, bool aAsync)
+        UserResult process(Connection::SharedPtr aConnection, const Request& aRequest, const Handler& aHandler, bool aAsync)
         {
             if (aAsync)
             {
                 // use WeakPtr to pass task via queue, so if connection closes
                 // it will be destroyed and task dropped
-                Server::WeakPtr sWeak = aServer;
+                Connection::WeakPtr sWeak = aConnection;
                 m_Worker.insert([sWeak, aRequest, aHandler]()
                 {
-                    auto sServer = sWeak.lock();
-                    if (sServer) {
-                        auto rc = aHandler(sServer, aRequest);
+                    auto sConnection = sWeak.lock();
+                    if (sConnection) {
+                        auto rc = aHandler(sConnection, aRequest);
                         if (rc == UserResult::DONE)
-                            sServer->notify();
+                            sConnection->notify();
                         // if handler return ASYNC - user must call notify() once request done
                     }
                 });
                 return UserResult::ASYNC;
             }
-            return aHandler(aServer, aRequest);
+            return aHandler(aConnection, aRequest);
         }
 
     public:
@@ -61,16 +56,17 @@ namespace httpd
         { }
 
         void start(Threads::Group& aGroup) { m_Worker.start(aGroup); }
-        void insert(const Location& aLoc, const Handler aHandler) { m_Locations.push_back({aLoc, aHandler}); }
+        void insert_sync(const std::string& aLoc, const Handler aHandler) { m_Locations.push_back({Location{aLoc, false}, aHandler}); }
+        void insert(const std::string& aLoc, const Handler aHandler) { m_Locations.push_back({Location{aLoc, true}, aHandler}); }
 
-        UserResult operator()(Server::SharedPtr aServer, const Request& aRequest)
+        UserResult operator()(Connection::SharedPtr aConnection, const Request& aRequest)
         {
             for (auto& [sLoc, sHandler]: m_Locations)
                 if (match(sLoc, aRequest))
-                    return process(aServer, aRequest, sHandler, sLoc.async);
+                    return process(aConnection, aRequest, sHandler, sLoc.async);
 
             const std::string sNotFound = "HTTP/1.0 404 Not Found\r\nContent-Length: 0\r\n\r\n";
-            aServer->write(sNotFound);  // FIXME: write_int, since we in the same thread
+            aConnection->write(sNotFound);  // FIXME: write_int, since we in the network thread
             return UserResult::DONE;
         }
     };

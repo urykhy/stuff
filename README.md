@@ -23,6 +23,7 @@ some information about stuff
 - cbor - cbor format implementation
 - container - containers, IoC.
 - file - file operations
+- httpd - httpd with pipelining and no asio
 - iconv - c++ wrapper for iconv
 - logger - logger which can be enabled/disabled per function/log-level
 - ml - machine learning: FTRL, LR.

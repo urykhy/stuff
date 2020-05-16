@@ -54,37 +54,37 @@ BOOST_AUTO_TEST_CASE(simple)
     Threads::Group sGroup;  // in d-tor we stop all threads
     sEPoll.start(sGroup);
 
-    auto sHandler1 = [](httpd::Server::SharedPtr aServer, const Request& aRequest)
+    auto sHandler1 = [](httpd::Connection::SharedPtr aPeer, const Request& aRequest)
     {
         BOOST_TEST_MESSAGE("request: " << aRequest.m_Url);
         std::string sResponse =
         "HTTP/1.1 200 OK\r\n"
         "Content-Length: 10\r\n"
         "Content-Type: text/numbers\r\n"
+        "Connection: keep-alive\r\n"
         "\r\n"
         "0123456789";
-        aServer->write(sResponse);
-        return Server::DONE;
+        aPeer->write(sResponse);
+        return Connection::DONE;
     };
-    sRouter.insert({"GET","/hello",false}, sHandler1);  // call handler in network thread
+    sRouter.insert_sync("/hello", sHandler1);  // call handler in network thread
 
-    auto sHandler2 = [](httpd::Server::SharedPtr aServer, const Request& aRequest){
+    auto sHandler2 = [](httpd::Connection::SharedPtr aPeer, const Request& aRequest){
         BOOST_TEST_MESSAGE("request: " << aRequest.m_Url);
         std::string sResponse =
         "HTTP/1.1 200 OK\r\n"
         "Content-Length: 10\r\n"
         "Content-Type: text/numbers\r\n"
+        "Connection: keep-alive\r\n"
         "\r\n"
         "9876543210";
-        aServer->write(sResponse);
-        return Server::DONE;
+        aPeer->write(sResponse);
+        return Connection::DONE;
     };
-    sRouter.insert({"GET","/async",true}, sHandler2);  // call handler in worker thread
+    sRouter.insert("/async", sHandler2);  // call handler in worker thread
     sRouter.start(sGroup);
 
-    auto sListener = std::make_shared<Tcp::Listener>(&sEPoll, 2081, httpd::Make(&sEPoll, [&sRouter](Server::SharedPtr aServer, const Request& aRequest){
-        return sRouter(aServer, aRequest);
-    }));
+    auto sListener = httpd::Create(&sEPoll, 2081, sRouter);
     sListener->start();
 
     std::this_thread::sleep_for(10ms);

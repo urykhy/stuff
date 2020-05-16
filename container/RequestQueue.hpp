@@ -91,6 +91,8 @@ namespace container
 
         void on_timer()
         {
+            std::list<V> sList;
+
             Lock lk(m_Mutex);
             auto sNow = Time::get_time().to_ms();
             auto& sStore = boost::multi_index::get<by_deadline>(m_Store);
@@ -100,12 +102,17 @@ namespace container
                 auto sIt = sStore.begin();
                 if (sIt->deadline <= sNow)
                 {   // notify if timeout
-                    m_Handler(sIt->value);
+                    sList.push_back(std::move(sIt->value));
                     sStore.erase(sIt);
                     continue;
                 }
                 break;
             }
+            lk.unlock();
+
+            // call handler's without mutex
+            for (auto& x : sList)
+                m_Handler(x);
         }
 
         bool empty()  const
