@@ -10,6 +10,7 @@
 #include <boost/iostreams/filter/lzma.hpp>
 #include <boost/iostreams/filter/zstd.hpp>
 
+#include "Stream.hpp"
 #include "LZ4.hpp"
 #include "Util.hpp"
 
@@ -85,8 +86,10 @@ namespace File
     template<class T>
     inline void read_file(const std::string& aName, T aHandler)
     {
-        std::ifstream sFile(aName);
-        sFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+        //std::ifstream sFile;
+        //sFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+        Stream::Reader sFile;
+        sFile.open(aName);
 
         io::filtering_istream sStream;
         add_decompressor(sStream, get_format(get_extension(aName)));
@@ -99,9 +102,11 @@ namespace File
     template<class T>
     inline void write_file(const std::string& aName, T aHandler)
     {
-        std::ofstream sFile;
-        sFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
-        sFile.open(aName, std::ofstream::out | std::ofstream::trunc | std::ofstream::binary);
+        //std::ofstream sFile;
+        //sFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+        //sFile.open(aName, std::ofstream::out | std::ofstream::trunc | std::ofstream::binary);
+        Stream::Writer sFile;
+        sFile.open(aName, O_TRUNC);
 
         io::filtering_ostream sStream;
         add_compressor(sStream, get_format(get_extension(aName)));

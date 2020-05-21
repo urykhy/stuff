@@ -33,7 +33,8 @@ namespace File::Block
     {
         const std::string     m_Name;
         const std::string     m_TmpName;
-        std::ofstream         m_File;
+        Stream::Writer        m_File;
+        //std::ofstream         m_File;
         io::filtering_ostream m_Stream;
 
     public:
@@ -41,8 +42,9 @@ namespace File::Block
         : m_Name(aName)
         , m_TmpName(std::filesystem::path(get_basename(aName)) /= (".tmp." + get_filename(aName)))
         {
-            m_File.exceptions(std::ofstream::failbit | std::ofstream::badbit);
-            m_File.open(m_TmpName, std::ofstream::out | std::ofstream::trunc | std::ofstream::binary);
+            //m_File.exceptions(std::ofstream::failbit | std::ofstream::badbit);
+            //m_File.open(m_TmpName, std::ofstream::out | std::ofstream::trunc | std::ofstream::binary);
+            m_File.open(m_TmpName, O_TRUNC);
             add_compressor(m_Stream, get_format(get_extension(aName)));
             m_Stream.push(m_File);
             m_Stream.exceptions(std::ofstream::failbit | std::ofstream::badbit);
