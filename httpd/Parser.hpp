@@ -22,6 +22,7 @@ namespace httpd
         std::string m_Url;
         Headers m_Headers;
         std::string m_Body;
+        bool m_KeepAlive{false};
 
         void clear()
         {
@@ -29,6 +30,7 @@ namespace httpd
             m_Url.clear();
             m_Headers.clear();
             m_Body.clear();
+            m_KeepAlive = false;
         }
     };
 
@@ -78,6 +80,7 @@ namespace httpd
         static int on_message_complete(http_parser* aParser) { return Get(aParser)->on_message_complete_int(); }
         int on_message_complete_int()
         {
+            m_Request.m_KeepAlive = http_should_keep_alive(&m_Parser);
             m_Request.m_Method = http_method_str((http_method)m_Parser.method);
             m_Handler(m_Request);
             clear();
