@@ -38,13 +38,11 @@ namespace httpd
                 m_Worker.insert([sWeak, aRequest, aHandler]()
                 {
                     auto sConnection = sWeak.lock();
-                    if (sConnection) {
-                        auto rc = aHandler(sConnection, aRequest);
-                        if (rc == UserResult::DONE)
-                            sConnection->notify();
-                        // if handler return ASYNC - user must call notify() once request done
-                    }
+                    if (sConnection)
+                        sConnection->notify(aHandler(sConnection, aRequest));
+                        // if handler return ASYNC - user must call notify() with proper value by self
                 });
+                // return async state to Connection
                 return UserResult::ASYNC;
             }
             return aHandler(aConnection, aRequest);

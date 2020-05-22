@@ -14,7 +14,7 @@ namespace httpd
         using SharedPtr = std::shared_ptr<Connection>;
         using WeakPtr   = std::weak_ptr<Connection>;
 
-        enum  UserResult { DONE, ASYNC };
+        enum class UserResult { DONE, ASYNC, CLOSE };
         using Handler   = std::function<UserResult(SharedPtr, const Request&)>;
 
     private:
@@ -27,6 +27,7 @@ namespace httpd
         const size_t  TASK_LIMIT = 100;
         const ssize_t BUFFER_SIZE = 128 * 1024;
         std::atomic_bool m_Error{false};
+        std::atomic_bool m_Closing{false};
 
         Threads::SafeQueue<Request> m_Incoming;
         uint64_t m_Done{0};
@@ -46,12 +47,18 @@ namespace httpd
                 if (!sItem)
                 {
                     m_Busy = false;
+                    if (m_Closing and writeOutSize() == 0)
+                        self_close();
                     return;
                 }
+                if (!sItem->m_KeepAlive)
+                    m_Closing=true;
                 auto sResult = m_Handler(shared_from_this(), *sItem);
                 // if async call -> return in busy state, wait for notify()
                 if (sResult == UserResult::ASYNC)
                     return;
+                if (sResult == UserResult::CLOSE)
+                    m_Closing = true;
                 // normal call. can process next request
                 m_Done++;
             }
@@ -64,6 +71,13 @@ namespace httpd
         {
             std::unique_lock<std::mutex> lk(m_Write);
             return m_WriteOut.size();
+        }
+
+        void self_close()
+        {
+            m_EPoll->post([p = shared_from_this()](Util::EPoll* ptr) {
+                ptr->erase(p->get_fd());
+            });
         }
 
     public:
@@ -103,9 +117,7 @@ namespace httpd
                 catch (...)
                 {
                     on_error(get_fd());
-                    m_EPoll->post([p = shared_from_this()](Util::EPoll* ptr) {
-                        ptr->erase(p->get_fd());
-                    });
+                    self_close();
                     return;
                 }
                 if (sSize == (ssize_t)aData.size())
@@ -118,18 +130,26 @@ namespace httpd
         }
 
         // called if async request processed
-        void notify()
+        void notify(UserResult sResult)
         {
-            m_EPoll->post([p = shared_from_this()](Util::EPoll* ptr) {
-                p->m_Done++;
-                p->process_request();
-            });
+            switch (sResult)
+            {
+                case UserResult::CLOSE: m_Closing = true;
+                case UserResult::DONE:  m_EPoll->post([p = shared_from_this()](Util::EPoll* ptr) {
+                                            p->m_Done++;
+                                            p->process_request();
+                                        });
+                                        break;
+                default: break; // ASYNC is no op
+            }
         }
 
         Result on_read(int) override
         {
             if (m_Error)
                 return CLOSE;
+            if (m_Closing)
+                return OK;  // no more reads
 
             const uint64_t sQueueSize = queueSize();
             // do not read if queue already have requests or writeout queue busy
@@ -154,6 +174,8 @@ namespace httpd
 
             if (!m_Busy and !m_Incoming.idle())
                 process_request();
+            if (m_Closing and !m_Busy and writeOutSize() == 0)
+                return CLOSE;
             return sSize < BUFFER_SIZE ? OK : RETRY;
         }
 
@@ -172,6 +194,8 @@ namespace httpd
                 m_WriteOut.erase(0, sSize);
             if (m_WriteOut.size() < WRITE_OUT_LIMIT and m_WriteOut.capacity() > WRITE_OUT_LIMIT)
                 m_WriteOut.reserve(WRITE_OUT_LIMIT);
+            if (m_WriteOut.empty() and m_Closing and !m_Busy)
+                return CLOSE;
             return OK;
         }
 

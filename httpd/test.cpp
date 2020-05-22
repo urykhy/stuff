@@ -65,7 +65,7 @@ BOOST_AUTO_TEST_CASE(simple)
         "\r\n"
         "0123456789";
         aPeer->write(sResponse);
-        return Connection::DONE;
+        return Connection::UserResult::DONE;
     };
     sRouter.insert_sync("/hello", sHandler1);  // call handler in network thread
 
@@ -79,7 +79,7 @@ BOOST_AUTO_TEST_CASE(simple)
         "\r\n"
         "9876543210";
         aPeer->write(sResponse);
-        return Connection::DONE;
+        return Connection::UserResult::DONE;
     };
     sRouter.insert("/async", sHandler2);  // call handler in worker thread
     sRouter.start(sGroup);
