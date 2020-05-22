@@ -19,17 +19,18 @@ namespace Util
     {
         struct HandlerFace
         {
-            enum Result { OK, RETRY, CLOSE };
+            enum class Result { OK, RETRY, CLOSE };
             virtual Result on_read(int) = 0;
             virtual Result on_write(int) = 0;
             virtual void   on_error(int) = 0;
-            virtual Result on_timer(int) { return OK; };
+            virtual Result on_timer(int) { return Result::OK; };
             virtual int    get_fd() const { return -1; }
             virtual ~HandlerFace() {}
         };
         using HandlerPtr = std::shared_ptr<HandlerFace>;
         using WeakPtr    = std::weak_ptr<HandlerFace>;
         using Func       = std::function<void(EPoll*)>;
+        using Result     = HandlerFace::Result;
     private:
 
         std::atomic_bool m_Running{true};
@@ -66,7 +67,7 @@ namespace Util
             auto sPtr = aData.ptr.lock();
             if (sPtr)
             {
-                HandlerFace::Result sResult = HandlerFace::CLOSE;
+                Result sResult = Result::CLOSE;
                 try {
                     switch (aData.action)
                     {
@@ -76,7 +77,7 @@ namespace Util
                     }
                 } catch (...) { /* already value close */}
 
-                if (sResult == HandlerFace::CLOSE)
+                if (sResult == Result::CLOSE)
                 {
                     sPtr->on_error(sPtr->get_fd());
                     m_CleanupQueue.insert(sPtr->get_fd());
@@ -85,7 +86,7 @@ namespace Util
         }
         container::RequestQueue<Backlog> m_Backlog;
 
-        HandlerFace::Result on_event()
+        Result on_event()
         {
             const size_t sCount = m_Event.read();
             for (size_t i = 0; i < sCount; i++)
@@ -94,7 +95,7 @@ namespace Util
                 if (sFunc)
                     sFunc->operator()(this);
             }
-            return m_External.idle() ? HandlerFace::Result::OK : HandlerFace::Result::RETRY;
+            return m_External.idle() ? Result::OK : Result::RETRY;
         }
 
         void process(int aFd, uint32_t aEvent)
@@ -109,21 +110,21 @@ namespace Util
             auto sFace = sIt->second;
             if (!sClose and aEvent & EPOLLOUT)
             {
-                auto sResult = HandlerFace::CLOSE;
+                auto sResult = Result::CLOSE;
                 try {
                     sResult = sFace->on_write(aFd);
-                } catch (...) { sResult = HandlerFace::Result::CLOSE; }
-                sClose |= sResult == HandlerFace::Result::CLOSE;
-                sRetry |= sResult == HandlerFace::Result::RETRY;
+                } catch (...) { sResult = Result::CLOSE; }
+                sClose |= sResult == Result::CLOSE;
+                sRetry |= sResult == Result::RETRY;
             }
             if (!sClose and aEvent & EPOLLIN)
             {
-                auto sResult = HandlerFace::CLOSE;
+                auto sResult = Result::CLOSE;
                 try {
                     sResult = sFace->on_read(aFd);
-                } catch (...) { sResult = HandlerFace::Result::CLOSE; }
-                sClose |= sResult == HandlerFace::Result::CLOSE;
-                sRetry |= sResult == HandlerFace::Result::RETRY;
+                } catch (...) { sResult = Result::CLOSE; }
+                sClose |= sResult == Result::CLOSE;
+                sRetry |= sResult == Result::RETRY;
             }
 
             if (sClose)

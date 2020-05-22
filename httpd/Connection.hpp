@@ -147,14 +147,14 @@ namespace httpd
         Result on_read(int) override
         {
             if (m_Error)
-                return CLOSE;
+                return Result::CLOSE;
             if (m_Closing)
-                return OK;  // no more reads
+                return Result::OK;  // no more reads
 
             const uint64_t sQueueSize = queueSize();
             // do not read if queue already have requests or writeout queue busy
             if (sQueueSize > TASK_LIMIT or writeOutSize() > WRITE_OUT_LIMIT)
-                return RETRY;       // retry in 1 ms
+                return Result::RETRY;       // retry in 1 ms
 
             ssize_t sSize = 0;
             void* sBuffer = alloca(BUFFER_SIZE);
@@ -162,12 +162,12 @@ namespace httpd
             {
                 sSize = m_Socket.read(sBuffer, BUFFER_SIZE);
                 if (sSize == 0)
-                    return CLOSE;
+                    return Result::CLOSE;
                 if (sSize < 0)      // EAGAIN: wait for next event
                     break;
                 ssize_t sUsed = m_Parser.consume((char*)sBuffer, sSize);
                 if (sUsed < sSize)  // parser problem
-                    return CLOSE;
+                    return Result::CLOSE;
                 if (sQueueSize < m_Incoming.count()) // got new request(s)
                     break;
             }
@@ -175,28 +175,28 @@ namespace httpd
             if (!m_Busy and !m_Incoming.idle())
                 process_request();
             if (m_Closing and !m_Busy and writeOutSize() == 0)
-                return CLOSE;
-            return sSize < BUFFER_SIZE ? OK : RETRY;
+                return Result::CLOSE;
+            return sSize < BUFFER_SIZE ? Result::OK : Result::RETRY;
         }
 
         Result on_write(int) override
         {
             if (m_Error)
-                return CLOSE;
+                return Result::CLOSE;
 
             std::unique_lock<std::mutex> lk(m_Write);
             if (m_WriteOut.empty())
-                return OK;
+                return Result::OK;
             ssize_t sSize = m_Socket.write(m_WriteOut.data(), m_WriteOut.size());
             if (sSize < 0) // eagain, wait for next event
-                return OK;
+                return Result::OK;
             if (sSize > 0)
                 m_WriteOut.erase(0, sSize);
             if (m_WriteOut.size() < WRITE_OUT_LIMIT and m_WriteOut.capacity() > WRITE_OUT_LIMIT)
                 m_WriteOut.reserve(WRITE_OUT_LIMIT);
             if (m_WriteOut.empty() and m_Closing and !m_Busy)
-                return CLOSE;
-            return OK;
+                return Result::CLOSE;
+            return Result::OK;
         }
 
         Result on_timer(int) override

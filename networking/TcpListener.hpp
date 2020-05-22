@@ -44,9 +44,9 @@ namespace Tcp
                     m_EPoll->insert(sFd, EPOLLIN, sNew);
                 }
             } while (sFd > 0);
-            return OK;
+            return Result::OK;
         }
-        virtual Result on_write(int) { return OK; }
+        virtual Result on_write(int) { return Result::OK; }
         virtual void on_error(int) {}
         virtual ~Listener() {}
     };
