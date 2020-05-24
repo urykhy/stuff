@@ -85,5 +85,14 @@ namespace Tcp
             if (setsockopt(m_Fd, IPPROTO_TCP, TCP_FASTOPEN, &sVal, sizeof(sVal)) < 0)
                 throw Error("fail to set fast open");
         }
+
+        void close() override
+        {
+            if (m_Fd != -1)
+            {
+                shutdown(m_Fd, SHUT_RDWR);
+                Util::CoreSocket::close();
+            }
+        }
     };
 }

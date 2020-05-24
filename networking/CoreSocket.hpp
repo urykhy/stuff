@@ -50,7 +50,7 @@ namespace Util
                 throw Error("fail to bind");
         }
 
-        void close()
+        virtual void close()
         {
             if (m_Fd != -1)
             {
@@ -151,6 +151,6 @@ namespace Util
                 throw Error("fail to set timeout");
         }
 
-        ~CoreSocket() { close(); }
+        virtual ~CoreSocket() { close(); }
     };
 }
