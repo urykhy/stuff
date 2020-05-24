@@ -64,7 +64,7 @@ namespace httpd
                     return process(aConnection, aRequest, sHandler, sLoc.async);
 
             const std::string sNotFound = "HTTP/1.0 404 Not Found\r\nContent-Length: 0\r\n\r\n";
-            aConnection->write(sNotFound);  // FIXME: write_int, since we in the network thread
+            aConnection->write(sNotFound);
             return UserResult::DONE;
         }
     };
