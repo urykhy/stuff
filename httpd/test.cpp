@@ -72,11 +72,13 @@ BOOST_AUTO_TEST_CASE(simple)
         BOOST_TEST_MESSAGE("request: " << aRequest.m_Url);
         std::string sResponse =
             "HTTP/1.1 200 OK\r\n"
-            "Content-Length: 10\r\n"
+            "Transfer-Encoding: chunked\r\n"
             "Content-Type: text/numbers\r\n"
             "Connection: keep-alive\r\n"
             "\r\n"
-            "9876543210";
+            "A\r\n" // chunk size in hex
+            "9876543210\r\n"
+            "0\r\n\r\n";
         aPeer->write(sResponse);
         return Connection::UserResult::DONE;
     };
