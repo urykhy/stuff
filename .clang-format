@@ -4,6 +4,8 @@
   IndentWidth: 4,
   TabWidth: 4,
   BreakBeforeBraces: Mozilla,
+  BreakConstructorInitializers: BeforeComma,
+  BreakInheritanceList: BeforeComma,
   AllowShortIfStatementsOnASingleLine: false,
   IndentCaseLabels: false,
   ColumnLimit: 0,
@@ -11,4 +13,12 @@
   PointerAlignment: Left,
   IncludeBlocks: Regroup,
   NamespaceIndentation: All,
+  ConstructorInitializerIndentWidth: 0,
+  IncludeCategories: [
+    { Regex: '<boost\/test\/unit_test.hpp>', Priority: 1},
+    { Regex: '^<[a-z_]+>',   Priority: 5},
+    { Regex: '^<.+\/.+>',    Priority: 10},
+    { Regex: '^<.+\.h>',     Priority: 20},
+    { Regex: '^"',           Priority: 30},
+  ]
 }
