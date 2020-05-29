@@ -1,8 +1,9 @@
 #define BOOST_TEST_MODULE Suites
 #include <boost/test/unit_test.hpp>
-#include "Router.hpp"
 
 #include <curl/Curl.hpp>
+
+#include "Router.hpp"
 
 using namespace std::chrono_literals;
 
@@ -29,12 +30,12 @@ BOOST_AUTO_TEST_CASE(parser)
         "0\r\n\r\n";
 
     bool sCalled = false;
-    httpd::Request::Handler sHandler = [&sCalled](httpd::Request &aRequest) {
+
+    httpd::Request::Handler sHandler = [&sCalled](httpd::Request& aRequest) {
         BOOST_CHECK_EQUAL(aRequest.m_Method, "POST");
         BOOST_CHECK_EQUAL(aRequest.m_Url, "/joyent/http-parser");
         const auto sHeaders = aRequest.m_Headers;
-        for (const auto &x : sHeaders)
-        {
+        for (const auto& x : sHeaders) {
             BOOST_TEST_MESSAGE("found header " << x.key << "=" << x.value);
             if (x.key == "DNT")
                 BOOST_CHECK_EQUAL(x.value, "1");
@@ -49,12 +50,12 @@ BOOST_AUTO_TEST_CASE(parser)
 }
 BOOST_AUTO_TEST_CASE(simple)
 {
-    Util::EPoll sEPoll;
-    httpd::Router sRouter;
+    Util::EPoll    sEPoll;
+    httpd::Router  sRouter;
     Threads::Group sGroup; // in d-tor we stop all threads
     sEPoll.start(sGroup);
 
-    auto sHandler1 = [](httpd::Connection::SharedPtr aPeer, const Request &aRequest) {
+    auto sHandler1 = [](httpd::Connection::SharedPtr aPeer, const Request& aRequest) {
         BOOST_TEST_MESSAGE("request: " << aRequest.m_Url);
         std::string sResponse =
             "HTTP/1.1 200 OK\r\n"
@@ -68,7 +69,7 @@ BOOST_AUTO_TEST_CASE(simple)
     };
     sRouter.insert_sync("/hello", sHandler1); // call handler in network thread
 
-    auto sHandler2 = [](httpd::Connection::SharedPtr aPeer, const Request &aRequest) {
+    auto sHandler2 = [](httpd::Connection::SharedPtr aPeer, const Request& aRequest) {
         BOOST_TEST_MESSAGE("request: " << aRequest.m_Url);
         std::string sResponse =
             "HTTP/1.1 200 OK\r\n"
@@ -92,7 +93,8 @@ BOOST_AUTO_TEST_CASE(simple)
 
     {
         Curl::Client::Params sParams;
-        Curl::Client sClient(sParams);
+        Curl::Client         sClient(sParams);
+
         auto sResult = sClient.GET("http://127.0.0.1:2081/hello");
         BOOST_CHECK_EQUAL(sResult.first, 200);
         BOOST_CHECK_EQUAL(sResult.second, "0123456789");

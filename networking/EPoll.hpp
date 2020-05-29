@@ -1,26 +1,32 @@
 #pragma once
 
+#include <sys/epoll.h>
+
 #include <atomic>
 #include <map>
 #include <memory>
 #include <set>
-#include <sys/epoll.h>
 #include <vector>
 
-#include "EventFd.hpp"
 #include <container/RequestQueue.hpp>
+#include <exception/Error.hpp>
 #include <threads/Group.hpp>
 #include <threads/SafeQueue.hpp>
-#include <exception/Error.hpp>
 
-namespace Util
-{
+#include "EventFd.hpp"
+
+namespace Util {
     struct EPoll
     {
         struct HandlerFace
         {
-            enum class Result { OK, RETRY, CLOSE };
-            virtual Result on_read(int) = 0;
+            enum class Result
+            {
+                OK,
+                RETRY,
+                CLOSE
+            };
+            virtual Result on_read(int)  = 0;
             virtual Result on_write(int) = 0;
             virtual void   on_error(int) = 0;
             virtual Result on_timer(int) { return Result::OK; };
@@ -31,31 +37,37 @@ namespace Util
         using WeakPtr    = std::weak_ptr<HandlerFace>;
         using Func       = std::function<void(EPoll*)>;
         using Result     = HandlerFace::Result;
-    private:
 
-        std::atomic_bool m_Running{true};
-        int m_Fd = -1;
+    private:
+        std::atomic_bool                m_Running{true};
+        int                             m_Fd = -1;
         std::vector<struct epoll_event> m_Events;
-        std::map<int, HandlerPtr> m_Handlers;   // fd to handler
-        std::set<int> m_Retry; // retry call
-        std::set<int> m_CleanupQueue;   // store unique fds
+        std::map<int, HandlerPtr>       m_Handlers;     // fd to handler
+        std::set<int>                   m_Retry;        // retry call
+        std::set<int>                   m_CleanupQueue; // store unique fds
 
         struct EventHandler : HandlerFace
         {
             EPoll* m_Parent = nullptr;
-            EventHandler(EPoll* aParent) : m_Parent(aParent) {}
-            Result on_read(int)  override { return m_Parent->on_event(); }
+            EventHandler(EPoll* aParent)
+            : m_Parent(aParent)
+            {}
+            Result on_read(int) override { return m_Parent->on_event(); }
             Result on_write(int) override { return Result::OK; }
             void   on_error(int) override {}
         };
-        EventFd m_Event;
-        HandlerPtr m_EventHandler;
+        EventFd                  m_Event;
+        HandlerPtr               m_EventHandler;
         Threads::SafeQueue<Func> m_External;
-
 
         struct Backlog
         {
-            enum ACTION { UNKNOWN, READ, TIMER };
+            enum ACTION
+            {
+                UNKNOWN,
+                READ,
+                TIMER
+            };
 
             WeakPtr ptr;
             ACTION  action{};
@@ -65,20 +77,24 @@ namespace Util
         void on_backlog(Backlog& aData)
         {
             auto sPtr = aData.ptr.lock();
-            if (sPtr)
-            {
+            if (sPtr) {
                 Result sResult = Result::CLOSE;
                 try {
-                    switch (aData.action)
-                    {
-                        case Backlog::READ:  sResult = sPtr->on_read(sPtr->get_fd()); break;
-                        case Backlog::TIMER: sResult = sPtr->on_timer(aData.timer_id); break;
-                        default: assert(0);
+                    switch (aData.action) {
+                    case Backlog::READ:
+                        sResult = sPtr->on_read(sPtr->get_fd());
+                        break;
+                    case Backlog::TIMER:
+                        sResult = sPtr->on_timer(aData.timer_id);
+                        break;
+                    default:
+                        assert(0);
                     }
-                } catch (...) { /* already value close */}
+                } catch (...) {
+                    /* sResult already == CLOSE */
+                }
 
-                if (sResult == Result::CLOSE)
-                {
+                if (sResult == Result::CLOSE) {
                     sPtr->on_error(sPtr->get_fd());
                     m_CleanupQueue.insert(sPtr->get_fd());
                 }
@@ -89,8 +105,7 @@ namespace Util
         Result on_event()
         {
             const size_t sCount = m_Event.read();
-            for (size_t i = 0; i < sCount; i++)
-            {
+            for (size_t i = 0; i < sCount; i++) {
                 auto sFunc = m_External.try_get();
                 if (sFunc)
                     sFunc->operator()(this);
@@ -108,27 +123,28 @@ namespace Util
             bool sRetry = false; // user can ask to call on_read on next dispatch
 
             auto sFace = sIt->second;
-            if (!sClose and aEvent & EPOLLOUT)
-            {
+            if (!sClose and aEvent & EPOLLOUT) {
                 auto sResult = Result::CLOSE;
                 try {
                     sResult = sFace->on_write(aFd);
-                } catch (...) { sResult = Result::CLOSE; }
+                } catch (...) {
+                    sResult = Result::CLOSE;
+                }
                 sClose |= sResult == Result::CLOSE;
                 sRetry |= sResult == Result::RETRY;
             }
-            if (!sClose and aEvent & EPOLLIN)
-            {
+            if (!sClose and aEvent & EPOLLIN) {
                 auto sResult = Result::CLOSE;
                 try {
                     sResult = sFace->on_read(aFd);
-                } catch (...) { sResult = Result::CLOSE; }
+                } catch (...) {
+                    sResult = Result::CLOSE;
+                }
                 sClose |= sResult == Result::CLOSE;
                 sRetry |= sResult == Result::RETRY;
             }
 
-            if (sClose)
-            {
+            if (sClose) {
                 sFace->on_error(aFd);
                 m_CleanupQueue.insert(aFd);
                 return;
@@ -137,12 +153,12 @@ namespace Util
             if (sRetry)
                 m_Backlog.insert(Backlog{sFace, Backlog::READ}, 1);
         }
-    public:
 
+    public:
         using Error = Exception::ErrnoError;
 
         EPoll(const unsigned aMaxEvents = 1024)
-        : m_Backlog([this](Backlog& aData){ on_backlog(aData); })
+        : m_Backlog([this](Backlog& aData) { on_backlog(aData); })
         {
             m_Events.resize(aMaxEvents);
 
@@ -166,10 +182,9 @@ namespace Util
                 throw Error("epoll_wait failed");
 
             // process socket events
-            for(int i = 0; i < sCount; i++)
-            {
+            for (int i = 0; i < sCount; i++) {
                 uint32_t sEvent = m_Events[i].events;
-                int sFd = m_Events[i].data.fd;
+                int      sFd    = m_Events[i].data.fd;
                 process(sFd, sEvent);
             }
 
@@ -184,11 +199,11 @@ namespace Util
 
         void start(Threads::Group& aGroup)
         {
-            aGroup.start([this](){
+            aGroup.start([this]() {
                 while (m_Running)
                     dispatch();
             });
-            aGroup.at_stop([this](){
+            aGroup.at_stop([this]() {
                 m_Running = false;
                 m_Event.signal(); // break epoll_wait
             });
@@ -198,9 +213,9 @@ namespace Util
         {
             struct epoll_event sEvent;
             memset(&sEvent, 0, sizeof(sEvent));
-            sEvent.events = aEvent | EPOLLHUP | EPOLLET;
+            sEvent.events  = aEvent | EPOLLHUP | EPOLLET;
             sEvent.data.fd = aFd;
-            int rc = epoll_ctl(m_Fd, EPOLL_CTL_ADD, aFd, &sEvent);
+            int rc         = epoll_ctl(m_Fd, EPOLL_CTL_ADD, aFd, &sEvent);
             if (rc == -1)
                 throw Error("epoll_ctl/insert failed");
             m_Handlers[aFd] = aHandler;

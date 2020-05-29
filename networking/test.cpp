@@ -1,24 +1,24 @@
 #define BOOST_TEST_MODULE Suites
 #include <boost/test/unit_test.hpp>
+
 #include <chrono>
 
-#include "MultiBuffer.hpp"
-#include "UdpPipe.hpp"
-#include "EventFd.hpp"
-#include "TimerFd.hpp"
-#include "SRV.hpp"
-#include <unsorted/Taskset.hpp>
-
-#include "TcpSocket.hpp"
-
 #include "EPoll.hpp"
-#include <unsorted/Log4cxx.hpp>
+#include "EventFd.hpp"
+#include "MultiBuffer.hpp"
+#include "SRV.hpp"
+#include "TcpSocket.hpp"
+#include "TimerFd.hpp"
+#include "UdpPipe.hpp"
+
+#include <unsorted/Taskset.hpp>
 
 using namespace std::chrono_literals;
 
-struct Message {    // data over UDP
+struct Message
+{ // data over UDP
     char data[8];
-} __attribute__ ((packed));
+} __attribute__((packed));
 
 BOOST_AUTO_TEST_SUITE(Networking)
 BOOST_AUTO_TEST_CASE(resolve)
@@ -26,10 +26,10 @@ BOOST_AUTO_TEST_CASE(resolve)
     BOOST_CHECK_EQUAL(0x100007F, Util::resolveAddr("127.0.0.1"));
     BOOST_CHECK_EQUAL(0x100007F, Util::resolveName("127.0.0.1"));
     BOOST_CHECK_EQUAL(0x100007F, Util::resolveName("localhost"));
-    BOOST_CHECK_THROW([](){ Util::resolveName("nx.domain.qjz9zk"); }(), std::runtime_error);
+    BOOST_CHECK_THROW([]() { Util::resolveName("nx.domain.qjz9zk"); }(), std::runtime_error);
 
     Util::SRV sResolver;
-    auto sSet = sResolver("_kerberos._tcp.kerberos.elf.dark");
+    auto      sSet = sResolver("_kerberos._tcp.kerberos.elf.dark");
     BOOST_CHECK(sSet.size() > 0);
     for (auto& x : sSet)
         BOOST_TEST_MESSAGE("resolved to " << x.name << ":" << x.port << " with priority: " << x.prio << ", weight: " << x.weight);
@@ -39,16 +39,15 @@ BOOST_AUTO_TEST_CASE(resolve)
 BOOST_AUTO_TEST_CASE(socket)
 {
     Udp::Socket s;
-    auto sBufSize = s.get_buffer();
+    auto        sBufSize = s.get_buffer();
     BOOST_TEST_MESSAGE("buffer size: " << sBufSize.first << "/" << sBufSize.second);
 
     s.set_buffer(4096, 16384);
     sBufSize = s.get_buffer();
     // kernel internally doubles that size
     BOOST_TEST_MESSAGE("buffer size: " << sBufSize.first << "/" << sBufSize.second);
-    BOOST_CHECK(sBufSize.first  == 8192);
+    BOOST_CHECK(sBufSize.first == 8192);
     BOOST_CHECK(sBufSize.second == 32768);
-
 }
 BOOST_AUTO_TEST_CASE(pipe)
 {
@@ -57,9 +56,9 @@ BOOST_AUTO_TEST_CASE(pipe)
     constexpr uint16_t PORT   = 2091;
 
     Threads::Group sGroup;
-    sGroup.start([&](){
-        Threads::Group sCG;
-        Udp::Consumer<Message> sConsumer(6, PORT, [&](auto& aMsg){
+    sGroup.start([&]() {
+        Threads::Group         sCG;
+        Udp::Consumer<Message> sConsumer(6, PORT, [&](auto& aMsg) {
             BOOST_CHECK_EQUAL(BUFFER.size() + 1, aMsg.size);
             BOOST_CHECK_EQUAL(BUFFER, aMsg.data.data);
         });
@@ -69,10 +68,10 @@ BOOST_AUTO_TEST_CASE(pipe)
     });
     std::this_thread::sleep_for(50ms);
 
-    sGroup.start([&](){
+    sGroup.start([&]() {
         Udp::Producer sProd("localhost", PORT);
         for (size_t i = 0; i < COUNT; i++)
-            sProd.write(BUFFER.data(), BUFFER.size() + 1);    // asciiZ string
+            sProd.write(BUFFER.data(), BUFFER.size() + 1); // asciiZ string
     });
 
     std::this_thread::sleep_for(50ms);
@@ -82,8 +81,8 @@ BOOST_AUTO_TEST_CASE(mread)
 {
     constexpr unsigned MSG_COUNT = 4;
 
-    Udp::Socket consumer(2092); // listen on port
-    consumer.set_nonblocking(); // avoid hang at mread
+    Udp::Socket consumer(2092);                                 // listen on port
+    consumer.set_nonblocking();                                 // avoid hang at mread
     Udp::Socket producer(Util::resolveName("127.0.0.1"), 2092); // `connect` to port
 
     producer.write("1234567", 8);
@@ -94,7 +93,7 @@ BOOST_AUTO_TEST_CASE(mread)
     std::this_thread::sleep_for(100ms);
 
     std::array<Message, MSG_COUNT> sData;
-    Util::MultiBuffer<MSG_COUNT> sHeader;
+    Util::MultiBuffer<MSG_COUNT>   sHeader;
     for (unsigned i = 0; i < MSG_COUNT; i++)
         sHeader.append(&sData[i], sizeof(Message));
 
@@ -135,7 +134,7 @@ BOOST_AUTO_TEST_CASE(timerfd)
 BOOST_AUTO_TEST_CASE(tcp)
 {
     Threads::Group sGroup;
-    sGroup.start([](){
+    sGroup.start([]() {
         Tcp::Socket sServer;
         sServer.set_reuse_port();
         sServer.bind(2090);
@@ -152,7 +151,7 @@ BOOST_AUTO_TEST_CASE(tcp)
 
     Tcp::Socket sClient = Tcp::Socket();
     sClient.connect(Util::resolveName("127.0.0.1"), 2090);
-    sClient.write("1234567890",10);
+    sClient.write("1234567890", 10);
     std::string sReply(10, ' ');
     sClient.read(sReply.data(), 10);
     BOOST_CHECK_EQUAL("1234567890", sReply);
@@ -161,14 +160,16 @@ BOOST_AUTO_TEST_SUITE_END()
 BOOST_AUTO_TEST_SUITE(epoll)
 BOOST_AUTO_TEST_CASE(ping)
 {
-    Util::EPoll sEpoll;
+    Util::EPoll    sEpoll;
     Threads::Group sGroup;
     sEpoll.start(sGroup);
 
     struct PingHandler : public Util::EPoll::HandlerFace
     {
         Udp::Socket m_Socket;
-        PingHandler() : m_Socket(2092) {}
+        PingHandler()
+        : m_Socket(2092)
+        {}
         int get_fd() { return m_Socket.get_fd(); }
 
         Result on_read(int) override
@@ -181,7 +182,7 @@ BOOST_AUTO_TEST_CASE(ping)
             return m_Socket.ionread() ? Result::RETRY : Result::OK;
         }
         Result on_write(int) override { return Result::OK; }
-        void on_error(int) override { BOOST_CHECK(false); }
+        void   on_error(int) override { BOOST_CHECK(false); }
     };
     auto sHandler = std::make_shared<PingHandler>();
     sEpoll.post([sHandler](Util::EPoll* ptr) {

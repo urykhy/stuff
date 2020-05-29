@@ -1,8 +1,8 @@
 #pragma once
 
-#include "CoreSocket.hpp"
-
 #include <netinet/tcp.h>
+
+#include "CoreSocket.hpp"
 
 namespace Tcp {
     class Socket : public Util::CoreSocket
@@ -20,7 +20,7 @@ namespace Tcp {
         explicit Socket(int aFd) { m_Fd = aFd; }
         Socket(Socket&& aSocket)
         {
-            m_Fd = aSocket.m_Fd;
+            m_Fd         = aSocket.m_Fd;
             aSocket.m_Fd = -1;
         }
 
@@ -28,8 +28,8 @@ namespace Tcp {
         {
             struct sockaddr_in sPeer;
             memset(&sPeer, 0, sizeof(sPeer));
-            sPeer.sin_family = AF_INET;
-            sPeer.sin_port = htons(aPort);
+            sPeer.sin_family      = AF_INET;
+            sPeer.sin_port        = htons(aPort);
             sPeer.sin_addr.s_addr = aRemote;
             if (::connect(m_Fd, (sockaddr*)&sPeer, sizeof(sPeer)) < 0 && errno != EINPROGRESS)
                 throw Error("fail to connect");

@@ -1,12 +1,13 @@
 #pragma once
 
-#include "http_parser.h"
 #include <string>
 #include <vector>
+
 #include <exception/Error.hpp>
 
-namespace httpd
-{
+#include "http_parser.h"
+
+namespace httpd {
     struct Request
     {
         using Handler = std::function<void(Request&)>;
@@ -20,9 +21,9 @@ namespace httpd
 
         const char* m_Method = nullptr;
         std::string m_Url;
-        Headers m_Headers;
+        Headers     m_Headers;
         std::string m_Body;
-        bool m_KeepAlive{false};
+        bool        m_KeepAlive{false};
 
         void clear()
         {
@@ -36,25 +37,24 @@ namespace httpd
 
     class Parser
     {
-        struct http_parser m_Parser;
+        struct http_parser          m_Parser;
         struct http_parser_settings m_Settings;
 
         static Parser* Get(http_parser* aParser) { return ((Parser*)aParser->data); }
-        static int on_message_begin(http_parser* aParser) { return Get(aParser)->on_message_begin_int(); }
-        int on_message_begin_int() { return 0; }
+        static int     on_message_begin(http_parser* aParser) { return Get(aParser)->on_message_begin_int(); }
+        int            on_message_begin_int() { return 0; }
 
         static int on_url(http_parser* aParser, const char* aData, size_t aSize) { return Get(aParser)->on_url_int(aData, aSize); }
-        int on_url_int(const char* aData, size_t aSize)
+        int        on_url_int(const char* aData, size_t aSize)
         {
             m_Request.m_Url.append(aData, aSize);
             return 0;
         }
 
         static int on_header_field(http_parser* aParser, const char* aData, size_t aSize) { return Get(aParser)->on_header_field_int(aData, aSize); }
-        int on_header_field_int(const char* aData, size_t aSize)
+        int        on_header_field_int(const char* aData, size_t aSize)
         {
-            if (m_InsertHeader)
-            {
+            if (m_InsertHeader) {
                 m_Request.m_Headers.push_back(Request::Header{});
                 m_InsertHeader = false;
             }
@@ -63,7 +63,7 @@ namespace httpd
         }
 
         static int on_header_value(http_parser* aParser, const char* aData, size_t aSize) { return Get(aParser)->on_header_value_int(aData, aSize); }
-        int on_header_value_int(const char* aData, size_t aSize)
+        int        on_header_value_int(const char* aData, size_t aSize)
         {
             m_InsertHeader = true;
             m_Request.m_Headers.back().value.append(aData, aSize);
@@ -71,17 +71,17 @@ namespace httpd
         }
 
         static int on_body(http_parser* aParser, const char* aData, size_t aSize) { return Get(aParser)->on_body_int(aData, aSize); }
-        int on_body_int(const char* aData, size_t aSize)
+        int        on_body_int(const char* aData, size_t aSize)
         {
             m_Request.m_Body.append(aData, aSize);
             return 0;
         }
 
         static int on_message_complete(http_parser* aParser) { return Get(aParser)->on_message_complete_int(); }
-        int on_message_complete_int()
+        int        on_message_complete_int()
         {
             m_Request.m_KeepAlive = http_should_keep_alive(&m_Parser);
-            m_Request.m_Method = http_method_str((http_method)m_Parser.method);
+            m_Request.m_Method    = http_method_str((http_method)m_Parser.method);
             m_Handler(m_Request);
             clear();
             return 0;
@@ -94,8 +94,8 @@ namespace httpd
         }
 
         Request::Handler m_Handler;
-        Request m_Request;
-        bool m_InsertHeader = true;
+        Request          m_Request;
+        bool             m_InsertHeader = true;
 
     public:
         using Error = Exception::Error<Parser>;
@@ -107,11 +107,11 @@ namespace httpd
             m_Parser.data = this;
 
             http_parser_settings_init(&m_Settings);
-            m_Settings.on_message_begin = on_message_begin;
-            m_Settings.on_url = on_url;
-            m_Settings.on_header_field = on_header_field;
-            m_Settings.on_header_value = on_header_value;
-            m_Settings.on_body = on_body;
+            m_Settings.on_message_begin    = on_message_begin;
+            m_Settings.on_url              = on_url;
+            m_Settings.on_header_field     = on_header_field;
+            m_Settings.on_header_value     = on_header_value;
+            m_Settings.on_body             = on_body;
             m_Settings.on_message_complete = on_message_complete;
         }
 
@@ -123,4 +123,4 @@ namespace httpd
             return sUsed;
         }
     };
-}
+} // namespace httpd

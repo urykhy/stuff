@@ -9,16 +9,22 @@
   AllowShortIfStatementsOnASingleLine: false,
   IndentCaseLabels: false,
   ColumnLimit: 0,
+  AlignConsecutiveAssignments: true,
+  AlignConsecutiveDeclarations: true,
   AccessModifierOffset: -4,
   PointerAlignment: Left,
-  IncludeBlocks: Regroup,
-  NamespaceIndentation: All,
   ConstructorInitializerIndentWidth: 0,
-  IncludeCategories: [
-    { Regex: '<boost\/test\/unit_test.hpp>', Priority: 1},
-    { Regex: '^<[a-z_]+>',   Priority: 5},
-    { Regex: '^<.+\/.+>',    Priority: 10},
-    { Regex: '^<.+\.h>',     Priority: 20},
-    { Regex: '^"',           Priority: 30},
-  ]
+  NamespaceIndentation: All,
+  IncludeBlocks: Regroup,
+  IncludeCategories:
+    [
+      { Regex: '<boost\/test\/unit_test.hpp>', Priority: 1 },
+      { Regex: '^<[a-z_]+\/[a-z_]+\.h>', Priority: 5 },
+      { Regex: '^<[a-z_0-9]+\.h>', Priority: 5 },
+      { Regex: "^<[a-z_]+>", Priority: 10 },
+      { Regex: '<boost\/.*>', Priority: 11 },
+      { Regex: '<thrift\/.*>', Priority: 11 },
+      { Regex: '^<[A-Za-z_0-9]+\/[A-Za-z_0-9]+\.hpp>', Priority: 20 },
+      { Regex: '^"', Priority: 30 },
+    ],
 }

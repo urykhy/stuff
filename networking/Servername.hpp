@@ -1,19 +1,18 @@
 #pragma once
 
-#include <string>
 #include <netdb.h>
 #include <unistd.h>
 
-namespace Util
-{
+#include <string>
+
+namespace Util {
     inline std::string Servername()
     {
         char sTmp[128];
         if (gethostname(sTmp, sizeof(sTmp)))
             return "unknown";
 
-        struct hostent* h = nullptr;
-        h = gethostbyname(sTmp);
+        struct hostent* h = gethostbyname(sTmp);
         if (h == nullptr)
             return "unknown";
 

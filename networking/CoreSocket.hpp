@@ -11,20 +11,19 @@
 
 #include <exception/Error.hpp>
 
-namespace Util
-{
+namespace Util {
     struct CoreSocket
     {
         using Error = Exception::ErrnoError;
-    private:
 
+    private:
         CoreSocket(const CoreSocket&) = delete;
         CoreSocket& operator=(const CoreSocket&) = delete;
-    protected:
 
+    protected:
         int m_Fd = -1;
 
-        template<class T>
+        template <class T>
         ssize_t checkCall(T t, const char* msg)
         {
             ssize_t sRes = t();
@@ -34,7 +33,6 @@ namespace Util
         }
 
     public:
-
         CoreSocket() {}
 
         // call bind(0) to make getsockname return port number
@@ -42,8 +40,8 @@ namespace Util
         {
             struct sockaddr_in sAddr;
             memset(&sAddr, 0, sizeof(sAddr));
-            sAddr.sin_family = AF_INET;
-            sAddr.sin_port = htons(aPort);
+            sAddr.sin_family      = AF_INET;
+            sAddr.sin_port        = htons(aPort);
             sAddr.sin_addr.s_addr = htonl(INADDR_ANY);
 
             if (::bind(m_Fd, (struct sockaddr*)&sAddr, sizeof(sAddr)))
@@ -52,8 +50,7 @@ namespace Util
 
         virtual void close()
         {
-            if (m_Fd != -1)
-            {
+            if (m_Fd != -1) {
                 ::close(m_Fd);
                 m_Fd = -1;
             }
@@ -88,8 +85,8 @@ namespace Util
         std::pair<int, int> get_buffer() const
         {
             socklen_t sDummy = sizeof(int);
-            int sRcv = 0;
-            int sSnd = 0;
+            int       sRcv   = 0;
+            int       sSnd   = 0;
 
             if (getsockopt(m_Fd, SOL_SOCKET, SO_RCVBUF, &sRcv, &sDummy))
                 throw Error("fail to get recv buffer size");
@@ -102,7 +99,7 @@ namespace Util
         int get_error()
         {
             socklen_t sDummy = sizeof(int);
-            int sError = 0;
+            int       sError = 0;
             if (getsockopt(m_Fd, SOL_SOCKET, SO_ERROR, &sError, &sDummy))
                 throw Error("fail to get socket error");
             return sError;
@@ -111,8 +108,8 @@ namespace Util
         uint16_t get_port()
         {
             struct sockaddr_in sTmp;
-            socklen_t sLen = sizeof(sTmp);
-            if (getsockname(m_Fd, (struct sockaddr *)&sTmp, &sLen) == -1)
+            socklen_t          sLen = sizeof(sTmp);
+            if (getsockname(m_Fd, (struct sockaddr*)&sTmp, &sLen) == -1)
                 throw Error("fail to get socket addr");
             return ntohs(sTmp.sin_port);
         }
@@ -120,8 +117,8 @@ namespace Util
         sockaddr_in get_peer()
         {
             struct sockaddr_in sTmp;
-            socklen_t sLen = sizeof(sTmp);
-            if (getpeername(m_Fd, (struct sockaddr *)&sTmp, &sLen) == -1)
+            socklen_t          sLen = sizeof(sTmp);
+            if (getpeername(m_Fd, (struct sockaddr*)&sTmp, &sLen) == -1)
                 throw Error("fail to get socket peer");
             return sTmp;
         }
@@ -144,7 +141,10 @@ namespace Util
 
         void set_timeout()
         {
-            struct timeval sTimeout{0, 100 * 1000}; // 0.1 sec
+            struct timeval sTimeout
+            {
+                0, 100 * 1000
+            }; // 0.1 sec
             if (setsockopt(m_Fd, SOL_SOCKET, SO_RCVTIMEO, &sTimeout, sizeof(sTimeout)))
                 throw Error("fail to set timeout");
             if (setsockopt(m_Fd, SOL_SOCKET, SO_SNDTIMEO, &sTimeout, sizeof(sTimeout)))
@@ -153,4 +153,4 @@ namespace Util
 
         virtual ~CoreSocket() { close(); }
     };
-}
+} // namespace Util

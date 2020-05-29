@@ -3,16 +3,17 @@
 #include "EPoll.hpp"
 #include "TcpSocket.hpp"
 
-namespace Tcp
-{
-    struct Listener : Util::EPoll::HandlerFace, std::enable_shared_from_this<Listener>
+namespace Tcp {
+    struct Listener
+    : Util::EPoll::HandlerFace
+    , std::enable_shared_from_this<Listener>
     {
         using Handler = std::function<Util::EPoll::HandlerPtr(Tcp::Socket&&)>;
 
     private:
         Util::EPoll* m_EPoll;
-        Socket  m_Socket;
-        Handler m_Handler;
+        Socket       m_Socket;
+        Handler      m_Handler;
 
     public:
         Listener(Util::EPoll* aEPoll, int aPort, Handler aHandler)
@@ -33,11 +34,9 @@ namespace Tcp
         virtual Result on_read(int)
         {
             int sFd = 0;
-            do
-            {
+            do {
                 sFd = m_Socket.accept();
-                if (sFd > 0)
-                {
+                if (sFd > 0) {
                     Socket sSocket(sFd);
                     sSocket.set_nonblocking();
                     auto sNew = m_Handler(std::move(sSocket));
@@ -47,7 +46,7 @@ namespace Tcp
             return Result::OK;
         }
         virtual Result on_write(int) { return Result::OK; }
-        virtual void on_error(int) {}
+        virtual void   on_error(int) {}
         virtual ~Listener() {}
     };
 } // namespace Tcp

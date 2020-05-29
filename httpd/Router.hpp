@@ -1,26 +1,25 @@
 #pragma once
 
+#include <threads/Group.hpp>
+#include <threads/SafeQueue.hpp>
+
 #include "Connection.hpp"
 
-#include <threads/SafeQueue.hpp>
-#include <threads/Group.hpp>
-
-namespace httpd
-{
+namespace httpd {
     struct Router
     {
-        using Worker = Threads::SafeQueueThread<std::function<void()>>;
+        using Worker     = Threads::SafeQueueThread<std::function<void()>>;
         using UserResult = Connection::UserResult;
 
         struct Location
         {
             std::string prefix;
-            bool async = true;
+            bool        async = true;
         };
         using Handler = std::function<UserResult(Connection::SharedPtr, const Request&)>;
 
     private:
-        Worker m_Worker;
+        Worker                                  m_Worker;
         std::list<std::pair<Location, Handler>> m_Locations;
 
         bool match(const Location& aLoc, const Request& aReq) const
@@ -30,17 +29,15 @@ namespace httpd
 
         UserResult process(Connection::SharedPtr aConnection, const Request& aRequest, const Handler& aHandler, bool aAsync)
         {
-            if (aAsync)
-            {
+            if (aAsync) {
                 // use WeakPtr to pass task via queue, so if connection closes
                 // it will be destroyed and task dropped
                 Connection::WeakPtr sWeak = aConnection;
-                m_Worker.insert([sWeak, aRequest, aHandler]()
-                {
+                m_Worker.insert([sWeak, aRequest, aHandler]() {
                     auto sConnection = sWeak.lock();
                     if (sConnection)
                         sConnection->notify(aHandler(sConnection, aRequest));
-                        // if handler return ASYNC - user must call notify() with proper value by self
+                    // if handler return ASYNC - user must call notify() with proper value by self
                 });
                 // return async state to Connection
                 return UserResult::ASYNC;
@@ -51,7 +48,7 @@ namespace httpd
     public:
         Router()
         : m_Worker([](std::function<void()>& aCall) { aCall(); })
-        { }
+        {}
 
         void start(Threads::Group& aGroup) { m_Worker.start(aGroup); }
         void insert_sync(const std::string& aLoc, const Handler aHandler) { m_Locations.push_back({Location{aLoc, false}, aHandler}); }
@@ -59,7 +56,7 @@ namespace httpd
 
         UserResult operator()(Connection::SharedPtr aConnection, const Request& aRequest)
         {
-            for (auto& [sLoc, sHandler]: m_Locations)
+            for (auto& [sLoc, sHandler] : m_Locations)
                 if (match(sLoc, aRequest))
                     return process(aConnection, aRequest, sHandler, sLoc.async);
 
