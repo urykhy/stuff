@@ -8,9 +8,9 @@
 using namespace std::chrono_literals;
 
 BOOST_AUTO_TEST_SUITE(httpd)
-BOOST_AUTO_TEST_CASE(parser)
+BOOST_AUTO_TEST_CASE(parser1)
 {
-    std::string sData =
+    const std::string sData =
         "POST /joyent/http-parser HTTP/1.1\r\n"
         "Host: github.com\r\n"
         "DNT: 1\r\n"
@@ -41,6 +41,39 @@ BOOST_AUTO_TEST_CASE(parser)
                 BOOST_CHECK_EQUAL(x.value, "1");
         }
         BOOST_CHECK_EQUAL(aRequest.m_Body, "hello world");
+        sCalled = true;
+    };
+
+    httpd::Parser sParser(sHandler);
+    sParser.consume(sData.data(), sData.size());
+    BOOST_CHECK(sCalled);
+}
+BOOST_AUTO_TEST_CASE(parser2)
+{
+    const std::string sData =
+        "HTTP/1.1 200 OK\r\n"
+        "Accept-Ranges: bytes\r\n"
+        "Content-Length: 20\r\n"
+        "Content-Type: text/plain\r\n"
+        "Date: Sat, 30 May 2020 10:42:02 GMT\r\n"
+        "Last-Modified: Thu, 12 Jun 2014 11:54:06 GMT\r\n"
+        "Server: nginx/1.14.2\r\n"
+        "\r\n"
+        "<?php\n"
+        "phpinfo();\n"
+        "?>\n";
+
+    bool sCalled = false;
+
+    httpd::Response::Handler sHandler = [&sCalled](httpd::Response& aResponse) {
+        BOOST_CHECK_EQUAL(aResponse.m_Status, 200);
+        const auto sHeaders = aResponse.m_Headers;
+        for (const auto& x : sHeaders) {
+            BOOST_TEST_MESSAGE("found header " << x.key << "=" << x.value);
+            if (x.key == "Server")
+                BOOST_CHECK_EQUAL(x.value, "nginx/1.14.2");
+        }
+        BOOST_CHECK_EQUAL(aResponse.m_Body, "<?php\nphpinfo();\n?>\n");
         sCalled = true;
     };
 

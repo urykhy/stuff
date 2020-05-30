@@ -8,10 +8,9 @@
 #include "http_parser.h"
 
 namespace httpd {
-    struct Request
-    {
-        using Handler = std::function<void(Request&)>;
 
+    struct RRCommon
+    {
         struct Header
         {
             std::string key;
@@ -19,19 +18,43 @@ namespace httpd {
         };
         using Headers = std::vector<Header>;
 
-        const char* m_Method = nullptr;
-        std::string m_Url;
         Headers     m_Headers;
         std::string m_Body;
         bool        m_KeepAlive{false};
 
         void clear()
         {
-            m_Method = nullptr;
-            m_Url.clear();
             m_Headers.clear();
             m_Body.clear();
             m_KeepAlive = false;
+        }
+    };
+
+    struct Request : public RRCommon
+    {
+        using Handler = std::function<void(Request&)>;
+
+        const char* m_Method = nullptr;
+        std::string m_Url;
+
+        void clear()
+        {
+            m_Method = nullptr;
+            m_Url.clear();
+            RRCommon::clear();
+        }
+    };
+
+    struct Response : public RRCommon
+    {
+        using Handler = std::function<void(Response&)>;
+
+        uint16_t m_Status = 0;
+
+        void clear()
+        {
+            m_Status = 0;
+            RRCommon::clear();
         }
     };
 
@@ -47,6 +70,9 @@ namespace httpd {
         static int on_url(http_parser* aParser, const char* aData, size_t aSize) { return Get(aParser)->on_url_int(aData, aSize); }
         int        on_url_int(const char* aData, size_t aSize)
         {
+            if (!m_ModeRequest)
+                return -1;
+
             m_Request.m_Url.append(aData, aSize);
             return 0;
         }
@@ -55,10 +81,10 @@ namespace httpd {
         int        on_header_field_int(const char* aData, size_t aSize)
         {
             if (m_InsertHeader) {
-                m_Request.m_Headers.push_back(Request::Header{});
+                m_Common->m_Headers.push_back(Request::Header{});
                 m_InsertHeader = false;
             }
-            m_Request.m_Headers.back().key.append(aData, aSize);
+            m_Common->m_Headers.back().key.append(aData, aSize);
             return 0;
         }
 
@@ -66,23 +92,28 @@ namespace httpd {
         int        on_header_value_int(const char* aData, size_t aSize)
         {
             m_InsertHeader = true;
-            m_Request.m_Headers.back().value.append(aData, aSize);
+            m_Common->m_Headers.back().value.append(aData, aSize);
             return 0;
         }
 
         static int on_body(http_parser* aParser, const char* aData, size_t aSize) { return Get(aParser)->on_body_int(aData, aSize); }
         int        on_body_int(const char* aData, size_t aSize)
         {
-            m_Request.m_Body.append(aData, aSize);
+            m_Common->m_Body.append(aData, aSize);
             return 0;
         }
 
         static int on_message_complete(http_parser* aParser) { return Get(aParser)->on_message_complete_int(); }
         int        on_message_complete_int()
         {
-            m_Request.m_KeepAlive = http_should_keep_alive(&m_Parser);
-            m_Request.m_Method    = http_method_str((http_method)m_Parser.method);
-            m_Handler(m_Request);
+            m_Common->m_KeepAlive = http_should_keep_alive(&m_Parser);
+            if (m_ModeRequest) {
+                m_Request.m_Method = http_method_str((http_method)m_Parser.method);
+                m_RequestHandler(m_Request);
+            } else {
+                m_Response.m_Status = m_Parser.status_code;
+                m_ResponseHandler(m_Response);
+            }
             clear();
             return 0;
         }
@@ -90,20 +121,21 @@ namespace httpd {
         void clear()
         {
             m_Request.clear();
+            m_Response.clear();
             m_InsertHeader = true;
         }
 
-        Request::Handler m_Handler;
-        Request          m_Request;
-        bool             m_InsertHeader = true;
+        const bool        m_ModeRequest;
+        Request::Handler  m_RequestHandler;
+        Response::Handler m_ResponseHandler;
 
-    public:
-        using Error = Exception::Error<Parser>;
+        Request   m_Request;
+        Response  m_Response;
+        RRCommon* m_Common = nullptr;
+        bool      m_InsertHeader = true;
 
-        Parser(Request::Handler aHandler)
-        : m_Handler(aHandler)
+        void init2()
         {
-            http_parser_init(&m_Parser, HTTP_REQUEST);
             m_Parser.data = this;
 
             http_parser_settings_init(&m_Settings);
@@ -113,6 +145,27 @@ namespace httpd {
             m_Settings.on_header_value     = on_header_value;
             m_Settings.on_body             = on_body;
             m_Settings.on_message_complete = on_message_complete;
+        }
+
+    public:
+        using Error = Exception::Error<Parser>;
+
+        Parser(Request::Handler aHandler)
+        : m_ModeRequest(true)
+        , m_RequestHandler(aHandler)
+        , m_Common(&m_Request)
+        {
+            http_parser_init(&m_Parser, HTTP_REQUEST);
+            init2();
+        }
+
+        Parser(Response::Handler aHandler)
+        : m_ModeRequest(false)
+        , m_ResponseHandler(aHandler)
+        , m_Common(&m_Response)
+        {
+            http_parser_init(&m_Parser, HTTP_RESPONSE);
+            init2();
         }
 
         size_t consume(const char* aData, size_t aSize)
