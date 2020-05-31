@@ -4,26 +4,26 @@
 %option noyywrap
 
 %%
-"select" {return SELECT;}
-"from"   {return FROM;}
-"as"     {return AS;}
-"where"  {return WHERE;}
-"and"    {return AND;}
-"or"     {return OR;}
-"not"    {return NOT;}
-"asc"    {return ASC;}
-"desc"   {return DESC;}
-"group"  {return GROUP;}
-"order"  {return ORDER;}
-"by"     {return BY;}
-"having" {return HAVING;}
-"limit"  {return LIMIT;}
-"insert" {return INSERT;}
-"into"   {return INTO;}
-"values" {return VALUES;}
-"update" {return UPDATE;}
-"set"    {return SET;}
-"delete" {return DELETE;}
+"SELECT" {return SELECT;}
+"FROM"   {return FROM;}
+"AS"     {return AS;}
+"WHERE"  {return WHERE;}
+"AND"    {return AND;}
+"OR"     {return OR;}
+"NOT"    {return NOT;}
+"ASC"    {return ASC;}
+"DESC"   {return DESC;}
+"GROUP"  {return GROUP;}
+"ORDER"  {return ORDER;}
+"BY"     {return BY;}
+"HAVING" {return HAVING;}
+"LIMIT"  {return LIMIT;}
+"INSERT" {return INSERT;}
+"INTO"   {return INTO;}
+"VALUES" {return VALUES;}
+"UPDATE" {return UPDATE;}
+"SET"    {return SET;}
+"DELETE" {return DELETE;}
 
 -?[0-9]+                { yylval.strval = strdup(yytext); return INTNUM; }
 -?[0-9]+"."[0-9]*       { yylval.strval = strdup(yytext); return FLOAT; }
@@ -38,6 +38,7 @@ FALSE                   { yylval.strval = strdup(yytext); return BOOL; }
 ">"      {return GT;}
 "<"      {return LT;}
 "="      {return EQ;}
+"!="     {return NE;}
 "+"      {return ADD;}
 "-"      {return SUB;}
 "*"      {return MULT;}

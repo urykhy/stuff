@@ -1,6 +1,6 @@
 project('protobuf', 'cpp', version : '0.1', default_options : ['cpp_std=c++17'])
 
-includes = include_directories('..')
+includes  = include_directories('..')
 protoc    = find_program('protoc', required : true)
 protobuf  = dependency('protobuf', required : true)
 benchmark = dependency('benchmark', required : true)
