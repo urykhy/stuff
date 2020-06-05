@@ -17,13 +17,13 @@ BOOST_AUTO_TEST_CASE(pool)
     Allocator::Guard<Data::Allocator> sGuard(&sAllocator);
 
     Data* n = new Data;
-    BOOST_CHECK_EQUAL(sAllocator.size(), 1);
-    BOOST_CHECK_EQUAL(sAllocator.free_blocks(), 0);
+    BOOST_CHECK_EQUAL(sAllocator.size(), 4096);
+    BOOST_CHECK_EQUAL(sAllocator.avail(), 4095);
     delete n;
-    BOOST_CHECK_EQUAL(sAllocator.free_blocks(), 1);
+    BOOST_CHECK_EQUAL(sAllocator.avail(), 4096);
 
     n = new Data;
-    BOOST_CHECK_EQUAL(sAllocator.free_blocks(), 0);
+    BOOST_CHECK_EQUAL(sAllocator.avail(), 4095);
     delete n;
 }
 BOOST_AUTO_TEST_CASE(arena)

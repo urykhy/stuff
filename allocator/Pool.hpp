@@ -1,5 +1,7 @@
 #pragma once
 
+#include <vector>
+
 #ifdef CONFIG_WITH_VALGRIND
 #include <valgrind/valgrind.h>
 #else
@@ -16,32 +18,8 @@
 
 namespace Allocator {
 
-    namespace aux {
-        template <class T, size_t SIZE>
-        class Buf
-        {
-            T buffer[SIZE];
-            size_t pos;
-
-        public:
-            Buf()
-            : pos(0)
-            {}
-
-            T* allocate()
-            {
-                if (pos < SIZE) {
-                    return &buffer[pos++];
-                }
-                return 0;
-            };
-
-            bool empty() const { return pos >= SIZE; }
-        };
-    } // namespace aux
-
-    // pool of small objects
-    template <class T, size_t BUFSIZE = 128>
+    // fixed pool of small objects
+    template <class T>
     class Pool
     {
         Pool(const Pool&) = delete;
@@ -49,70 +27,52 @@ namespace Allocator {
 
         union Entry
         {
-            char pad[sizeof(T)];
+            char   pad[sizeof(T)];
             Entry* next;
         };
-
-        typedef aux::Buf<Entry, BUFSIZE> PoolEntry;
-        std::list<PoolEntry*> pool;
-        Entry* head;
+        std::vector<Entry> m_Data;
+        Entry*             m_Head  = nullptr;
+        uint32_t           m_Avail = 0;
 
     public:
-        Pool()
-        : head(0)
+        Pool(size_t aSize = 64 * 1024 /* buffer size in bytes */)
         {
-            ;
+            m_Data.resize(aSize / sizeof(Entry));
+            memset(m_Data.data(), 0, m_Data.size() * sizeof(Entry));
+            for (auto& x : m_Data) {
+                x.next = m_Head;
+                m_Head = &x;
+            }
+            m_Avail = m_Data.size();
         }
         ~Pool() throw()
-        {
-            for (auto& x : pool) {
-                delete x;
-            }
-        }
-        // abs minimal: rebind, allocate, deallocate
-        template <typename _Tp1>
-        struct rebind
-        {
-            typedef Pool<_Tp1> other;
-        };
+        {}
 
         T* allocate(size_t s)
         {
-            Entry* n = 0;
-            if (!head) {
-                if (pool.empty() || pool.back()->empty())
-                    pool.push_back(new PoolEntry());
-                n = pool.back()->allocate();
-                VALGRIND_MALLOCLIKE_BLOCK(n, sizeof(Entry), 0, 1);
-                memset(n, 0, sizeof(Entry));
-            } else {
-                n = head;
-                VALGRIND_MALLOCLIKE_BLOCK(n, sizeof(Entry), 0, 1);
-                head = head->next;
-                memset(n, 0, sizeof(Entry));
-            }
-            return reinterpret_cast<T*>(n);
+            if (m_Head == nullptr)
+                throw std::bad_alloc();
+            assert(m_Avail > 0);
+
+            Entry* sResult = m_Head;
+            VALGRIND_MALLOCLIKE_BLOCK(sResult, sizeof(Entry), 0, 1);
+            m_Head = m_Head->next;
+            memset(sResult, 0, sizeof(Entry));
+            m_Avail--;
+
+            return reinterpret_cast<T*>(sResult);
         }
-        void deallocate(T* t, size_t = 0)
+        void deallocate(T* aAddr, size_t = 0)
         {
-            Entry* e = reinterpret_cast<Entry*>(t);
-            e->next = head;
-            head = e;
-            VALGRIND_FREELIKE_BLOCK(head, 0);
+            Entry* sEntry = reinterpret_cast<Entry*>(aAddr);
+            sEntry->next  = m_Head;
+            m_Head        = sEntry;
+            m_Avail++;
+            VALGRIND_FREELIKE_BLOCK(m_Head, 0);
         }
 
-        size_t size() const { return pool.size(); }
-        size_t mem_used() const { return size() * sizeof(Entry) * BUFSIZE; };
-
-        // it can fire valgrind if build with CONFIG_WITH_VALGRIND
-        size_t free_blocks() const
-        {
-            size_t n = 0;
-            for (Entry* e = head; e; e = e->next) {
-                n++;
-            }
-            return n;
-        }
+        size_t size() const { return m_Data.size(); }
+        size_t avail() const { return m_Avail; }
     };
 
 } // namespace Allocator
