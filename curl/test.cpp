@@ -159,7 +159,7 @@ BOOST_AUTO_TEST_CASE(Index)
     Curl::Client::Params sParams;
     {
         auto [sValid, sFiles] = Curl::index("http://127.0.0.1:8080/auto_index", sParams);
-        Curl::FileList sExpected = {{"../"},{"20200331"},{"20200401"}};
+        Parse::StringList sExpected = {{"../"},{"20200331"},{"20200401"}};
         BOOST_CHECK_EQUAL(sValid, true);
         BOOST_CHECK_EQUAL_COLLECTIONS(sExpected.begin(), sExpected.end(), sFiles.begin(), sFiles.end());
     }
