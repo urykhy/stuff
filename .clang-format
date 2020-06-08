@@ -5,7 +5,7 @@
   TabWidth: 4,
   BreakBeforeBraces: Mozilla,
   BreakConstructorInitializers: BeforeComma,
-  BreakInheritanceList: BeforeComma,
+  BreakInheritanceList: BeforeColon,
   AllowShortIfStatementsOnASingleLine: false,
   IndentCaseLabels: false,
   ColumnLimit: 0,
