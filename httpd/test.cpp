@@ -2,6 +2,7 @@
 #include <boost/test/unit_test.hpp>
 
 #include <curl/Curl.hpp>
+#include <networking/Resolve.hpp>
 
 #include "Router.hpp"
 
@@ -136,6 +137,33 @@ BOOST_AUTO_TEST_CASE(simple)
         BOOST_CHECK_EQUAL(sResult.second, "9876543210");
         sResult = sClient.GET("http://127.0.0.1:2081/not_exists");
         BOOST_CHECK_EQUAL(sResult.first, 404);
+    }
+
+    {
+        int sResponseCount = 0;
+
+        auto sClient = std::make_shared<ClientConnection>(&sEPoll, Tcp::Socket(), [&sResponseCount](ClientConnection::SharedPtr aPeer, const Response& aResponse) {
+            sResponseCount++;
+            BOOST_TEST_MESSAGE("response " << sResponseCount);
+            BOOST_TEST_MESSAGE("code: " << aResponse.m_Status);
+            for (const auto& x : aResponse.m_Headers)
+                BOOST_TEST_MESSAGE("found header " << x.key << "=" << x.value);
+            BOOST_TEST_MESSAGE("body: " << aResponse.m_Body);
+            return ClientConnection::UserResult::DONE;
+        });
+        // FIXME: add callback to exec once connected/error
+        sClient->connect(Util::resolveAddr("127.0.0.1"), 2081);
+        std::this_thread::sleep_for(20ms);
+        BOOST_CHECK_EQUAL(sClient->is_connected(), 0);
+
+        sClient->write("GET /hello HTTP/1.1\r\nConnection: keep-alive\r\n"
+                       "\r\n"
+                       "GET /async HTTP/1.1\r\nConnection: keep-alive\r\n"
+                       "\r\n"
+                       "GET /not_exists HTTP/1.1\r\nConnection: keep-alive\r\n"
+                       "\r\n");
+        std::this_thread::sleep_for(20ms);
+        BOOST_CHECK_EQUAL(sResponseCount, 3);
     }
     std::this_thread::sleep_for(10ms);
 }

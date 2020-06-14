@@ -40,7 +40,7 @@ namespace Tcp {
                     Socket sSocket(sFd);
                     sSocket.set_nonblocking();
                     auto sNew = m_Handler(std::move(sSocket));
-                    m_EPoll->insert(sFd, EPOLLIN, sNew);
+                    m_EPoll->insert(sFd, EPOLLIN | EPOLLOUT, sNew);
                 }
             } while (sFd > 0);
             return Result::OK;

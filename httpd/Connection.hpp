@@ -20,6 +20,18 @@ namespace httpd {
 
     using Connection = Tcp::Connection<Server>;
 
+    struct Client
+    {
+        using Request = httpd::Response;
+        using Parser  = httpd::Parser;
+
+        static constexpr size_t  WRITE_BUFFER_SIZE = 1 * 1024 * 1024; // output buffer size
+        static constexpr size_t  TASK_LIMIT        = 100;             // max parsed tasks in queue
+        static constexpr ssize_t READ_BUFFER_SIZE  = 128 * 1024;      // read buffer size
+    };
+
+    using ClientConnection = Tcp::Connection<Client>;
+
     template <class H>
     inline auto Create(Util::EPoll* aEPoll, uint16_t aPort, H& aRouter)
     {                                                                                                                                                  // create listener

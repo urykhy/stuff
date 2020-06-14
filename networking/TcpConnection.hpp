@@ -10,8 +10,8 @@ namespace Tcp {
 
     template <class P>
     struct Connection
-    : Util::EPoll::HandlerFace
-    , std::enable_shared_from_this<Connection<P>>
+    : Util::EPoll::HandlerFace,
+      std::enable_shared_from_this<Connection<P>>
     {
         using Request   = typename P::Request;
         using Parser    = typename P::Parser;
@@ -37,6 +37,12 @@ namespace Tcp {
         std::atomic_bool m_Busy{false};
         std::atomic_bool m_Error{false};
         std::atomic_bool m_Closing{false};
+        std::atomic_int  m_Connected{EPIPE};
+
+        enum : int
+        {
+            TIMER_ID_CONNECTING = 2
+        };
 
         uint64_t queueSize() const { return m_Incoming.count() - m_Done; }
 
@@ -89,6 +95,22 @@ namespace Tcp {
         , m_Handler(aHandler)
         {
             m_WriteOut.reserve(P::WRITE_BUFFER_SIZE);
+        }
+
+        void connect(uint32_t aRemote, uint16_t aPort, time_t aTimeoutMS = 10)
+        {
+            m_Socket.set_nonblocking();
+            m_Connected = EINPROGRESS;
+            m_EPoll->post([this, p = this->shared_from_this(), aRemote, aPort, aTimeoutMS](Util::EPoll*) {
+                m_EPoll->insert(get_fd(), EPOLLOUT | EPOLLIN, p);
+                m_Socket.connect(aRemote, aPort);
+                m_EPoll->schedule(this->shared_from_this(), aTimeoutMS, TIMER_ID_CONNECTING);
+            });
+        }
+
+        int is_connected() const // return error code or 0 if connected
+        {
+            return m_Connected;
         }
 
         int get_fd() const override { return m_Socket.get_fd(); }
@@ -174,6 +196,13 @@ namespace Tcp {
 
         Result on_write(int) override
         {
+            if (m_Connected == EINPROGRESS) {
+                m_Connected = m_Socket.get_error();
+                if (m_Connected != 0)
+                    throw Util::CoreSocket::Error("fail to connect", m_Connected);
+                return Result::OK;
+            }
+
             if (m_Error)
                 return Result::CLOSE;
 
@@ -192,8 +221,16 @@ namespace Tcp {
             return Result::OK;
         }
 
-        Result on_timer(int) override
-        { // timer used only to kick write out. so we not need timer_id
+        Result on_timer(int aTimerID) override
+        {
+            if (aTimerID == TIMER_ID_CONNECTING) {
+                if (m_Connected == EINPROGRESS) {
+                    m_Connected = ETIMEDOUT;
+                    throw Util::CoreSocket::Error("fail to connect", ETIMEDOUT);
+                }
+                return Result::OK;
+            }
+            // it's a write-out message
             return on_write(0);
         }
 
