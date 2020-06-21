@@ -3,6 +3,7 @@
 
 #include <curl/Curl.hpp>
 #include <networking/Resolve.hpp>
+#include <threads/WaitGroup.hpp>
 
 #include "Router.hpp"
 
@@ -151,9 +152,11 @@ BOOST_AUTO_TEST_CASE(simple)
             BOOST_TEST_MESSAGE("body: " << aResponse.m_Body);
             return ClientConnection::UserResult::DONE;
         });
-        // FIXME: add callback to exec once connected/error
-        sClient->connect(Util::resolveAddr("127.0.0.1"), 2081);
-        std::this_thread::sleep_for(20ms);
+        Threads::WaitGroup sWait(1);
+        sClient->connect(Util::resolveAddr("127.0.0.1"), 2081, 10 /* timeout in ms */, [&sWait](int) {
+            sWait.release();
+        });
+        sWait.wait();
         BOOST_CHECK_EQUAL(sClient->is_connected(), 0);
 
         sClient->write("GET /hello HTTP/1.1\r\nConnection: keep-alive\r\n"

@@ -24,13 +24,15 @@ namespace Tcp {
             ASYNC,
             CLOSE
         };
-        using Handler = std::function<UserResult(SharedPtr, const Request&)>;
+        using Handler        = std::function<UserResult(SharedPtr, const Request&)>;
+        using ConnectHandler = std::function<void(int)>;    // called with 0 or error code
 
     private:
         Tcp::Socket                 m_Socket;
         Util::EPoll*                m_EPoll;
         Parser                      m_Parser;
         Handler                     m_Handler;
+        ConnectHandler              m_ConnectHandler;
         Threads::SafeQueue<Request> m_Incoming;
 
         uint64_t         m_Done{0};
@@ -97,10 +99,11 @@ namespace Tcp {
             m_WriteOut.reserve(P::WRITE_BUFFER_SIZE);
         }
 
-        void connect(uint32_t aRemote, uint16_t aPort, time_t aTimeoutMS = 10)
+        void connect(uint32_t aRemote, uint16_t aPort, time_t aTimeoutMS, ConnectHandler aHandler)
         {
             m_Socket.set_nonblocking();
-            m_Connected = EINPROGRESS;
+            m_Connected      = EINPROGRESS;
+            m_ConnectHandler = aHandler;
             m_EPoll->post([this, p = this->shared_from_this(), aRemote, aPort, aTimeoutMS](Util::EPoll*) {
                 m_EPoll->insert(get_fd(), EPOLLOUT | EPOLLIN, p);
                 m_Socket.connect(aRemote, aPort);
@@ -198,6 +201,7 @@ namespace Tcp {
         {
             if (m_Connected == EINPROGRESS) {
                 m_Connected = m_Socket.get_error();
+                m_ConnectHandler(m_Connected);
                 if (m_Connected != 0)
                     throw Util::CoreSocket::Error("fail to connect", m_Connected);
                 return Result::OK;
@@ -226,6 +230,7 @@ namespace Tcp {
             if (aTimerID == TIMER_ID_CONNECTING) {
                 if (m_Connected == EINPROGRESS) {
                     m_Connected = ETIMEDOUT;
+                    m_ConnectHandler(m_Connected);
                     throw Util::CoreSocket::Error("fail to connect", ETIMEDOUT);
                 }
                 return Result::OK;
