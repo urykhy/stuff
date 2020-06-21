@@ -25,7 +25,7 @@ namespace Tcp {
             CLOSE
         };
         using Handler        = std::function<UserResult(SharedPtr, const Request&)>;
-        using ConnectHandler = std::function<void(int)>;    // called with 0 or error code
+        using ConnectHandler = std::function<void(int)>; // called with 0 or error code
 
     private:
         Tcp::Socket                 m_Socket;
@@ -39,7 +39,7 @@ namespace Tcp {
         std::atomic_bool m_Busy{false};
         std::atomic_bool m_Error{false};
         std::atomic_bool m_Closing{false};
-        std::atomic_int  m_Connected{EPIPE};
+        std::atomic_int  m_Connected{ENOTCONN};
 
         enum : int
         {
@@ -97,6 +97,7 @@ namespace Tcp {
         , m_Handler(aHandler)
         {
             m_WriteOut.reserve(P::WRITE_BUFFER_SIZE);
+            m_Connected = 0; // server connection
         }
 
         void connect(uint32_t aRemote, uint16_t aPort, time_t aTimeoutMS, ConnectHandler aHandler)
@@ -136,7 +137,7 @@ namespace Tcp {
                 try {
                     sSize = m_Socket.write(aData.data(), aData.size());
                 } catch (...) {
-                    on_error(get_fd());
+                    on_error();
                     self_close();
                     return;
                 }
@@ -163,7 +164,7 @@ namespace Tcp {
             }
         }
 
-        Result on_read(int) override
+        Result on_read() override
         {
             if (m_Error)
                 return Result::CLOSE;
@@ -197,7 +198,7 @@ namespace Tcp {
             return sSize < P::READ_BUFFER_SIZE ? Result::OK : Result::RETRY;
         }
 
-        Result on_write(int) override
+        Result on_write() override
         {
             if (m_Connected == EINPROGRESS) {
                 m_Connected = m_Socket.get_error();
@@ -236,10 +237,19 @@ namespace Tcp {
                 return Result::OK;
             }
             // it's a write-out message
-            return on_write(0);
+            return on_write();
         }
 
-        void on_error(int) override { m_Error = true; }
+        void on_error() override
+        {
+            m_Error = true;
+            if (m_Closing)
+                m_Connected = ECONNABORTED; // closed as requested by user
+            else
+                m_Connected = m_Socket.get_error(); // get socket error
+            if (m_ConnectHandler)
+                m_ConnectHandler(m_Connected);
+        }
         virtual ~Connection() {}
     };
 

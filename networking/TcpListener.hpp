@@ -31,7 +31,7 @@ namespace Tcp {
             m_EPoll->post([p = shared_from_this()](Util::EPoll* ptr) { ptr->insert(p->m_Socket.get_fd(), EPOLLIN, p); });
         }
 
-        virtual Result on_read(int)
+        virtual Result on_read()
         {
             int sFd = 0;
             do {
@@ -45,8 +45,8 @@ namespace Tcp {
             } while (sFd > 0);
             return Result::OK;
         }
-        virtual Result on_write(int) { return Result::OK; }
-        virtual void   on_error(int) {}
+        virtual Result on_write() { return Result::OK; }
+        virtual void   on_error() {}
         virtual ~Listener() {}
     };
 } // namespace Tcp

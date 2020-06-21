@@ -26,10 +26,10 @@ namespace Util {
                 RETRY,
                 CLOSE
             };
-            virtual Result on_read(int)  = 0;
-            virtual Result on_write(int) = 0;
-            virtual void   on_error(int) = 0;
-            virtual Result on_timer(int) { return Result::OK; };
+            virtual Result on_read()     = 0;
+            virtual Result on_write()    = 0;
+            virtual void   on_error() = 0;
+            virtual Result on_timer(int /* timer id */ ) { return Result::OK; };
             virtual int    get_fd() const { return -1; }
             virtual ~HandlerFace() {}
         };
@@ -52,9 +52,9 @@ namespace Util {
             EventHandler(EPoll* aParent)
             : m_Parent(aParent)
             {}
-            Result on_read(int) override { return m_Parent->on_event(); }
-            Result on_write(int) override { return Result::OK; }
-            void   on_error(int) override {}
+            Result on_read() override { return m_Parent->on_event(); }
+            Result on_write() override { return Result::OK; }
+            void   on_error() override {}
         };
         EventFd                  m_Event;
         HandlerPtr               m_EventHandler;
@@ -82,7 +82,7 @@ namespace Util {
                 try {
                     switch (aData.action) {
                     case Backlog::READ:
-                        sResult = sPtr->on_read(sPtr->get_fd());
+                        sResult = sPtr->on_read();
                         break;
                     case Backlog::TIMER:
                         sResult = sPtr->on_timer(aData.timer_id);
@@ -95,7 +95,7 @@ namespace Util {
                 }
 
                 if (sResult == Result::CLOSE) {
-                    sPtr->on_error(sPtr->get_fd());
+                    sPtr->on_error();
                     m_CleanupQueue.insert(sPtr->get_fd());
                 }
             }
@@ -126,7 +126,7 @@ namespace Util {
             if (!sClose and aEvent & EPOLLOUT) {
                 auto sResult = Result::CLOSE;
                 try {
-                    sResult = sFace->on_write(aFd);
+                    sResult = sFace->on_write();
                 } catch (...) {
                     sResult = Result::CLOSE;
                 }
@@ -136,7 +136,7 @@ namespace Util {
             if (!sClose and aEvent & EPOLLIN) {
                 auto sResult = Result::CLOSE;
                 try {
-                    sResult = sFace->on_read(aFd);
+                    sResult = sFace->on_read();
                 } catch (...) {
                     sResult = Result::CLOSE;
                 }
@@ -145,7 +145,7 @@ namespace Util {
             }
 
             if (sClose) {
-                sFace->on_error(aFd);
+                sFace->on_error();
                 m_CleanupQueue.insert(aFd);
                 return;
             }

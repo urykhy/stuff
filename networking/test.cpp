@@ -172,7 +172,7 @@ BOOST_AUTO_TEST_CASE(ping)
         {}
         int get_fd() { return m_Socket.get_fd(); }
 
-        Result on_read(int) override
+        Result on_read() override
         {
             auto sMsg = m_Socket.read();
             BOOST_CHECK_EQUAL(sMsg.size, 4);
@@ -181,8 +181,8 @@ BOOST_AUTO_TEST_CASE(ping)
             m_Socket.write(sReply);
             return m_Socket.ionread() ? Result::RETRY : Result::OK;
         }
-        Result on_write(int) override { return Result::OK; }
-        void   on_error(int) override { BOOST_CHECK(false); }
+        Result on_write() override { return Result::OK; }
+        void   on_error() override { BOOST_CHECK(false); }
     };
     auto sHandler = std::make_shared<PingHandler>();
     sEpoll.post([sHandler](Util::EPoll* ptr) {
