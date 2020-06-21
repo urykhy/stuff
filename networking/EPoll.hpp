@@ -26,10 +26,10 @@ namespace Util {
                 RETRY,
                 CLOSE
             };
-            virtual Result on_read()     = 0;
-            virtual Result on_write()    = 0;
+            virtual Result on_read()  = 0;
+            virtual Result on_write() = 0;
             virtual void   on_error() = 0;
-            virtual Result on_timer(int /* timer id */ ) { return Result::OK; };
+            virtual Result on_timer(int /* timer id */) { return Result::OK; };
             virtual int    get_fd() const { return -1; }
             virtual ~HandlerFace() {}
         };

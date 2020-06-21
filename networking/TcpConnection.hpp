@@ -84,10 +84,6 @@ namespace Tcp {
             return m_WriteOut.size();
         }
 
-        void self_close()
-        {
-            m_EPoll->post([p = this->shared_from_this()](Util::EPoll* ptr) { ptr->erase(p->get_fd()); });
-        }
 
     public:
         Connection(Util::EPoll* aEPoll, Tcp::Socket&& aSocket, Handler aHandler)
@@ -100,6 +96,15 @@ namespace Tcp {
             m_Connected = 0; // server connection
         }
 
+        Connection(Util::EPoll* aEPoll, Handler aHandler)
+        : m_EPoll(aEPoll)
+        , m_Parser([this](Request& a) { m_Incoming.insert(a); })
+        , m_Handler(aHandler)
+        {
+            m_WriteOut.reserve(P::WRITE_BUFFER_SIZE);
+            // client connection
+        }
+
         void connect(uint32_t aRemote, uint16_t aPort, time_t aTimeoutMS, ConnectHandler aHandler)
         {
             m_Socket.set_nonblocking();
@@ -110,6 +115,11 @@ namespace Tcp {
                 m_Socket.connect(aRemote, aPort);
                 m_EPoll->schedule(this->shared_from_this(), aTimeoutMS, TIMER_ID_CONNECTING);
             });
+        }
+
+        void self_close()
+        {
+            m_EPoll->post([p = this->shared_from_this()](Util::EPoll* ptr) { ptr->erase(p->get_fd()); });
         }
 
         int is_connected() const // return error code or 0 if connected
@@ -245,7 +255,7 @@ namespace Tcp {
             m_Error = true;
             if (m_Closing)
                 m_Connected = ECONNABORTED; // closed as requested by user
-            else
+            if (m_Connected == 0)
                 m_Connected = m_Socket.get_error(); // get socket error
             if (m_ConnectHandler)
                 m_ConnectHandler(m_Connected);
