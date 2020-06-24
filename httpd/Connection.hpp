@@ -42,7 +42,7 @@ namespace httpd {
         });
     }
 
-    struct MassClient
+    struct MassClient : std::enable_shared_from_this<MassClient>
     {
         using ClientPtr = std::shared_ptr<ClientConnection>;
 
@@ -66,29 +66,62 @@ namespace httpd {
         const Params m_Params;
         ClientPtr    m_Connection;
 
+        struct XQuery : Query
+        {
+            uint64_t deadline = 0;
+        };
+
         using Lock = std::unique_lock<std::mutex>;
         mutable std::mutex m_Mutex;
-        std::list<Query>   m_Queue;
-        /*
+        std::list<XQuery>  m_Queue;
+
+        using Weak = std::weak_ptr<MassClient>;
+
         struct Timer : Util::EPoll::HandlerFace, std::enable_shared_from_this<Timer>
         {
-            RealClient* m_Parent = nullptr;
-            Timer(RealClient* aParent) : m_Parent {}
+            Weak m_Parent;
+            Timer(Weak aParent)
+            : m_Parent(aParent)
+            {}
 
             virtual Result on_read() { return Result::OK; };
             virtual Result on_write() { return Result::OK; }
             virtual void   on_error() {}
-            virtual Result on_timer(int aID) { m_Parent->on_timer(); }
+            virtual Result on_timer(int aID)
+            {
+                auto sPtr = m_Parent.lock();
+                if (sPtr)
+                    sPtr->on_timer();
+                return Result::OK;
+            }
             virtual ~Timer() {}
         };
+        Util::EPoll::HandlerPtr m_Timer;
+        bool                    m_TimerStarted{false};
 
         void on_timer()
         {
-            // start timer: m_EPoll->schedule(timer_ptr, timeout_ms_for_1st_query);
-            // FIXME: self_close m_Connection since timeout
-            // flush(ETIMEDOUT);
+            Lock lk(m_Mutex);
+
+            const uint64_t sNow     = Time::get_time().to_ms();
+            const bool     sTimeOut = m_Queue.empty() ? false : m_Queue.front().deadline <= sNow;
+
+            if (sTimeOut) {
+                flush_i(ETIMEDOUT);
+                m_Connection.reset();
+                m_TimerStarted = false;
+                return;
+            }
+
+            if (m_Queue.empty()) {
+                m_TimerStarted = false;
+                return;
+            }
+
+            // have pending request. prepare timer
+            m_EPoll->schedule(m_Timer, sNow - m_Queue.front().deadline);
         }
-*/
+
         void flush_i(int aCode)
         {
             for (auto& x : m_Queue)
@@ -123,14 +156,21 @@ namespace httpd {
 
         void initiate_i()
         {
-            m_Connection = std::make_shared<ClientConnection>(m_EPoll, [this](ClientConnection::SharedPtr aPeer, const Response& aResponse) {
-                notify(aResponse);
+            Weak sWeak   = shared_from_this();
+            m_Connection = std::make_shared<ClientConnection>(m_EPoll, [sWeak](ClientConnection::SharedPtr aPeer, const Response& aResponse) {
+                auto sPtr = sWeak.lock();
+                if (sPtr)
+                    sPtr->notify(aResponse);
                 return ClientConnection::UserResult::DONE;
             });
-            m_Connection->connect(m_Params.remote_addr, m_Params.remote_port, m_Params.connect_ms, [this](int aCode) {
-                notify(aCode);
+            m_Connection->connect(m_Params.remote_addr, m_Params.remote_port, m_Params.connect_ms, [sWeak](int aCode) {
+                auto sPtr = sWeak.lock();
+                if (sPtr)
+                    sPtr->notify(aCode);
                 return;
             });
+            if (!m_Timer)
+                m_Timer = std::make_shared<Timer>(sWeak);
         }
 
     public:
@@ -148,15 +188,24 @@ namespace httpd {
 
         void insert(Query&& aQuery, bool aMore = false)
         {
-            const int sStatus = is_connected();
             Lock lk(m_Mutex);
+            const int sStatus = m_Connection ? m_Connection->is_connected() : ENOTCONN; // is_connected
 
             if (sStatus != 0 and sStatus != EINPROGRESS)
                 initiate_i();
             if (sStatus == 0)
                 m_Connection->write(aQuery.request, aMore);
 
-            m_Queue.push_back(std::move(aQuery));
+            XQuery sQuery;
+            sQuery.request  = std::move(aQuery.request);
+            sQuery.callback = std::move(aQuery.callback);
+            sQuery.deadline = Time::get_time().to_ms() + m_Params.timeout_ms;
+
+            if (!m_TimerStarted) {
+                m_EPoll->schedule(m_Timer, m_Params.timeout_ms);
+                m_TimerStarted = true;
+            }
+            m_Queue.push_back(std::move(sQuery));
         }
 
         int is_connected() const

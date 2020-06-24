@@ -173,10 +173,10 @@ BOOST_AUTO_TEST_CASE(simple)
         httpd::MassClient::Params sParams;
         sParams.remote_addr = Util::resolveAddr("127.0.0.1");
         sParams.remote_port = 2081;
-        httpd::MassClient sClient(&sEPoll, sParams);
+        auto sClient = std::make_shared<httpd::MassClient>(&sEPoll, sParams);
 
         int sResponseCount = 0;
-        sClient.insert({"GET /hello HTTP/1.1\r\nConnection: keep-alive\r\n""\r\n", [&sResponseCount](int aCode, const Response& aResponse){
+        sClient->insert({"GET /hello HTTP/1.1\r\nConnection: keep-alive\r\n""\r\n", [&sResponseCount](int aCode, const Response& aResponse){
             sResponseCount++;
             BOOST_CHECK_EQUAL(aCode, 0);
             BOOST_CHECK_EQUAL(aResponse.m_Status, 200);
@@ -184,7 +184,7 @@ BOOST_AUTO_TEST_CASE(simple)
         }});
         std::this_thread::sleep_for(20ms);
 
-        BOOST_CHECK_EQUAL(sClient.is_connected(), 0);
+        BOOST_CHECK_EQUAL(sClient->is_connected(), 0);
         BOOST_CHECK_EQUAL(sResponseCount, 1);
     }
     std::this_thread::sleep_for(10ms);
