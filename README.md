@@ -9,7 +9,7 @@ some information about stuff
 
 ### libraries
 - curl - easy and multi handle c++ wrappers
-- httpd - simple httpd server
+- httpd - simple httpd server/client with pipelining
 - mysql - mysql client
 - threads - thread group, work queue, pipeline.
 
