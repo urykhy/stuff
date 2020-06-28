@@ -213,9 +213,7 @@ namespace Tcp {
             if (m_Connected == EINPROGRESS) {
                 m_Connected = m_Socket.get_error();
                 m_ConnectHandler(m_Connected);
-                if (m_Connected != 0)
-                    throw Util::CoreSocket::Error("fail to connect", m_Connected);
-                return Result::OK;
+                return m_Connected == 0 ? Result::OK : Result::CLOSE;
             }
 
             if (m_Error)
@@ -242,7 +240,7 @@ namespace Tcp {
                 if (m_Connected == EINPROGRESS) {
                     m_Connected = ETIMEDOUT;
                     m_ConnectHandler(m_Connected);
-                    throw Util::CoreSocket::Error("fail to connect", ETIMEDOUT);
+                    return Result::CLOSE;
                 }
                 return Result::OK;
             }
