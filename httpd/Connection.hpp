@@ -98,6 +98,7 @@ namespace httpd {
         };
         Util::EPoll::HandlerPtr m_Timer;
         bool                    m_TimerStarted{false};
+        bool                    m_QueueWritten{false};
 
         void on_timer()
         {
@@ -147,6 +148,7 @@ namespace httpd {
                 // connection ok. write pending requests
                 for (auto& x : m_Queue)
                     m_Connection->write(x.request, true);
+                m_QueueWritten = true;
             } else {
                 // connection failed. fire callbacks with error
                 flush_i(aCode);
@@ -186,14 +188,14 @@ namespace httpd {
                 m_Connection->self_close();
         }
 
-        void insert(Query&& aQuery, bool aMore = false)
+        void insert(Query&& aQuery, bool aMore = true)
         {
             Lock lk(m_Mutex);
             const int sStatus = m_Connection ? m_Connection->is_connected() : ENOTCONN; // is_connected
 
             if (sStatus != 0 and sStatus != EINPROGRESS)
                 initiate_i();
-            if (sStatus == 0)
+            if (sStatus == 0 and m_QueueWritten)
                 m_Connection->write(aQuery.request, aMore);
 
             XQuery sQuery;

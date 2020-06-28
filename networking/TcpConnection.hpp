@@ -40,6 +40,7 @@ namespace Tcp {
         std::atomic_bool m_Error{false};
         std::atomic_bool m_Closing{false};
         std::atomic_int  m_Connected{ENOTCONN};
+        const bool       m_Server;
 
         enum : int
         {
@@ -91,6 +92,7 @@ namespace Tcp {
         , m_EPoll(aEPoll)
         , m_Parser([this](Request& a) { m_Incoming.insert(a); })
         , m_Handler(aHandler)
+        , m_Server(true)
         {
             m_WriteOut.reserve(P::WRITE_BUFFER_SIZE);
             m_Connected = 0; // server connection
@@ -100,6 +102,7 @@ namespace Tcp {
         : m_EPoll(aEPoll)
         , m_Parser([this](Request& a) { m_Incoming.insert(a); })
         , m_Handler(aHandler)
+        , m_Server(false)
         {
             m_WriteOut.reserve(P::WRITE_BUFFER_SIZE);
             // client connection
@@ -183,8 +186,10 @@ namespace Tcp {
 
             const uint64_t sQueueSize = queueSize();
             // do not read if queue already have requests or writeout queue busy
-            if (sQueueSize > P::TASK_LIMIT or writeOutSize() > P::WRITE_BUFFER_SIZE)
+            if (sQueueSize > P::TASK_LIMIT or (m_Server and writeOutSize() > P::WRITE_BUFFER_SIZE))
+            {   // only server must suspend if write out queue too large
                 return Result::RETRY; // retry in 1 ms
+            }
 
             ssize_t sSize   = 0;
             void*   sBuffer = alloca(P::READ_BUFFER_SIZE);
@@ -197,7 +202,7 @@ namespace Tcp {
                 ssize_t sUsed = m_Parser.consume((char*)sBuffer, sSize);
                 if (sUsed < sSize) // parser problem
                     return Result::CLOSE;
-                if (sQueueSize < m_Incoming.count()) // got new request(s)
+                if (sQueueSize + P::TASK_LIMIT < m_Incoming.count()) // got pack of new request(s)
                     break;
             }
 

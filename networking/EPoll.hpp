@@ -43,7 +43,7 @@ namespace Util {
         int                             m_Fd = -1;
         std::vector<struct epoll_event> m_Events;
         std::map<int, HandlerPtr>       m_Handlers;     // fd to handler
-        std::set<int>                   m_Retry;        // retry call
+        std::set<int>                   m_Retry;        // fd with retry, do not schedule retry again
         std::set<int>                   m_CleanupQueue; // store unique fds
 
         struct EventHandler : HandlerFace
@@ -83,6 +83,13 @@ namespace Util {
                     switch (aData.action) {
                     case Backlog::READ:
                         sResult = sPtr->on_read();
+                        //BOOST_TEST_MESSAGE("timer: read result for " << sPtr->get_fd() << " is " << (int)sResult);
+                        if (sResult == Result::RETRY) {
+                            //BOOST_TEST_MESSAGE("retry again for " << sPtr->get_fd());
+                            m_Backlog.insert(Backlog{sPtr, Backlog::READ}, 0);
+                        } else {
+                            m_Retry.erase(sPtr->get_fd());
+                        }
                         break;
                     case Backlog::TIMER:
                         sResult = sPtr->on_timer(aData.timer_id);
@@ -93,7 +100,6 @@ namespace Util {
                 } catch (...) {
                     /* sResult already == CLOSE */
                 }
-
                 if (sResult == Result::CLOSE) {
                     sPtr->on_error();
                     m_CleanupQueue.insert(sPtr->get_fd());
@@ -130,8 +136,9 @@ namespace Util {
                 } catch (...) {
                     sResult = Result::CLOSE;
                 }
+                //BOOST_TEST_MESSAGE("write result for " << aFd << " is " << (int)sResult);
                 sClose |= sResult == Result::CLOSE;
-                sRetry |= sResult == Result::RETRY;
+                // retry for write is done by epoll / EPOLLOUT event
             }
             if (!sClose and aEvent & EPOLLIN) {
                 auto sResult = Result::CLOSE;
@@ -140,6 +147,7 @@ namespace Util {
                 } catch (...) {
                     sResult = Result::CLOSE;
                 }
+                //BOOST_TEST_MESSAGE("read result for " << aFd << " is " << (int)sResult);
                 sClose |= sResult == Result::CLOSE;
                 sRetry |= sResult == Result::RETRY;
             }
@@ -150,8 +158,12 @@ namespace Util {
                 return;
             }
 
-            if (sRetry)
-                m_Backlog.insert(Backlog{sFace, Backlog::READ}, 1);
+            if (sRetry) {
+                if (m_Retry.count(aFd) == 0) { // do not schedule read event, if already scheduled
+                    m_Retry.insert(aFd);
+                    m_Backlog.insert(Backlog{sFace, Backlog::READ}, 0);
+                }
+            }
         }
 
     public:
