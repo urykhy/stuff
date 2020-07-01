@@ -30,20 +30,20 @@ namespace Allocator {
             char   pad[sizeof(T)];
             Entry* next;
         };
-        std::vector<Entry> m_Data;
-        Entry*             m_Head  = nullptr;
-        uint32_t           m_Avail = 0;
+        std::vector<char> m_Data;
+        Entry*            m_Head  = nullptr;
+        uint32_t          m_Avail = 0;
 
     public:
         Pool(size_t aSize = 64 * 1024 /* buffer size in bytes */)
+        : m_Data(aSize, 0)
         {
-            m_Data.resize(aSize / sizeof(Entry));
-            memset(m_Data.data(), 0, m_Data.size() * sizeof(Entry));
-            for (auto& x : m_Data) {
-                x.next = m_Head;
-                m_Head = &x;
+            m_Avail = aSize / sizeof(Entry);
+            for (unsigned i = 0; i < m_Avail; i++) {
+                Entry* x = (Entry*)&m_Data[sizeof(Entry) * i];
+                x->next  = m_Head;
+                m_Head   = x;
             }
-            m_Avail = m_Data.size();
         }
         ~Pool() throw()
         {}
@@ -71,7 +71,7 @@ namespace Allocator {
             VALGRIND_FREELIKE_BLOCK(m_Head, 0);
         }
 
-        size_t size() const { return m_Data.size(); }
+        size_t size() const { return m_Data.size() / sizeof(Entry); }
         size_t avail() const { return m_Avail; }
     };
 

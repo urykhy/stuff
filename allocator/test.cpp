@@ -25,6 +25,25 @@ BOOST_AUTO_TEST_CASE(pool)
     n = new Data;
     BOOST_CHECK_EQUAL(sAllocator.avail(), 4095);
     delete n;
+
+    // allocate all
+    std::vector<Data*> sList;
+    n = nullptr;
+    do {
+        try {
+            n = new Data;
+            sList.push_back(n);
+        } catch(const std::exception& e) {
+            BOOST_TEST_MESSAGE("exception: " << e.what());
+            n = nullptr;
+        }
+    } while (n);
+    BOOST_CHECK_EQUAL(sAllocator.avail(), 0);
+    BOOST_CHECK_EQUAL(sAllocator.size(), 4096);
+
+    for (auto x : sList)
+        delete x;
+    BOOST_CHECK_EQUAL(sAllocator.avail(), 4096);
 }
 BOOST_AUTO_TEST_CASE(arena)
 {
