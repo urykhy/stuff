@@ -127,8 +127,22 @@ struct WithServer
             return Connection::UserResult::DONE;
         };
         m_Router.insert("/async", sHandler2); // call handler in worker thread
-        m_Router.start(m_Group);
 
+        auto sHandler3 = [](Connection::SharedPtr aPeer, const Request& aRequest) {
+            sleep(1);
+            std::string sResponse =
+                "HTTP/1.1 200 OK\r\n"
+                "Transfer-Length: 12\r\n"
+                "Content-Type: text/numbers\r\n"
+                "Connection: keep-alive\r\n"
+                "\r\n"
+                "veryslowcall";
+            aPeer->write(sResponse);
+            return Connection::UserResult::DONE;
+        };
+        m_Router.insert("/slow", sHandler3); // call handler in worker thread
+
+        m_Router.start(m_Group);
         auto sListener = httpd::Create(&m_EPoll, 2081, m_Router);
         sListener->start();
         std::this_thread::sleep_for(10ms);
@@ -208,6 +222,30 @@ BOOST_AUTO_TEST_CASE(simple)
     std::this_thread::sleep_for(20ms);
 
     BOOST_CHECK_EQUAL(sClient->is_connected(), 0);
+    BOOST_CHECK_EQUAL(sResponseCount, 1);
+}
+BOOST_AUTO_TEST_CASE(slow)
+{
+    Util::EPoll    sEPoll;
+    Threads::Group sGroup;
+    sEPoll.start(sGroup);
+
+    httpd::MassClient::Params sParams;
+    sParams.remote_addr = Util::resolveAddr("127.0.0.1");
+    sParams.remote_port = 2081;
+    sParams.timeout_ms  = 500;
+    auto sClient        = std::make_shared<httpd::MassClient>(&sEPoll, sParams);
+
+    int sResponseCount = 0;
+    sClient->insert({"GET /slow HTTP/1.1\r\nConnection: keep-alive\r\n"
+                     "\r\n",
+                     [&sResponseCount](int aCode, const Response& aResponse) {
+                         sResponseCount++;
+                         BOOST_CHECK_EQUAL(aCode, 110); // ETIMEDOUT
+                     }});
+    std::this_thread::sleep_for(1s);
+
+    BOOST_CHECK_EQUAL(sClient->is_connected(), 107); // ENOTCONN
     BOOST_CHECK_EQUAL(sResponseCount, 1);
 }
 BOOST_AUTO_TEST_CASE(bench)
