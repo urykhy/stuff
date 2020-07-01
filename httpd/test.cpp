@@ -9,8 +9,8 @@
 
 using namespace std::chrono_literals;
 
-BOOST_AUTO_TEST_SUITE(httpd)
-BOOST_AUTO_TEST_CASE(parser1)
+BOOST_AUTO_TEST_SUITE(parser)
+BOOST_AUTO_TEST_CASE(request)
 {
     const std::string sData =
         "POST /joyent/http-parser HTTP/1.1\r\n"
@@ -50,7 +50,7 @@ BOOST_AUTO_TEST_CASE(parser1)
     sParser.consume(sData.data(), sData.size());
     BOOST_CHECK(sCalled);
 }
-BOOST_AUTO_TEST_CASE(parser2)
+BOOST_AUTO_TEST_CASE(response)
 {
     const std::string sData =
         "HTTP/1.1 200 OK\r\n"
@@ -83,144 +83,146 @@ BOOST_AUTO_TEST_CASE(parser2)
     sParser.consume(sData.data(), sData.size());
     BOOST_CHECK(sCalled);
 }
+BOOST_AUTO_TEST_SUITE_END()
+
+struct WithServer
+{
+    Util::EPoll     m_EPoll;
+    httpd::Router   m_Router;
+    Threads::Group  m_Group; // in d-tor we stop all threads
+    static uint64_t m_RequestCount;
+
+    WithServer()
+    {
+        using namespace httpd;
+        m_EPoll.start(m_Group);
+
+        auto sHandler1 = [](Connection::SharedPtr aPeer, const Request& aRequest) {
+            //BOOST_TEST_MESSAGE("request: " << aRequest.m_Url);
+            m_RequestCount++;
+            std::string sResponse =
+                "HTTP/1.1 200 OK\r\n"
+                "Content-Length: 10\r\n"
+                "Content-Type: text/numbers\r\n"
+                "Connection: keep-alive\r\n"
+                "\r\n"
+                "0123456789";
+            aPeer->write(sResponse);
+            return Connection::UserResult::DONE;
+        };
+        m_Router.insert_sync("/hello", sHandler1); // call handler in network thread
+
+        auto sHandler2 = [](Connection::SharedPtr aPeer, const Request& aRequest) {
+            //BOOST_TEST_MESSAGE("request: " << aRequest.m_Url);
+            std::string sResponse =
+                "HTTP/1.1 200 OK\r\n"
+                "Transfer-Encoding: chunked\r\n"
+                "Content-Type: text/numbers\r\n"
+                "Connection: keep-alive\r\n"
+                "\r\n"
+                "A\r\n" // chunk size in hex
+                "9876543210\r\n"
+                "0\r\n\r\n";
+            aPeer->write(sResponse);
+            return Connection::UserResult::DONE;
+        };
+        m_Router.insert("/async", sHandler2); // call handler in worker thread
+        m_Router.start(m_Group);
+
+        auto sListener = httpd::Create(&m_EPoll, 2081, m_Router);
+        sListener->start();
+        std::this_thread::sleep_for(10ms);
+    }
+};
+uint64_t WithServer::m_RequestCount = 0;
+
+BOOST_FIXTURE_TEST_SUITE(httpd, WithServer)
+BOOST_AUTO_TEST_CASE(curl)
+{
+    Curl::Client::Params sParams;
+    Curl::Client         sClient(sParams);
+
+    auto sResult = sClient.GET("http://127.0.0.1:2081/hello");
+    BOOST_CHECK_EQUAL(sResult.first, 200);
+    BOOST_CHECK_EQUAL(sResult.second, "0123456789");
+    sResult = sClient.GET("http://127.0.0.1:2081/async");
+    BOOST_CHECK_EQUAL(sResult.first, 200);
+    BOOST_CHECK_EQUAL(sResult.second, "9876543210");
+    sResult = sClient.GET("http://127.0.0.1:2081/not_exists");
+    BOOST_CHECK_EQUAL(sResult.first, 404);
+}
+
+BOOST_AUTO_TEST_CASE(raw)
+{
+    Util::EPoll    sEPoll;
+    Threads::Group sGroup;
+    sEPoll.start(sGroup);
+
+    int sResponseCount = 0;
+
+    auto               sClient = std::make_shared<ClientConnection>(&sEPoll, [&sResponseCount](ClientConnection::SharedPtr aPeer, const Response& aResponse) {
+        sResponseCount++;
+        BOOST_TEST_MESSAGE("response " << sResponseCount);
+        BOOST_TEST_MESSAGE("status:  " << aResponse.m_Status);
+        for (const auto& x : aResponse.m_Headers)
+            BOOST_TEST_MESSAGE("found header " << x.key << "=" << x.value);
+        BOOST_TEST_MESSAGE("body:    " << aResponse.m_Body);
+        return ClientConnection::UserResult::DONE;
+    });
+    Threads::WaitGroup sWait(1);
+    sClient->connect(Util::resolveAddr("127.0.0.1"), 2081, 10 /* timeout in ms */, [&sWait](int) {
+        sWait.release();
+    });
+    sWait.wait();
+    BOOST_CHECK_EQUAL(sClient->is_connected(), 0);
+
+    sClient->write("GET /hello HTTP/1.1\r\nConnection: keep-alive\r\n"
+                   "\r\n"
+                   "GET /async HTTP/1.1\r\nConnection: keep-alive\r\n"
+                   "\r\n"
+                   "GET /not_exists HTTP/1.1\r\nConnection: keep-alive\r\n"
+                   "\r\n");
+    std::this_thread::sleep_for(20ms);
+    BOOST_CHECK_EQUAL(sResponseCount, 3);
+}
 BOOST_AUTO_TEST_CASE(simple)
 {
     Util::EPoll    sEPoll;
-    httpd::Router  sRouter;
-    Threads::Group sGroup; // in d-tor we stop all threads
+    Threads::Group sGroup;
     sEPoll.start(sGroup);
-
-    auto sHandler1 = [](httpd::Connection::SharedPtr aPeer, const Request& aRequest) {
-        BOOST_TEST_MESSAGE("request: " << aRequest.m_Url);
-        std::string sResponse =
-            "HTTP/1.1 200 OK\r\n"
-            "Content-Length: 10\r\n"
-            "Content-Type: text/numbers\r\n"
-            "Connection: keep-alive\r\n"
-            "\r\n"
-            "0123456789";
-        aPeer->write(sResponse);
-        return Connection::UserResult::DONE;
-    };
-    sRouter.insert_sync("/hello", sHandler1); // call handler in network thread
-
-    auto sHandler2 = [](httpd::Connection::SharedPtr aPeer, const Request& aRequest) {
-        BOOST_TEST_MESSAGE("request: " << aRequest.m_Url);
-        std::string sResponse =
-            "HTTP/1.1 200 OK\r\n"
-            "Transfer-Encoding: chunked\r\n"
-            "Content-Type: text/numbers\r\n"
-            "Connection: keep-alive\r\n"
-            "\r\n"
-            "A\r\n" // chunk size in hex
-            "9876543210\r\n"
-            "0\r\n\r\n";
-        aPeer->write(sResponse);
-        return Connection::UserResult::DONE;
-    };
-    sRouter.insert("/async", sHandler2); // call handler in worker thread
-    sRouter.start(sGroup);
-
-    auto sListener = httpd::Create(&sEPoll, 2081, sRouter);
-    sListener->start();
-
-    std::this_thread::sleep_for(10ms);
-
-    {
-        Curl::Client::Params sParams;
-        Curl::Client         sClient(sParams);
-
-        auto sResult = sClient.GET("http://127.0.0.1:2081/hello");
-        BOOST_CHECK_EQUAL(sResult.first, 200);
-        BOOST_CHECK_EQUAL(sResult.second, "0123456789");
-        sResult = sClient.GET("http://127.0.0.1:2081/async");
-        BOOST_CHECK_EQUAL(sResult.first, 200);
-        BOOST_CHECK_EQUAL(sResult.second, "9876543210");
-        sResult = sClient.GET("http://127.0.0.1:2081/not_exists");
-        BOOST_CHECK_EQUAL(sResult.first, 404);
-    }
-
-    {
-        int sResponseCount = 0;
-
-        auto               sClient = std::make_shared<ClientConnection>(&sEPoll, [&sResponseCount](ClientConnection::SharedPtr aPeer, const Response& aResponse) {
-            sResponseCount++;
-            BOOST_TEST_MESSAGE("response " << sResponseCount);
-            BOOST_TEST_MESSAGE("status:  " << aResponse.m_Status);
-            for (const auto& x : aResponse.m_Headers)
-                BOOST_TEST_MESSAGE("found header " << x.key << "=" << x.value);
-            BOOST_TEST_MESSAGE("body:    " << aResponse.m_Body);
-            return ClientConnection::UserResult::DONE;
-        });
-        Threads::WaitGroup sWait(1);
-        sClient->connect(Util::resolveAddr("127.0.0.1"), 2081, 10 /* timeout in ms */, [&sWait](int) {
-            sWait.release();
-        });
-        sWait.wait();
-        BOOST_CHECK_EQUAL(sClient->is_connected(), 0);
-
-        sClient->write("GET /hello HTTP/1.1\r\nConnection: keep-alive\r\n"
-                       "\r\n"
-                       "GET /async HTTP/1.1\r\nConnection: keep-alive\r\n"
-                       "\r\n"
-                       "GET /not_exists HTTP/1.1\r\nConnection: keep-alive\r\n"
-                       "\r\n");
-        std::this_thread::sleep_for(20ms);
-        BOOST_CHECK_EQUAL(sResponseCount, 3);
-    }
-
-    {
-        httpd::MassClient::Params sParams;
-        sParams.remote_addr = Util::resolveAddr("127.0.0.1");
-        sParams.remote_port = 2081;
-        auto sClient        = std::make_shared<httpd::MassClient>(&sEPoll, sParams);
-
-        int sResponseCount = 0;
-        sClient->insert({"GET /hello HTTP/1.1\r\nConnection: keep-alive\r\n"
-                         "\r\n",
-                         [&sResponseCount](int aCode, const Response& aResponse) {
-                             sResponseCount++;
-                             BOOST_CHECK_EQUAL(aCode, 0);
-                             BOOST_CHECK_EQUAL(aResponse.m_Status, 200);
-                             BOOST_CHECK_EQUAL(aResponse.m_Body, "0123456789");
-                         }});
-        std::this_thread::sleep_for(20ms);
-
-        BOOST_CHECK_EQUAL(sClient->is_connected(), 0);
-        BOOST_CHECK_EQUAL(sResponseCount, 1);
-    }
-}
-BOOST_AUTO_TEST_CASE(bench)
-{
-    Util::EPoll    sEPoll;
-    httpd::Router  sRouter;
-    Threads::Group sGroup; // in d-tor we stop all threads
-    sEPoll.start(sGroup);
-
-    unsigned sRequestCount = 0;
-    auto     sHandler1     = [&](httpd::Connection::SharedPtr aPeer, const Request& aRequest) {
-        std::string sResponse =
-            "HTTP/1.1 200 OK\r\n"
-            "Content-Length: 10\r\n"
-            "Content-Type: text/numbers\r\n"
-            "Connection: keep-alive\r\n"
-            "\r\n"
-            "0123456789";
-        aPeer->write(sResponse);
-        sRequestCount++;
-        return Connection::UserResult::DONE;
-    };
-    sRouter.insert_sync("/hello", sHandler1); // call handler in network thread
-    auto sListener = httpd::Create(&sEPoll, 2081, sRouter);
-    sListener->start();
-    std::this_thread::sleep_for(10ms);
 
     httpd::MassClient::Params sParams;
     sParams.remote_addr = Util::resolveAddr("127.0.0.1");
     sParams.remote_port = 2081;
     auto sClient        = std::make_shared<httpd::MassClient>(&sEPoll, sParams);
 
+    int sResponseCount = 0;
+    sClient->insert({"GET /hello HTTP/1.1\r\nConnection: keep-alive\r\n"
+                     "\r\n",
+                     [&sResponseCount](int aCode, const Response& aResponse) {
+                         sResponseCount++;
+                         BOOST_CHECK_EQUAL(aCode, 0);
+                         BOOST_CHECK_EQUAL(aResponse.m_Status, 200);
+                         BOOST_CHECK_EQUAL(aResponse.m_Body, "0123456789");
+                     }});
+    std::this_thread::sleep_for(20ms);
+
+    BOOST_CHECK_EQUAL(sClient->is_connected(), 0);
+    BOOST_CHECK_EQUAL(sResponseCount, 1);
+}
+BOOST_AUTO_TEST_CASE(bench)
+{
+    Util::EPoll    sEPoll;
+    Threads::Group sGroup;
+    sEPoll.start(sGroup);
+
+    httpd::MassClient::Params sParams;
+    sParams.remote_addr        = Util::resolveAddr("127.0.0.1");
+    sParams.remote_port        = 2081;
+    auto sClient               = std::make_shared<httpd::MassClient>(&sEPoll, sParams);
+    WithServer::m_RequestCount = 0;
     // only keep alive mode must be used
+
     auto               sStart = Time::get_time();
     const unsigned     COUNT  = 1000000;
     Threads::WaitGroup sWait(COUNT);
@@ -236,7 +238,7 @@ BOOST_AUTO_TEST_CASE(bench)
     }
     sWait.wait();
     auto sDuration = (Time::get_time() - sStart).to_double();
-    BOOST_CHECK_EQUAL(sRequestCount, COUNT);
+    BOOST_CHECK_EQUAL(WithServer::m_RequestCount, COUNT);
     BOOST_CHECK_EQUAL(sSuccess, COUNT);
     BOOST_TEST_MESSAGE("" << sSuccess << " successful requests from " << COUNT << " done in " << sDuration << " = " << unsigned(sSuccess / sDuration) << " rps");
 }
