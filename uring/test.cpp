@@ -114,6 +114,6 @@ BOOST_AUTO_TEST_CASE(Httpd)
 
     sRing.accept(sServer.get_fd(), std::make_shared<URing::http::Listener>(sRing, sServer.get_fd()));
 
-    std::this_thread::sleep_for(100s);
+    std::this_thread::sleep_for(1s);
 }
 BOOST_AUTO_TEST_SUITE_END()
