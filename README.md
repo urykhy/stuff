@@ -22,6 +22,7 @@ some information about stuff
 - cache - some caching
 - cbor - cbor format implementation
 - container - containers, IoC.
+- etcd - etcd client
 - file - file operations
 - httpd - httpd with pipelining and no asio
 - iconv - c++ wrapper for iconv
