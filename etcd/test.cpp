@@ -6,6 +6,7 @@ using namespace std::chrono_literals;
 #include <thread>
 
 #include "Etcd.hpp"
+#include "Notify.hpp"
 
 BOOST_AUTO_TEST_SUITE(etcd)
 BOOST_AUTO_TEST_CASE(simple)
@@ -102,8 +103,7 @@ BOOST_AUTO_TEST_CASE(enqueue)
     BOOST_CHECK_EQUAL(3, sList.size());
 
     std::string sResult;
-    for (unsigned i = 0; i < sList.size(); i++)
-    {
+    for (unsigned i = 0; i < sList.size(); i++) {
         const std::string sItem = sKey + "/" + sList[i].key;
         BOOST_TEST_MESSAGE("process task " << sItem);
         sResult += sClient.get(sItem).value;
@@ -111,5 +111,33 @@ BOOST_AUTO_TEST_CASE(enqueue)
     }
     sClient.rmdir(sKey);
     BOOST_CHECK_EQUAL("job1job2job3", sResult);
+}
+BOOST_AUTO_TEST_CASE(notify)
+{
+    Etcd::Notify::Params sParams;
+    sParams.key    = "notify/instance/a01";
+    sParams.ttl    = 2;
+    sParams.period = 1;
+    Etcd::Client sClient(sParams);
+    std::string sValue = R"({"weight": 10})";
+
+    Etcd::Notify   sNotify(sParams, sValue);
+    Threads::Group sGroup;
+    sNotify.start(sGroup);
+    std::this_thread::sleep_for(4s); // sleep more than ttl
+
+    // ensure key still here
+    BOOST_CHECK_EQUAL(sValue, sClient.get(sParams.key).value);
+
+    // update value, it must be updated in etcd too
+    sValue = R"({"weight": 10, "idle": 5})";
+    sNotify.update(sValue);
+    std::this_thread::sleep_for(2s);
+    BOOST_CHECK_EQUAL(sValue, sClient.get(sParams.key).value);
+
+    sGroup.wait();
+
+    // ensure key deleted from etcd
+    BOOST_CHECK_EQUAL("", sClient.get(sParams.key).value);
 }
 BOOST_AUTO_TEST_SUITE_END()

@@ -17,9 +17,9 @@ namespace Threads
     class Periodic
     {
         volatile bool m_Stop{false};
+        using Handler = std::function<void()>;
 
-        template<class T>
-        void thread_loop(unsigned aPeriod, T aHandler)
+        void thread_loop(unsigned aPeriod, const Handler& aHandler)
         {
             time_t sLastRun = 0;
             while (!m_Stop)
@@ -43,11 +43,12 @@ namespace Threads
         }
 
     public:
-        template<class T>
-        void start(Group& aGroup, unsigned aPeriod, T aHandler)
+
+        void start(Group& aGroup, unsigned aPeriod, Handler aHandler, Handler aTerm = [](){})
         {
-            aGroup.start([aPeriod, aHandler, this](){
+            aGroup.start([aPeriod, aHandler = std::move(aHandler), aTerm = std::move(aTerm), this](){
                 thread_loop(aPeriod, aHandler);
+                aTerm();
             });
             aGroup.at_stop([this](){ m_Stop = true; });
         }
