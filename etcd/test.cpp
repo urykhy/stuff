@@ -5,6 +5,7 @@
 using namespace std::chrono_literals;
 #include <thread>
 
+#include "Balancer.hpp"
 #include "Etcd.hpp"
 #include "Notify.hpp"
 
@@ -105,7 +106,7 @@ BOOST_AUTO_TEST_CASE(enqueue)
     std::string sResult;
     for (unsigned i = 0; i < sList.size(); i++) {
         const std::string sItem = sKey + "/" + sList[i].key;
-        BOOST_TEST_MESSAGE("process task " << sItem);
+        BOOST_TEST_MESSAGE("process task " << sList[i].key);
         sResult += sClient.get(sItem).value;
         sClient.remove(sItem);
     }
@@ -119,7 +120,7 @@ BOOST_AUTO_TEST_CASE(notify)
     sParams.ttl    = 2;
     sParams.period = 1;
     Etcd::Client sClient(sParams);
-    std::string sValue = R"({"weight": 10})";
+    std::string  sValue = R"({"weight": 10})";
 
     Etcd::Notify   sNotify(sParams, sValue);
     Threads::Group sGroup;
@@ -135,8 +136,25 @@ BOOST_AUTO_TEST_CASE(notify)
     std::this_thread::sleep_for(2s);
     BOOST_CHECK_EQUAL(sValue, sClient.get(sParams.key).value);
 
-    sGroup.wait();
+    // start balancer and get state
+    Etcd::Balancer::Params sBalancerParams;
+    sBalancerParams.key = "notify/instance";
+    Etcd::Balancer sBalancer(sBalancerParams);
+    sBalancer.start(sGroup);
 
+    std::this_thread::sleep_for(10ms);
+    const auto sState = sBalancer();
+
+    BOOST_CHECK_EQUAL(1, sState.size());
+    const auto& sEntry = sState.front();
+    BOOST_CHECK_EQUAL("a01", sEntry.key);
+    BOOST_CHECK_EQUAL(10, sEntry.weight);
+
+    // pick
+    BOOST_CHECK_EQUAL("a01", sBalancer.random().key);
+
+    // stop threads..
+    sGroup.wait();
     // ensure key deleted from etcd
     BOOST_CHECK_EQUAL("", sClient.get(sParams.key).value);
 }

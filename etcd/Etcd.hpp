@@ -107,6 +107,7 @@ namespace Etcd {
         struct Pair
         {
             std::string key;
+            std::string value;
             uint64_t    modified = 0;
             bool        is_dir   = false;
             bool        operator<(const Pair& x) const { return key < x.key; }
@@ -114,7 +115,7 @@ namespace Etcd {
 
         using Set = std::vector<Pair>;
 
-        Set list(const std::string& aKey)
+        Set list(const std::string& aKey, bool aValues = false)
         {
             Set sSet;
 
@@ -125,9 +126,13 @@ namespace Etcd {
             const auto sRoot  = parse(sResult);
             auto&&     sNodes = sRoot["node"]["nodes"];
             for (Json::Value::ArrayIndex i = 0; i != sNodes.size(); i++)
-                sSet.push_back({File::get_filename(sNodes[i]["key"].asString()),
-                                sNodes[i]["modifiedIndex"].asUInt64(),
-                                sNodes[i]["dir"].asBool()});
+            {
+                auto&& sNode = sNodes[i];
+                sSet.push_back({File::get_filename(sNode["key"].asString()),
+                                (aValues and sNode.isMember("value") ? sNode["value"].asString() : ""),
+                                sNode["modifiedIndex"].asUInt64(),
+                                sNode["dir"].asBool()});
+            }
             return sSet;
         }
 
