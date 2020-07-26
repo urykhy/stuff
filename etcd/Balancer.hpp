@@ -38,7 +38,7 @@ namespace Etcd {
 
         void read_i()
         {
-            const auto sList = m_Client.list(m_Params.key, true);
+            const auto sList = m_Client.list(m_Params.key);
             List       sState;
             uint64_t   sWeight = 0;
 
@@ -46,7 +46,7 @@ namespace Etcd {
                 Json::Value  sRoot;
                 Json::Reader sReader;
                 if (!sReader.parse(x.value, sRoot))
-                    throw Error("fail to parse server reply: " + x.value);
+                    throw Error("fail to parse server response: " + x.value);
                 if (sRoot.isObject() and sRoot.isMember("weight") and sRoot["weight"].isUInt64())
                 {
                     sState.push_back({x.key, sRoot["weight"].asUInt64()});

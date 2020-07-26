@@ -31,8 +31,13 @@ namespace Etcd {
             Json::Value  sRoot;
             Json::Reader sReader;
             if (!sReader.parse(aStr, sRoot))
-                throw Error("etcd: fail to parse server reply: " + aStr);
+                throw "fail to parse server response: " + sReader.getFormattedErrorMessages();
             return sRoot;
+        }
+
+        [[noreturn]] void report(const std::string& aAction, const std::string& aKey, int aCode, const std::string& aResult)
+        {
+            throw Error("etcd: fail to " + aAction + " " + aKey + ", http code: " + std::to_string(aCode) + ", message: " + aResult);
         }
 
     public:
@@ -54,19 +59,23 @@ namespace Etcd {
             auto&& [sCode, sResult] = m_Client.GET(url(aKey));
             if (sCode == 200) {
                 //BOOST_TEST_MESSAGE("etcd response: " << sResult);
-                const auto sRoot = parse(sResult);
-                return {sRoot["node"]["value"].asString(), sRoot["node"]["modifiedIndex"].asUInt64()};
+                try {
+                    const auto sRoot = parse(sResult);
+                    return {sRoot["node"]["value"].asString(), sRoot["node"]["modifiedIndex"].asUInt64()};
+                } catch (const std::exception& e) {
+                    report("get", aKey, sCode, e.what());
+                }
             }
             if (sCode == 404)
                 return {};
-            throw Error("etcd: fail to get " + aKey + ", http code: " + std::to_string(sCode) + ", message: " + sResult);
+            report("get", aKey, sCode, sResult);
         }
 
         void set(const std::string& aKey, const std::string& aValue, int aTTL = 0)
         {
             auto&& [sCode, sResult] = m_Client.PUT(url(aKey, aTTL), "value=" + aValue);
             if (sCode != 200 and sCode != 201)
-                throw Error("etcd: fail to set " + aKey + ", http code: " + std::to_string(sCode) + ", message: " + sResult);
+                report("set", aKey, sCode, sResult);
         }
 
         void refresh(const std::string& aKey, int aTTL = 0)
@@ -74,14 +83,14 @@ namespace Etcd {
             std::string sData       = "refresh=true&prevExist=true";
             auto&& [sCode, sResult] = m_Client.PUT(url(aKey, aTTL), sData);
             if (sCode != 200)
-                throw Error("etcd: fail to refresh " + aKey + ", http code: " + std::to_string(sCode) + ", message: " + sResult);
+                report("refresh", aKey, sCode, sResult);
         }
 
         void remove(const std::string& aKey)
         {
             auto&& [sCode, sResult] = m_Client.DELETE(url(aKey));
             if (sCode != 200)
-                throw Error("etcd: fail to delete " + aKey + ", http code: " + std::to_string(sCode) + ", message: " + sResult);
+                report("delete", aKey, sCode, sResult);
         }
 
         void cas(const std::string& aKey, const std::string& aOld, const std::string aNew)
@@ -94,14 +103,14 @@ namespace Etcd {
 
             auto&& [sCode, sResult] = m_Client.PUT(url(aKey), "value=" + aNew + sParam);
             if (sCode != 200 and sCode != 201)
-                throw Error("etcd: fail to cas " + aKey + ", http code: " + std::to_string(sCode) + ", message: " + sResult);
+                report("cas", aKey, sCode, sResult);
         }
 
         void cad(const std::string& aKey, const std::string& aOld)
         {
             auto&& [sCode, sResult] = m_Client.DELETE(url(aKey) + "?prevValue=" + aOld);
             if (sCode != 200)
-                throw Error("etcd: fail to cad " + aKey + ", http code: " + std::to_string(sCode) + ", message: " + sResult);
+                report("cad", aKey, sCode, sResult);
         }
 
         struct Pair
@@ -115,24 +124,28 @@ namespace Etcd {
 
         using Set = std::vector<Pair>;
 
-        Set list(const std::string& aKey, bool aValues = false)
+        Set list(const std::string& aKey)
         {
             Set sSet;
 
             auto&& [sCode, sResult] = m_Client.GET(url(aKey) + "?sorted=true");
             if (sCode != 200)
-                throw Error("etcd: fail to list " + aKey + ", http code: " + std::to_string(sCode) + ", message: " + sResult);
+                report("list", aKey, sCode, sResult);
 
-            const auto sRoot  = parse(sResult);
-            auto&&     sNodes = sRoot["node"]["nodes"];
-            for (Json::Value::ArrayIndex i = 0; i != sNodes.size(); i++)
-            {
-                auto&& sNode = sNodes[i];
-                sSet.push_back({File::get_filename(sNode["key"].asString()),
-                                (aValues and sNode.isMember("value") ? sNode["value"].asString() : ""),
-                                sNode["modifiedIndex"].asUInt64(),
-                                sNode["dir"].asBool()});
+            try {
+                const auto sRoot  = parse(sResult);
+                auto&&     sNodes = sRoot["node"]["nodes"];
+                for (Json::Value::ArrayIndex i = 0; i != sNodes.size(); i++) {
+                    auto&& sNode = sNodes[i];
+                    sSet.push_back({File::get_filename(sNode["key"].asString()),
+                                    (sNode.isMember("value") ? sNode["value"].asString() : ""),
+                                    sNode["modifiedIndex"].asUInt64(),
+                                    sNode["dir"].asBool()});
+                }
+            } catch (const std::exception& e) {
+                report("list", aKey, sCode, e.what());
             }
+
             return sSet;
         }
 
@@ -140,21 +153,21 @@ namespace Etcd {
         {
             auto&& [sCode, sResult] = m_Client.PUT(url(aKey), "dir=true");
             if (sCode != 200 and sCode != 201)
-                throw Error("etcd: fail to create directory " + aKey + ", http code: " + std::to_string(sCode) + ", message: " + sResult);
+                report("create directory", aKey, sCode, sResult);
         }
 
         void enqueue(const std::string& aKey, const std::string& aValue)
         {
             auto&& [sCode, sResult] = m_Client.POST(url(aKey), "value=" + aValue);
             if (sCode != 201)
-                throw Error("etcd: fail to set " + aKey + ", http code: " + std::to_string(sCode) + ", message: " + sResult);
+                report("enqueue", aKey, sCode, sResult);
         }
 
         void rmdir(const std::string& aKey)
         {
             auto&& [sCode, sResult] = m_Client.DELETE(url(aKey) + "?recursive=true");
             if (sCode != 200)
-                throw Error("etcd: fail to delete " + aKey + ", http code: " + std::to_string(sCode) + ", message: " + sResult);
+                report("delete directory", aKey, sCode, sResult);
         }
     };
 } // namespace Etcd
