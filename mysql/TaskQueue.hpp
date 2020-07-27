@@ -14,6 +14,7 @@ namespace MySQL::TaskQueue
         std::string   table = "task_queue";
         std::string   instance = "test";
         time_t        period = 10;
+        bool          resume = true; // resume tasks by other worker
     };
 
     struct HandlerFace
@@ -44,7 +45,9 @@ namespace MySQL::TaskQueue
             std::optional<Task> sTask;
             const std::string sQuery = "SELECT id, task, worker, hint "
                                        "FROM " + m_Config.table + " "
-                                       "WHERE (status = 'new') OR (status = 'started' and updated < DATE_SUB(NOW(), INTERVAL 1 HOUR)) "
+                                       "WHERE (status = 'new') OR (status = 'started' and "
+                                       + (m_Config.resume ? "updated < DATE_SUB(NOW(), INTERVAL 1 HOUR)" : "worker='" + m_Config.instance + "'") +
+                                       ") "
                                        "ORDER BY id ASC LIMIT 1 "
                                        "FOR UPDATE SKIP LOCKED";
             m_Connection->Query(sQuery);

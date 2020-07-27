@@ -14,6 +14,8 @@
 #include <iostream>
 #include <cassert>
 
+using namespace std::chrono_literals;
+
 struct Entry
 {
     int64_t emp_no = 0;
@@ -200,7 +202,6 @@ BOOST_AUTO_TEST_CASE(task_queue)
 BOOST_AUTO_TEST_CASE(task_queue_mock)
 {
     size_t sCount = 0;
-    using namespace std::chrono_literals;
     struct TestHandler : MySQL::TaskQueue::HandlerFace
     {
         size_t&     m_Count;
