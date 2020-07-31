@@ -54,6 +54,7 @@ BOOST_AUTO_TEST_CASE(Basic)
     sParams.username = "othername";
     BOOST_CHECK_EQUAL(sClient.GET("http://127.0.0.1:8080/auth").first, 401);
     BOOST_CHECK_EQUAL(sClient.GET("http://127.0.0.1:8080/nx_location").first, 404);
+    BOOST_CHECK_EQUAL(sClient.HEAD("http://127.0.0.1:8080/nx_location"), 404);
 
     BOOST_CHECK_THROW(sClient.GET("http://127.0.0.1:8080/slow"), Curl::Client::Error);
 }

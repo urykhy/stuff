@@ -60,6 +60,13 @@ namespace Curl
             }
         }
 
+        int HEAD(const std::string& aUrl)
+        {
+            clear();
+            setopt(CURLOPT_NOBODY, 1);
+            return query(aUrl).first;
+        }
+
         Result DELETE(const std::string& aUrl)
         {
             clear();
