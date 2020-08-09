@@ -9,6 +9,7 @@
 #include <file/Tmp.hpp>
 #include <parser/Autoindex.hpp>
 #include <threads/SafeQueue.hpp>
+#include "exception/Holder.hpp"
 
 namespace Curl
 {
@@ -30,20 +31,17 @@ namespace Curl
     // download without order. handler called from multiple threads
     void download(const Parse::StringList& aUrls, const Curl::Client::Params& aParams, unsigned aCount, std::function<void(const std::string&, File::Tmp&)> aHandler)
     {
-        using Lock = std::unique_lock<std::mutex>;
-        std::mutex sMutex;
-        std::exception_ptr sException;
+        Exception::Holder sError;
 
-        Threads::SafeQueueThread<std::string> sQueue([&sMutex, &sException, &aParams, &aHandler](const std::string& aUrl)
+        Threads::SafeQueueThread<std::string> sQueue([&sError, &aParams, &aHandler](const std::string& aUrl)
         {
             try {
-                if (Lock lk(sMutex); sException) return;
+                if (sError) return;
                 auto sTmp = download(aUrl, aParams);
-                if (Lock lk(sMutex); sException) return;
+                if (sError) return;
                 aHandler(aUrl, sTmp);
             } catch (...) {
-                if (Lock lk(sMutex); !sException)
-                    sException = std::current_exception();
+                sError.collect();
             }
         });
 
@@ -56,8 +54,7 @@ namespace Curl
         while(!sQueue.idle())
         {
             sleep(0.01);
-            if (Lock lk(sMutex); sException)
-                std::rethrow_exception(sException);
+            sError.raise();
         }
     }
 
