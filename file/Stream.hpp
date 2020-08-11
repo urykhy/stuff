@@ -104,7 +104,7 @@ namespace File::Stream
         }
 
     public:
-        Writer(size_t aSize = 64)
+        Writer(size_t aSize = 64 * 1024)
         : m_Buffer(aSize, 'x')
         {}
 
