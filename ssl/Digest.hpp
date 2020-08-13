@@ -15,6 +15,22 @@ namespace SSLxx
 {
     using Error = std::runtime_error;
 
+    namespace
+    {
+        inline void updateDigest(EVP_MD_CTX* sCtx, const std::string_view& aInput)
+        {
+            if (1 != EVP_DigestUpdate(sCtx, aInput.data(), aInput.size()))
+                throw Error("EVP_DigestUpdate");
+        }
+
+        template<class T> typename std::enable_if<std::is_integral_v<T>, void>::type updateDigest(EVP_MD_CTX* sCtx, const T& aInput)
+        {
+            if (1 != EVP_DigestUpdate(sCtx, &aInput, sizeof(T)))
+                throw Error("EVP_DigestUpdate");
+        }
+    }
+
+
     // aKind is a EVP_sha256() for example
     template<class... T>
     inline std::string Digest(const EVP_MD* aKind, T&&... aInput)
@@ -32,7 +48,7 @@ namespace SSLxx
         if (sCtx == nullptr) throw Error("EVP_MD_CTX_create");
         if (1 != EVP_DigestInit_ex(sCtx, aKind, NULL)) throw Error("EVP_DigestInit_ex");
         Mpl::for_each_argument([&](const auto& aInput){
-            if (1 != EVP_DigestUpdate(sCtx, aInput.data(), aInput.size())) throw Error("EVP_DigestUpdate");
+            updateDigest(sCtx, aInput);
         }, aInput...);
         if (1 != EVP_DigestFinal_ex(sCtx, (uint8_t*)sResult.data(), &sLen)) throw Error("EVP_DigestFinal_ex");
 

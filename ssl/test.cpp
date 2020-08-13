@@ -12,6 +12,7 @@ BOOST_AUTO_TEST_CASE(hash)
     BOOST_CHECK_EQUAL(SSLxx::DigestHash(EVP_md5(), std::string_view("qwerty")), 0xA45C8CA576BBC5FBULL);
     BOOST_CHECK_EQUAL(SSLxx::DigestNth(EVP_md5(), 10, std::string_view("qwerty10")), false);
     BOOST_CHECK_EQUAL(SSLxx::DigestNth(EVP_md5(), 10, std::string_view("qwerty99")), true);
+    BOOST_CHECK_EQUAL(SSLxx::DigestStr(EVP_md5(), 42), "9824a7030ce67cf3f0efe7529f0c6ecc");
 }
 BOOST_AUTO_TEST_CASE(encrypt_aes_gcm)
 {
