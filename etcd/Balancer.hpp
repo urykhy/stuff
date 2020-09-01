@@ -85,7 +85,7 @@ namespace Etcd {
         {
         }
 
-        List operator()() const
+        List state() const
         {
             Lock lk(m_Mutex);
             return m_State;

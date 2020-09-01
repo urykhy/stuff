@@ -143,7 +143,7 @@ BOOST_AUTO_TEST_CASE(notify)
     sBalancer.start(sGroup);
 
     std::this_thread::sleep_for(10ms);
-    const auto sState = sBalancer();
+    const auto sState = sBalancer.state();
 
     BOOST_CHECK_EQUAL(1, sState.size());
     const auto& sEntry = sState.front();
