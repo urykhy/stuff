@@ -32,10 +32,10 @@ some information about stuff
 - msgpack - incomplete msgpack serialization
 - networking - epoll based networking
 - protobuf - fast protobuf parser with polymorphic allocator support
+- prometheus - small client library
 - resource - embed binary data into elf, tar file for example.
 - rpc - simple rpc over udp
 - ssl - openssl wrapper
-- stats - graphite/prometheus metrics proof of concept
 - time - cctz wrapper
 - utf8 - utf8 validator
 

@@ -1,14 +1,15 @@
 #pragma once
 
-#include <sys/time.h>
 #include <sys/resource.h>
+#include <sys/time.h>
 
-#include <time/Meter.hpp>
 #include <file/List.hpp>
-#include "Stat.hpp"
+#include <time/Meter.hpp>
 
-namespace Stat
-{
+#include "Metrics.hpp"
+
+namespace Prometheus {
+
     struct Common : public ComplexFace
     {
         const uint64_t m_PageSize;
@@ -20,34 +21,32 @@ namespace Stat
 
         Common()
         : m_PageSize(sysconf(_SC_PAGESIZE))
-        , m_RSS("common.rss", "rss_bytes")
-        , m_FDS("common.files", "open_files_count")
-        , m_Thr("common.threads", "threads_count")
-        , m_User("common.user_time", "cpu_seconds_total{mode=\"user\"}")
-        , m_System("common.system_time", "cpu_seconds_total{mode=\"system\"}")
+        , m_RSS("rss_bytes")
+        , m_FDS("files_count")
+        , m_Thr("threads_count")
+        , m_User("cpu_seconds_total{mode=\"user\"}")
+        , m_System("cpu_seconds_total{mode=\"system\"}")
         {}
 
         void update() override
         {
-            uint64_t sRSS = 0;
-            FILE* fp = nullptr;
-            fp = fopen("/proc/self/statm", "r");
-            if (fp)
-            {
-                fscanf(fp, "%*s%lu", &sRSS);
-                fclose(fp);
+            uint64_t sRSS  = 0;
+            FILE*    sFile = nullptr;
+            sFile          = fopen("/proc/self/statm", "r");
+            if (sFile) {
+                fscanf(sFile, "%*s%lu", &sRSS);
+                fclose(sFile);
             }
             m_RSS.set(sRSS * m_PageSize);
             m_FDS.set(File::CountDir("/proc/self/fd"));
             m_Thr.set(File::CountDir("/proc/self/task"));
 
             struct rusage sUsage;
-            if (getrusage(RUSAGE_SELF, &sUsage) == 0)
-            {
+            if (getrusage(RUSAGE_SELF, &sUsage) == 0) {
                 m_User.set(::Time::time_val(sUsage.ru_utime).to_double());
                 m_System.set(::Time::time_val(sUsage.ru_stime).to_double());
             }
         }
     };
 
-} // namespace Stat
+} // namespace Prometheus

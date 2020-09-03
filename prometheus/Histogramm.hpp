@@ -3,7 +3,7 @@
 #include <array>
 #include <cmath>
 
-namespace Stat
+namespace Prometheus
 {
     template<unsigned SIZE = 1000>
     class Histogramm

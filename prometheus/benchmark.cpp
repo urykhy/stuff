@@ -1,9 +1,10 @@
 #include <benchmark/benchmark.h>
-#include "Stat.hpp"
+
+#include "Metrics.hpp"
 
 static void BM_Tick(benchmark::State& state)
 {
-    Stat::Counter sCounter("not used","as well");
+    Prometheus::Counter sCounter("not used");
     for (auto _ : state)
         sCounter.tick();
 }
@@ -11,7 +12,7 @@ BENCHMARK(BM_Tick)->Threads(1)->Threads(4)->UseRealTime();
 
 static void BM_Time(benchmark::State& state)
 {
-    Stat::Time sTime("not used","as well");
+    Prometheus::Time sTime("not used");
     for (auto _ : state)
         sTime.account(1);
 }
