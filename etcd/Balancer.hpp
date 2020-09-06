@@ -9,10 +9,11 @@
 namespace Etcd {
     struct Balancer
     {
-        struct Params : Client::Params
+        struct Params
         {
-            std::string key;
-            int         period = 60;
+            Client::Params addr;
+            std::string    prefix;
+            int            period = 60;
         };
 
         struct Entry
@@ -38,17 +39,17 @@ namespace Etcd {
 
         void read_i()
         {
-            const auto sList = m_Client.list(m_Params.key);
-            List       sState;
-            uint64_t   sWeight = 0;
+            auto     sList = m_Client.list(m_Params.prefix);
+            List     sState;
+            uint64_t sWeight = 0;
 
             for (auto&& x : sList) {
+                x.key.erase(0, m_Params.prefix.size());
                 Json::Value  sRoot;
                 Json::Reader sReader;
                 if (!sReader.parse(x.value, sRoot))
                     throw Error("fail to parse server response: " + x.value);
-                if (sRoot.isObject() and sRoot.isMember("weight") and sRoot["weight"].isUInt64())
-                {
+                if (sRoot.isObject() and sRoot.isMember("weight") and sRoot["weight"].isUInt64()) {
                     sState.push_back({x.key, sRoot["weight"].asUInt64()});
                     sWeight += sState.back().weight;
                 }
@@ -81,9 +82,8 @@ namespace Etcd {
     public:
         Balancer(const Params& aParams)
         : m_Params(aParams)
-        , m_Client(m_Params)
-        {
-        }
+        , m_Client(m_Params.addr)
+        {}
 
         List state() const
         {
@@ -93,7 +93,7 @@ namespace Etcd {
 
         Entry random()
         {
-            Lock lk(m_Mutex);
+            Lock     lk(m_Mutex);
             uint64_t sKey = lrand48() % m_TotalWeight;
 
             for (const auto& x : m_State)

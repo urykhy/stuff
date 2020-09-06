@@ -4,6 +4,13 @@
 
 #include <curl/Curl.hpp>
 #include <file/Util.hpp>
+#include <format/Base64.hpp>
+#include <parser/Atoi.hpp>
+#include <parser/Base64.hpp>
+
+#ifndef BOOST_TEST_MESSAGE
+#define BOOST_TEST_MESSAGE(x)
+#endif
 
 namespace Etcd {
     struct Client
@@ -11,163 +18,129 @@ namespace Etcd {
         struct Params
         {
             std::string url    = "http://127.0.0.1:2379";
-            std::string prefix = "test";
+            std::string prefix = "test:";
         };
 
         using Error = std::runtime_error;
+
+        struct Pair
+        {
+            std::string key;
+            std::string value;
+        };
+        using List = std::list<Pair>;
 
     private:
         const Params         m_Params;
         Curl::Client::Params m_CurlParams;
         Curl::Client         m_Client;
 
-        std::string url(const std::string& aKey, int aTTL = 0) const
+        Pair decodePair(const Json::Value& aNode)
         {
-            return m_Params.url + "/v2/keys/" + m_Params.prefix + '/' + aKey + (aTTL > 0 ? "?ttl=" + std::to_string(aTTL) : "");
+            std::string sKey = Parser::Base64(aNode["key"].asString());
+            sKey.erase(0, m_Params.prefix.size());
+            return {sKey, Parser::Base64(aNode["value"].asString())};
         }
 
-        Json::Value parse(const std::string& aStr)
+        Json::Value request(const std::string& aAPI, const Json::Value& aBody)
         {
-            Json::Value  sRoot;
-            Json::Reader sReader;
-            if (!sReader.parse(aStr, sRoot))
-                throw "fail to parse server response: " + sReader.getFormattedErrorMessages();
-            return sRoot;
-        }
+            Json::StreamWriterBuilder sBuilder;
+            auto                      sBody = Json::writeString(sBuilder, aBody);
+            //BOOST_TEST_MESSAGE("etcd <- " << aAPI << ' ' << sBody);
 
-        [[noreturn]] void report(const std::string& aAction, const std::string& aKey, int aCode, const std::string& aResult)
-        {
-            throw Error("etcd: fail to " + aAction + " " + aKey + ", http code: " + std::to_string(aCode) + ", message: " + aResult);
+            auto&& [sCode, sResult] = m_Client.POST(m_Params.url + "/v3/" + aAPI, sBody);
+            //BOOST_TEST_MESSAGE("etcd -> " << sResult);
+            if (sCode == 200) {
+                Json::Value  sJson;
+                Json::Reader sReader;
+                if (!sReader.parse(sResult, sJson))
+                    throw Error("etcd: bad server response: " + sReader.getFormattedErrorMessages());
+                return sJson;
+            }
+            if (sCode == 404)
+                return Json::Value();
+            throw Error("etcd: http code: " + std::to_string(sCode) + ", message: " + sResult);
         }
 
     public:
         Client(const Params& aParams)
         : m_Params(aParams)
         , m_Client(m_CurlParams)
+        {}
+
+        std::string get(const std::string& aKey)
         {
-            m_CurlParams.headers.push_back({"Content-Type", "application/x-www-form-urlencoded"});
+            Json::Value sRoot;
+            sRoot["key"]       = Format::Base64(m_Params.prefix + aKey);
+            const auto sResult = request("kv/range", sRoot);
+
+            if (sResult.isObject())
+                return decodePair(sResult["kvs"][0]).value;
+            return "";
         }
 
-        struct Value
+        void put(const std::string& aKey, const std::string& aValue, int64_t aLease = 0)
         {
-            std::string value;
-            uint64_t    modified = 0;
-        };
+            Json::Value sRoot;
+            sRoot["key"]   = Format::Base64(m_Params.prefix + aKey);
+            sRoot["value"] = Format::Base64(aValue);
+            if (aLease > 0)
+                sRoot["lease"] = Json::Value::Int64(aLease);
 
-        Value get(const std::string& aKey)
-        {
-            auto&& [sCode, sResult] = m_Client.GET(url(aKey));
-            if (sCode == 200) {
-                //BOOST_TEST_MESSAGE("etcd response: " << sResult);
-                try {
-                    const auto sRoot = parse(sResult);
-                    return {sRoot["node"]["value"].asString(), sRoot["node"]["modifiedIndex"].asUInt64()};
-                } catch (const std::exception& e) {
-                    report("get", aKey, sCode, e.what());
-                }
-            }
-            if (sCode == 404)
-                return {};
-            report("get", aKey, sCode, sResult);
-        }
-
-        void set(const std::string& aKey, const std::string& aValue, int aTTL = 0)
-        {
-            auto&& [sCode, sResult] = m_Client.PUT(url(aKey, aTTL), "value=" + aValue);
-            if (sCode != 200 and sCode != 201)
-                report("set", aKey, sCode, sResult);
-        }
-
-        void refresh(const std::string& aKey, int aTTL = 0)
-        {
-            std::string sData       = "refresh=true&prevExist=true";
-            auto&& [sCode, sResult] = m_Client.PUT(url(aKey, aTTL), sData);
-            if (sCode != 200)
-                report("refresh", aKey, sCode, sResult);
+            request("kv/put", sRoot);
         }
 
         void remove(const std::string& aKey)
         {
-            auto&& [sCode, sResult] = m_Client.DELETE(url(aKey));
-            if (sCode != 200)
-                report("delete", aKey, sCode, sResult);
+            Json::Value sRoot;
+            sRoot["key"] = Format::Base64(m_Params.prefix + aKey);
+            request("kv/deleterange", sRoot);
         }
 
-        void cas(const std::string& aKey, const std::string& aOld, const std::string aNew)
+        List list(const std::string& aKey, int64_t aLimit = 0)
         {
-            std::string sParam;
-            if (aOld.empty())
-                sParam = "&prevExist=false";
-            else
-                sParam = "&prevValue=" + aOld;
+            Json::Value sRoot;
+            auto        sKey = m_Params.prefix + aKey;
+            sRoot["key"]     = Format::Base64(sKey);
+            sKey.back()++;
+            sRoot["range_end"] = Format::Base64(sKey);
+            if (aLimit > 0)
+                sRoot["limit"] = Json::Value::Int64(aLimit);
 
-            auto&& [sCode, sResult] = m_Client.PUT(url(aKey), "value=" + aNew + sParam);
-            if (sCode != 200 and sCode != 201)
-                report("cas", aKey, sCode, sResult);
-        }
+            const auto sResult = request("kv/range", sRoot);
 
-        void cad(const std::string& aKey, const std::string& aOld)
-        {
-            auto&& [sCode, sResult] = m_Client.DELETE(url(aKey) + "?prevValue=" + aOld);
-            if (sCode != 200)
-                report("cad", aKey, sCode, sResult);
-        }
+            List sList;
+            if (sResult.isObject()) {
+                auto&& sKvs = sResult["kvs"];
+                for (Json::Value::ArrayIndex i = 0; i != sKvs.size(); i++)
+                    sList.emplace_back(decodePair(sKvs[i]));
 
-        struct Pair
-        {
-            std::string key;
-            std::string value;
-            uint64_t    modified = 0;
-            bool        is_dir   = false;
-            bool        operator<(const Pair& x) const { return key < x.key; }
-        };
-
-        using Set = std::vector<Pair>;
-
-        Set list(const std::string& aKey)
-        {
-            Set sSet;
-
-            auto&& [sCode, sResult] = m_Client.GET(url(aKey) + "?sorted=true");
-            if (sCode != 200)
-                report("list", aKey, sCode, sResult);
-
-            try {
-                const auto sRoot  = parse(sResult);
-                auto&&     sNodes = sRoot["node"]["nodes"];
-                for (Json::Value::ArrayIndex i = 0; i != sNodes.size(); i++) {
-                    auto&& sNode = sNodes[i];
-                    sSet.push_back({File::get_filename(sNode["key"].asString()),
-                                    (sNode.isMember("value") ? sNode["value"].asString() : ""),
-                                    sNode["modifiedIndex"].asUInt64(),
-                                    sNode["dir"].asBool()});
-                }
-            } catch (const std::exception& e) {
-                report("list", aKey, sCode, e.what());
+                return sList;
             }
-
-            return sSet;
+            return sList;
         }
 
-        void mkdir(const std::string& aKey)
+        // lease api
+        int64_t createLease(int32_t aTTL)
         {
-            auto&& [sCode, sResult] = m_Client.PUT(url(aKey), "dir=true");
-            if (sCode != 200 and sCode != 201)
-                report("create directory", aKey, sCode, sResult);
+            Json::Value sRoot;
+            sRoot["TTL"]       = Json::Value::Int64(aTTL);
+            const auto sResult = request("lease/grant", sRoot);
+            return Parser::Atoi<int64_t>(sResult["ID"].asString());
         }
 
-        void enqueue(const std::string& aKey, const std::string& aValue)
+        void updateLease(int64_t aLease)
         {
-            auto&& [sCode, sResult] = m_Client.POST(url(aKey), "value=" + aValue);
-            if (sCode != 201)
-                report("enqueue", aKey, sCode, sResult);
+            Json::Value sRoot;
+            sRoot["ID"] = Json::Value::Int64(aLease);
+            request("lease/keepalive", sRoot);
         }
 
-        void rmdir(const std::string& aKey)
+        void dropLease(int64_t aLease)
         {
-            auto&& [sCode, sResult] = m_Client.DELETE(url(aKey) + "?recursive=true");
-            if (sCode != 200)
-                report("delete directory", aKey, sCode, sResult);
+            Json::Value sRoot;
+            sRoot["ID"] = Json::Value::Int64(aLease);
+            request("lease/revoke", sRoot);
         }
-    };
+    }; // namespace Etcd
 } // namespace Etcd
