@@ -2,11 +2,19 @@
 
 // based on https://www.boost.org/doc/libs/master/libs/beast/example/http/client/coro/http_client_coro.cpp
 
+#include <boost/asio/spawn.hpp>
+
 #include <threads/Asio.hpp>
 #include "Router.hpp"
 
 namespace asio_http
 {
+    namespace asio = boost::asio;
+    namespace beast = boost::beast;
+    namespace http = beast::http;
+    namespace net = boost::asio;
+    using tcp = boost::asio::ip::tcp;
+
     struct ClientRequest
     {
         std::string host;

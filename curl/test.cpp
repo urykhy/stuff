@@ -158,7 +158,7 @@ BOOST_AUTO_TEST_CASE(Tmp)
     // step 2. massive loader
     std::mutex sMutex;
     uint64_t sCounter = 0;
-    Parse::StringList sUrls{"http://127.0.0.1:8080/hello", "http://127.0.0.1:8080/hello", "http://127.0.0.1:8080/hello"};
+    Parser::StringList sUrls{"http://127.0.0.1:8080/hello", "http://127.0.0.1:8080/hello", "http://127.0.0.1:8080/hello"};
     Curl::download(sUrls, sParams, 2, [&sMutex, &sCounter](const std::string& aUrl, File::Tmp& sTmp) mutable
     {
         std::unique_lock<std::mutex> lk(sMutex);
@@ -169,7 +169,7 @@ BOOST_AUTO_TEST_CASE(Tmp)
     BOOST_CHECK_EQUAL(sCounter, sUrls.size());
 
     // step3. get download error
-    Parse::StringList sUrls2{"http://127.0.0.1:8080/hello", "http://127.0.0.1:8080/nx_location"};
+    Parser::StringList sUrls2{"http://127.0.0.1:8080/hello", "http://127.0.0.1:8080/nx_location"};
     BOOST_CHECK_THROW(Curl::download(sUrls2, sParams, 2, [](const std::string& aUrl, File::Tmp& sTmp) mutable {}), Curl::Client::Error);
 
 }
@@ -178,7 +178,7 @@ BOOST_AUTO_TEST_CASE(Index)
     Curl::Client::Params sParams;
     {
         auto [sValid, sFiles] = Curl::index("http://127.0.0.1:8080/auto_index", sParams);
-        Parse::StringList sExpected = {{"../"},{"20200331"},{"20200401"}};
+        Parser::StringList sExpected = {{"../"},{"20200331"},{"20200401"}};
         BOOST_CHECK_EQUAL(sValid, true);
         BOOST_CHECK_EQUAL_COLLECTIONS(sExpected.begin(), sExpected.end(), sFiles.begin(), sFiles.end());
     }

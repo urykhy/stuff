@@ -29,7 +29,7 @@ namespace Curl
     }
 
     // download without order. handler called from multiple threads
-    void download(const Parse::StringList& aUrls, const Curl::Client::Params& aParams, unsigned aCount, std::function<void(const std::string&, File::Tmp&)> aHandler)
+    void download(const Parser::StringList& aUrls, const Curl::Client::Params& aParams, unsigned aCount, std::function<void(const std::string&, File::Tmp&)> aHandler)
     {
         Exception::Holder sError;
 
@@ -59,9 +59,9 @@ namespace Curl
     }
 
     // pair.first is false if not modified
-    inline std::pair<bool, Parse::StringList> index(const std::string& aUrl, const Curl::Client::Params& aParams, time_t aIMS = 0)
+    inline std::pair<bool, Parser::StringList> index(const std::string& aUrl, const Curl::Client::Params& aParams, time_t aIMS = 0)
     {
-        using L = Parse::StringList;
+        using L = Parser::StringList;
         Client sClient(aParams);
         auto [sCode, sStr] = sClient.GET(aUrl, aIMS);
 
@@ -72,7 +72,7 @@ namespace Curl
         if (sStr.empty())
             return std::make_pair(true, L{});
 
-        return std::make_pair(true, Parse::Autoindex(sStr));
+        return std::make_pair(true, Parser::Autoindex(sStr));
     }
 
 } // namespace Curl

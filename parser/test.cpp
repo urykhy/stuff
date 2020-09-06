@@ -6,13 +6,13 @@
 #include <ULeb128.hpp>
 #include <Autoindex.hpp>
 
-BOOST_AUTO_TEST_SUITE(Parser)
+BOOST_AUTO_TEST_SUITE(parser)
 BOOST_AUTO_TEST_CASE(simple)
 {
     std::string line="asd,zxc,123,";
     {
         std::vector<boost::string_ref> result;
-        BOOST_CHECK(Parse::simple(line, result));
+        BOOST_CHECK(Parser::simple(line, result));
         std::vector<boost::string_ref> expected = {"asd", "zxc", "123"};
         BOOST_CHECK_EQUAL_COLLECTIONS(result.begin(), result.end(), expected.begin(), expected.end());
     }
@@ -22,7 +22,7 @@ BOOST_AUTO_TEST_CASE(quoted)
     {
         std::list<std::string> result;
         std::string line="asd,\"foo\",\"Super, \"\"luxurious\"\" truck\",";
-        BOOST_CHECK(Parse::quoted(line, [&result](std::string& aStr) mutable {
+        BOOST_CHECK(Parser::quoted(line, [&result](std::string& aStr) mutable {
             result.push_back(aStr);
         }));
 
@@ -33,7 +33,7 @@ BOOST_AUTO_TEST_CASE(quoted)
     {
         std::list<std::string> result;
         std::string line="asd,\"foo\"";
-        BOOST_CHECK(Parse::quoted(line, [&result](std::string& aStr) mutable {
+        BOOST_CHECK(Parser::quoted(line, [&result](std::string& aStr) mutable {
             result.push_back(aStr);
         }));
     }
@@ -41,7 +41,7 @@ BOOST_AUTO_TEST_CASE(quoted)
     {
         std::list<std::string> result;
         std::string line="asd,\"foo";
-        BOOST_CHECK(false == Parse::quoted(line, [&result](std::string& aStr) mutable {
+        BOOST_CHECK(false == Parser::quoted(line, [&result](std::string& aStr) mutable {
             result.push_back(aStr);
         }));
     }
@@ -52,7 +52,7 @@ BOOST_AUTO_TEST_CASE(escape)
         std::list<std::string> result;
 
         std::string line=R"(asd,f\,oo,Super\, "luxurious" truck,)";
-        BOOST_CHECK(Parse::quoted(line, [&result](std::string& aStr) mutable {
+        BOOST_CHECK(Parser::quoted(line, [&result](std::string& aStr) mutable {
             result.push_back(aStr);
         }, ',', '"', '\\'));
 
@@ -63,7 +63,7 @@ BOOST_AUTO_TEST_CASE(escape)
         std::list<std::string> result;
 
         std::string line=R"("a\\sd",f"oo,"Super, \"luxurious"" truck",)";
-        BOOST_CHECK(Parse::quoted(line, [&result](std::string& aStr) mutable {
+        BOOST_CHECK(Parser::quoted(line, [&result](std::string& aStr) mutable {
             result.push_back(aStr);
         }));
 
@@ -73,14 +73,14 @@ BOOST_AUTO_TEST_CASE(escape)
     {
         std::list<std::string> result;
         std::string line=R"(asd,foo\)";
-        BOOST_CHECK(false == Parse::quoted(line, [&result](std::string& aStr) mutable {
+        BOOST_CHECK(false == Parser::quoted(line, [&result](std::string& aStr) mutable {
             result.push_back(aStr);
         }));
     }
     {
         std::list<std::string> result;
         std::string line=R"(asd,\"foo,"""bar""")";
-        BOOST_CHECK(true == Parse::quoted(line, [&result](std::string& aStr) mutable {
+        BOOST_CHECK(true == Parser::quoted(line, [&result](std::string& aStr) mutable {
             result.push_back(aStr);
         }));
         auto it = result.begin();
@@ -141,8 +141,8 @@ BOOST_AUTO_TEST_CASE(autoindex)
 <tr><td valign="top"><img src="/icons/folder.gif" alt="[DIR]"></td><td><a href="calque/">calque/</a></td><td align="right">2015-08-07 17:52  </td><td align="right">  - </td></tr>
 <tr><td valign="top"><img src="/icons/folder.gif" alt="[DIR]"></td><td><a href="dygraf/">dygraf/</a></td><td align="right">2016-07-02 10:04  </td><td align="right">  - </td></tr>
     )";
-    const Parse::StringList expected = {"calque/", "dygraf/"};
-    const auto result = Parse::Autoindex(sBody);
+    const Parser::StringList expected = {"calque/", "dygraf/"};
+    const auto result = Parser::Autoindex(sBody);
     BOOST_CHECK_EQUAL_COLLECTIONS(result.begin(), result.end(), expected.begin(), expected.end());
 }
 BOOST_AUTO_TEST_SUITE_END()

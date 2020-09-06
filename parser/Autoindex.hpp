@@ -6,7 +6,7 @@
 
 #include "Parser.hpp"
 
-namespace Parse
+namespace Parser
 {
     using StringList = std::vector<std::string>;
 

@@ -4,7 +4,7 @@
 #include <string>
 
 // via: https://github.com/mvorbrodt/blog/blob/master/src/base64.hpp
-namespace Parse {
+namespace Parser {
 
     inline std::string Base64(const std::string& aStr)
     {
@@ -66,4 +66,4 @@ namespace Parse {
 
         return decoded;
     }
-} // namespace Parse
+} // namespace Parser
