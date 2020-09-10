@@ -32,8 +32,15 @@ namespace String
         rtrim(s);
     }
 
-    inline bool start_with(const std::string& s, const std::string& pa)
+    inline bool starts_with(const std::string& s, const std::string& pa)
     {
         return s.compare(0, pa.size(), pa) == 0;
+    }
+
+    inline bool ends_with(const std::string& s, const std::string& pa)
+    {
+        if (s.size() < pa.size())
+            return false;
+        return s.compare(s.size() - pa.size(), pa.size(), pa) == 0;
     }
 }
