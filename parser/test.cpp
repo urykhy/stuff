@@ -3,6 +3,7 @@
 #include <Parser.hpp>
 #include <Atoi.hpp>
 #include <Hex.hpp>
+#include <format/ULeb128.hpp>
 #include <ULeb128.hpp>
 #include <Autoindex.hpp>
 
@@ -108,16 +109,16 @@ BOOST_AUTO_TEST_CASE(uleb128)
 {
     {
         std::stringstream s;
-        Parser::ULEB128::encode(45, s);
+        Format::uleb128(45, s);
         BOOST_CHECK_EQUAL(s.str(), "\x2D");
-        BOOST_CHECK_EQUAL(Parser::ULEB128::decode(s), 45);
+        BOOST_CHECK_EQUAL(Parser::uleb128(s), 45);
     }
 
     {
         std::stringstream s;
-        Parser::ULEB128::encode(624485, s);
+        Format::uleb128(624485, s);
         BOOST_CHECK_EQUAL(s.str(), "\xE5\x8E\x26");
-        BOOST_CHECK_EQUAL(Parser::ULEB128::decode(s), 624485);
+        BOOST_CHECK_EQUAL(Parser::uleb128(s), 624485);
     }
 }
 BOOST_AUTO_TEST_CASE(url)
