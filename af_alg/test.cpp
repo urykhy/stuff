@@ -4,7 +4,7 @@
 using namespace std::chrono_literals;
 
 #include <endian.h>
-#include <parser/Hex.hpp>
+#include <format/Hex.hpp>
 #include <unsorted/Random.hpp>
 #include <container/Stream.hpp>
 
@@ -23,7 +23,7 @@ BOOST_AUTO_TEST_CASE(random)
     Util::Random sRND;
     const auto sTmp = sRND(12);
     BOOST_CHECK_EQUAL(sTmp.size(), 12);
-    BOOST_TEST_MESSAGE("random: " << Parser::to_hex(sTmp));
+    BOOST_TEST_MESSAGE("random: " << Format::to_hex(sTmp));
 }
 
 BOOST_AUTO_TEST_SUITE(digest)
@@ -31,23 +31,23 @@ BOOST_AUTO_TEST_CASE(md5)
 {   // echo -n "qwerty" | md5sum
     af_alg::DigestImpl sMD5("md5", 16);
     auto sResult = af_alg::Digest(sMD5, std::string("qwe"), std::string("rty"));
-    BOOST_CHECK_EQUAL(Parser::to_hex(sResult), "d8578edf8458ce06fbc5bb76a58c5ca4");
+    BOOST_CHECK_EQUAL(Format::to_hex(sResult), "d8578edf8458ce06fbc5bb76a58c5ca4");
     // reuse impl
     // echo -n "abcdef" | md5sum
     sResult = af_alg::Digest(sMD5, std::string("abcdef"));
-    BOOST_CHECK_EQUAL(Parser::to_hex(sResult), "e80b5017098950fc58aad83c8c14978e");
+    BOOST_CHECK_EQUAL(Format::to_hex(sResult), "e80b5017098950fc58aad83c8c14978e");
 }
 BOOST_AUTO_TEST_CASE(hmac_sha256)
 {   // echo -n "qwerty" | openssl dgst -sha256 -hmac some_pass
     af_alg::DigestImpl sHmac("hmac(sha256)", 32, "some_pass");
     auto sResult = af_alg::Digest(sHmac, std::string("qwerty"));
-    BOOST_CHECK_EQUAL(Parser::to_hex(sResult), "03353640f3645d2356f29ba368951f9be22af36ae09e7314f1163ac81e38ed84");
+    BOOST_CHECK_EQUAL(Format::to_hex(sResult), "03353640f3645d2356f29ba368951f9be22af36ae09e7314f1163ac81e38ed84");
 }
 BOOST_AUTO_TEST_CASE(cmac_aes)
 {   // echo -n qwerty | openssl dgst -mac cmac -macopt cipher:aes-128-cbc -macopt hexkey:`echo -n secure_password1 | xxd -p`
     af_alg::DigestImpl sMac("cmac(aes)", 16, PASSSWORD16);
     auto sResult = af_alg::Digest(sMac, std::string("qwerty"));
-    BOOST_CHECK_EQUAL(Parser::to_hex(sResult), "3588bcb162ca6fa7e5854e37d90e2df3");
+    BOOST_CHECK_EQUAL(Format::to_hex(sResult), "3588bcb162ca6fa7e5854e37d90e2df3");
 }
 BOOST_AUTO_TEST_SUITE_END()
 
@@ -59,7 +59,7 @@ BOOST_AUTO_TEST_CASE(password)
     af_alg::Password sPass(sCfg);
 
     const std::string sHash = sPass.create(sPassword);
-    BOOST_TEST_MESSAGE("hashed password: " << Parser::to_hex(sHash));
+    BOOST_TEST_MESSAGE("hashed password: " << Format::to_hex(sHash));
     BOOST_CHECK(sPass.validate(sPassword, sHash));
     BOOST_CHECK_EQUAL(sPass.validate("wrong password", sHash), false);
 }
@@ -74,7 +74,7 @@ BOOST_AUTO_TEST_CASE(ctr_aes)
     af_alg::CryptoCfg sCfg{"ctr(aes)", IV16, PASSSWORD16, true};
     af_alg::CryptoImpl sImpl(sCfg);
     const std::string sEncrypted = sImpl(sInput);
-    BOOST_TEST_MESSAGE("encrypted: " << Parser::to_hex(sEncrypted));
+    BOOST_TEST_MESSAGE("encrypted: " << Format::to_hex(sEncrypted));
 
     sCfg.encrypt = false;
     af_alg::CryptoImpl sImplD(sCfg);
@@ -89,7 +89,7 @@ BOOST_AUTO_TEST_CASE(gcm_aes)
     af_alg::CryptoCfg sCfg{"gcm(aes)", IV12, PASSSWORD16, true, 8};
     af_alg::CryptoImpl sImpl(sCfg);
     const std::string sEncrypted = sImpl(sInput);
-    BOOST_TEST_MESSAGE("encrypted: " << Parser::to_hex(sEncrypted));
+    BOOST_TEST_MESSAGE("encrypted: " << Format::to_hex(sEncrypted));
 
     sCfg.encrypt = false;
     af_alg::CryptoImpl sImplD(sCfg);
@@ -115,7 +115,7 @@ BOOST_AUTO_TEST_CASE(auth_enc)
     af_alg::CryptoCfg sCfg{"authenc(hmac(sha1),cbc(aes))", IV16, sKey, true, 8};
     af_alg::CryptoImpl sImpl(sCfg);
     const std::string sEncrypted = sImpl(sInput);
-    BOOST_TEST_MESSAGE("encrypted: " << Parser::to_hex(sEncrypted));
+    BOOST_TEST_MESSAGE("encrypted: " << Format::to_hex(sEncrypted));
 
     sCfg.encrypt = false;
     af_alg::CryptoImpl sImplD(sCfg);

@@ -1,6 +1,6 @@
 #define BOOST_TEST_MODULE Suites
 #include <boost/test/unit_test.hpp>
-#include <parser/Hex.hpp>
+#include <format/Hex.hpp>
 
 #include <encoder.hpp>
 #include <decoder.hpp>
@@ -15,7 +15,7 @@ BOOST_AUTO_TEST_CASE(list)
     cbor::binary buffer;
     cbor::omemstream out(buffer);
     cbor::write(out, 1, 5.0, boost::string_ref("string"), true);
-    BOOST_TEST_MESSAGE(Parser::to_hex(std::string(buffer.begin(), buffer.end())));
+    BOOST_TEST_MESSAGE(Format::to_hex(std::string(buffer.begin(), buffer.end())));
 
     cbor::imemstream in(buffer);
     int a;
@@ -113,7 +113,7 @@ BOOST_AUTO_TEST_CASE(generated)
 
         cbor::omemstream out(tmp);
         sTmp.write(out);
-        BOOST_TEST_MESSAGE(Parser::to_hex(std::string(tmp.begin(), tmp.end())));
+        BOOST_TEST_MESSAGE(Format::to_hex(std::string(tmp.begin(), tmp.end())));
     }
     {
         cbor::imemstream in(tmp);

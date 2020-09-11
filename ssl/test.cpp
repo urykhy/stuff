@@ -21,10 +21,10 @@ BOOST_AUTO_TEST_CASE(encrypt_aes_gcm)
     const std::string sKey = SSLxx::Scrypt("123","salt", 32); // 256bit key for aes256
     Config sCfg{EVP_aes_256_gcm(), "0123456789abcdef", sKey};
     auto sResult = Encrypt(sMessage, sCfg);
-    BOOST_TEST_MESSAGE("key:       " << Parser::to_hex(sKey));
-    BOOST_TEST_MESSAGE("plain:     " << Parser::to_hex(sMessage));
-    BOOST_TEST_MESSAGE("encrypted: " << Parser::to_hex(sResult.data));
-    BOOST_TEST_MESSAGE("tag:       " << Parser::to_hex(sResult.tag));
+    BOOST_TEST_MESSAGE("key:       " << Format::to_hex(sKey));
+    BOOST_TEST_MESSAGE("plain:     " << Format::to_hex(sMessage));
+    BOOST_TEST_MESSAGE("encrypted: " << Format::to_hex(sResult.data));
+    BOOST_TEST_MESSAGE("tag:       " << Format::to_hex(sResult.tag));
     auto sDecrypt = Decrypt(sResult, sCfg);
     BOOST_CHECK_EQUAL(sDecrypt, sMessage);
 }

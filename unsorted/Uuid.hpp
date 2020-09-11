@@ -1,7 +1,7 @@
 #pragma once
 
 #include <uuid/uuid.h>
-#include <parser/Hex.hpp>
+#include <format/Hex.hpp>
 
 namespace Util
 {
@@ -10,15 +10,14 @@ namespace Util
         uuid_t sID;
         uuid_generate_random(sID);
         const std::string sTmp((const char*)sID, sizeof(sID));
-        return Parser::to_hex(sTmp);
+        return Format::to_hex(sTmp);
     }
 
-    using UuidPair = std::pair<uint64_t, uint64_t>;
-    inline UuidPair Uuid64()
+    inline auto Uuid64()
     {
         uuid_t sID;
         uuid_generate_random(sID);
         uint64_t* sPtr = (reinterpret_cast<uint64_t*>(&sID));
-        return std::make_pair(htobe64(sPtr[0]), htobe64(sPtr[1]));
+        return std::make_tuple(htobe64(sPtr[0]), htobe64(sPtr[1]));
     }
 } // namespace Util

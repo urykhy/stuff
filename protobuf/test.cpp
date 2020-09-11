@@ -4,7 +4,7 @@
 #include <Protobuf.hpp>
 #include "tutorial.pb.h"
 
-#include <../parser/Hex.hpp>
+#include <format/Hex.hpp>
 #include "tutorial.hpp"
 
 struct MyPerson
@@ -170,7 +170,7 @@ BOOST_AUTO_TEST_CASE(person)
     std::string sBuf;
     BOOST_CHECK_EQUAL(true, sPerson.SerializeToString(&sBuf));
 
-    BOOST_TEST_MESSAGE("hex : " << Parser::to_hex_c_string(sBuf));
+    BOOST_TEST_MESSAGE("hex : " << Format::to_hex_c_string(sBuf));
     BOOST_TEST_MESSAGE("size: " << sBuf.size());
 
     char sBuffer[1024] = {};

@@ -3,6 +3,7 @@
 #include <Parser.hpp>
 #include <Atoi.hpp>
 #include <Hex.hpp>
+#include <format/Hex.hpp>
 #include <format/ULeb128.hpp>
 #include <ULeb128.hpp>
 #include <Autoindex.hpp>
@@ -92,9 +93,9 @@ BOOST_AUTO_TEST_CASE(escape)
 }
 BOOST_AUTO_TEST_CASE(hex)
 {
-    BOOST_CHECK_EQUAL(Parser::to_hex("ABC1="), "414243313d");
+    BOOST_CHECK_EQUAL(Format::to_hex("ABC1="), "414243313d");
     BOOST_CHECK_EQUAL(Parser::from_hex("414243313d"), "ABC1=");
-    BOOST_CHECK_EQUAL(Parser::to_hex_c_string("ABC1="), "\\x41\\x42\\x43\\x31\\x3d");
+    BOOST_CHECK_EQUAL(Format::to_hex_c_string("ABC1="), "\\x41\\x42\\x43\\x31\\x3d");
 
 }
 BOOST_AUTO_TEST_CASE(atoi)
@@ -123,7 +124,7 @@ BOOST_AUTO_TEST_CASE(uleb128)
 }
 BOOST_AUTO_TEST_CASE(url)
 {
-    BOOST_CHECK_EQUAL("https%3a%2f%2fwww.urlencoder.org%2f", Parser::to_url("https://www.urlencoder.org/"));
+    BOOST_CHECK_EQUAL("https%3a%2f%2fwww.urlencoder.org%2f", Format::to_url("https://www.urlencoder.org/"));
     BOOST_CHECK_EQUAL("https://www.urlencoder.org/", Parser::from_url("https%3A%2F%2Fwww.urlencoder.org%2F"));
 }
 BOOST_AUTO_TEST_CASE(autoindex)

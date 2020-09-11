@@ -55,9 +55,9 @@ namespace Jaeger
             m_Batch.process.serviceName = aName;
         }
 
-        Metric(const std::string& aName, const std::pair<uint64_t, uint64_t>& aUUID, size_t aBaseID = 0)
-        : m_TraceIDHigh(aUUID.first)
-        , m_TraceIDLow(aUUID.second)
+        Metric(const std::string& aName, const std::tuple<uint64_t, uint64_t>& aUUID, size_t aBaseID = 0)
+        : m_TraceIDHigh(std::get<0>(aUUID))
+        , m_TraceIDLow(std::get<1>(aUUID))
         , m_BaseSpanID(aBaseID)
         {
             m_Batch.process.serviceName = aName;

@@ -20,7 +20,7 @@ pmr_tutorial_src = pmr_gen.process('tutorial.proto')
 pmr_tutorial_lib = static_library('pmr_tutorial', pmr_tutorial_src)
 pmr_tutorial_dep = declare_dependency(link_with : pmr_tutorial_lib, include_directories: pmr_tutorial_lib.private_dir_include())
 
-a  = executable('a.out',  'test.cpp',       dependencies : [tutorial_dep, pmr_tutorial_dep, json, protobuf, boost], cpp_args : '-DWITH_JSON')
+a  = executable('a.out',  'test.cpp',       dependencies : [tutorial_dep, pmr_tutorial_dep, json, protobuf, boost], cpp_args : '-DWITH_JSON', include_directories : includes)
 b  = executable('b.out',  'benchmark.cpp',  dependencies : [tutorial_dep, protobuf, boost, benchmark])
 b2 = executable('b2.out', 'benchmark2.cpp', dependencies : [tutorial_dep, protobuf, pmr_tutorial_dep, boost, benchmark], include_directories : includes)
 test('basic test', a, args : ['-l', 'all'])

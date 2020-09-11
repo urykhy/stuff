@@ -9,7 +9,7 @@
 
 #include <mpl/Mpl.hpp>
 #include <unsorted/Raii.hpp>
-#include <parser/Hex.hpp>
+#include <format/Hex.hpp>
 
 namespace SSLxx
 {
@@ -60,7 +60,7 @@ namespace SSLxx
     template<class... T>
     inline std::string DigestStr(const EVP_MD* aKind, T&&... aInput)
     {
-        return Parser::to_hex(Digest(aKind, std::forward<T&&>(aInput)...));
+        return Format::to_hex(Digest(aKind, std::forward<T&&>(aInput)...));
     }
 
     template<class... T>
