@@ -3,6 +3,7 @@
 #include <json/json.h>
 
 #include <curl/Curl.hpp>
+#include <exception/Error.hpp>
 #include <file/Util.hpp>
 #include <format/Base64.hpp>
 #include <parser/Atoi.hpp>
@@ -22,6 +23,9 @@ namespace Etcd {
         };
 
         using Error = std::runtime_error;
+
+        struct TxnErrorTag;
+        using TxnError = Exception::Error<TxnErrorTag>;
 
         struct Pair
         {
@@ -142,5 +146,49 @@ namespace Etcd {
             sRoot["ID"] = Json::Value::Int64(aLease);
             request("lease/revoke", sRoot);
         }
+
+        // txn
+        void atomicPut(const std::string& aKey, const std::string& aValue)
+        {
+            Json::Value sRoot;
+
+            auto& sCompare              = sRoot["compare"][0];
+            sCompare["key"]             = Format::Base64(m_Params.prefix + aKey);
+            sCompare["result"]          = "EQUAL";
+            sCompare["target"]          = "CREATE";
+            sCompare["create_revision"] = 0;
+
+            auto& sOp    = sRoot["success"][0]["request_put"];
+            sOp["key"]   = Format::Base64(m_Params.prefix + aKey);
+            sOp["value"] = Format::Base64(aValue);
+
+            auto sResponse = request("kv/txn", sRoot);
+            if (sResponse.isObject() and sResponse["succeeded"].asBool())
+                return;
+
+            throw TxnError("transaction error for key: " + aKey);
+        }
+
+        void atomicUpdate(const std::string& aKey, const std::string& aOld, const std::string& aValue)
+        {
+            Json::Value sRoot;
+
+            auto& sCompare     = sRoot["compare"][0];
+            sCompare["key"]    = Format::Base64(m_Params.prefix + aKey);
+            sCompare["result"] = "EQUAL";
+            sCompare["target"] = "VALUE";
+            sCompare["value"]  = Format::Base64(aOld);
+
+            auto& sOp    = sRoot["success"][0]["request_put"];
+            sOp["key"]   = Format::Base64(m_Params.prefix + aKey);
+            sOp["value"] = Format::Base64(aValue);
+
+            auto sResponse = request("kv/txn", sRoot);
+            if (sResponse.isObject() and sResponse["succeeded"].asBool())
+                return;
+
+            throw TxnError("transaction error for key: " + aKey);
+        }
+
     }; // namespace Etcd
 } // namespace Etcd

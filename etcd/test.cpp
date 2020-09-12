@@ -101,4 +101,16 @@ BOOST_AUTO_TEST_CASE(notify)
     // ensure key deleted from etcd
     BOOST_CHECK_EQUAL("", sClient.get(sParams.key));
 }
+BOOST_AUTO_TEST_CASE(atomic)
+{
+    const std::string sKey = "atomic/name";
+    sClient.atomicPut(sKey, "test");
+    BOOST_CHECK_THROW(sClient.atomicPut(sKey, "test"), Etcd::Client::TxnError);
+
+    sClient.atomicUpdate(sKey, "test", "success");
+    BOOST_CHECK_EQUAL(sClient.get(sKey), "success");
+    BOOST_CHECK_THROW(sClient.atomicUpdate(sKey, "test", "success"), Etcd::Client::TxnError);
+
+    sClient.remove(sKey);
+}
 BOOST_AUTO_TEST_SUITE_END()
