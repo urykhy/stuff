@@ -100,9 +100,9 @@ namespace Etcd {
         List list(const std::string& aKey, int64_t aLimit = 0)
         {
             Json::Value sRoot;
-            auto        sKey = m_Params.prefix + aKey;
+            std::string sKey = m_Params.prefix + aKey;
             sRoot["key"]     = Format::Base64(sKey);
-            sKey.back()++;
+            sKey.push_back(0xFF);
             sRoot["range_end"] = Format::Base64(sKey);
             if (aLimit > 0)
                 sRoot["limit"] = Json::Value::Int64(aLimit);
