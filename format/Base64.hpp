@@ -13,8 +13,8 @@ namespace Format {
         std::string encoded;
         encoded.reserve(((aStr.size() / 3) + (aStr.size() % 3 > 0)) * 4);
 
-        std::uint32_t temp{};
-        auto          it = aStr.begin();
+        uint32_t temp{};
+        auto     it = reinterpret_cast<const unsigned char*>(&aStr[0]);
 
         for (std::size_t i = 0; i < aStr.size() / 3; ++i) {
             temp = (*it++) << 16;

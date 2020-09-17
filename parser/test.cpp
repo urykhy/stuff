@@ -4,11 +4,13 @@
 #include "Atoi.hpp"
 #include "Hex.hpp"
 #include "Url.hpp"
+#include "format/Base64.hpp"
 #include <format/Hex.hpp>
 #include <format/Url.hpp>
 #include <format/ULeb128.hpp>
 #include "ULeb128.hpp"
 #include "Autoindex.hpp"
+#include "Base64.hpp"
 
 BOOST_AUTO_TEST_SUITE(parser)
 BOOST_AUTO_TEST_CASE(simple)
@@ -148,5 +150,12 @@ BOOST_AUTO_TEST_CASE(autoindex)
     const Parser::StringList expected = {"calque/", "dygraf/"};
     const auto result = Parser::Autoindex(sBody);
     BOOST_CHECK_EQUAL_COLLECTIONS(result.begin(), result.end(), expected.begin(), expected.end());
+}
+BOOST_AUTO_TEST_CASE(base64)
+{
+    const std::string sStr = Parser::from_hex("31ff");
+    const std::string sBase64 = Format::Base64(sStr);
+    BOOST_CHECK_EQUAL("Mf8=", sBase64);
+    BOOST_CHECK_EQUAL(Format::to_hex(sStr), Format::to_hex(Parser::Base64(sBase64)));
 }
 BOOST_AUTO_TEST_SUITE_END()
