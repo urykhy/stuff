@@ -8,6 +8,7 @@
 #include <format/Base64.hpp>
 #include <parser/Atoi.hpp>
 #include <parser/Base64.hpp>
+#include <format/Hex.hpp>
 
 #ifndef BOOST_TEST_MESSAGE
 #define BOOST_TEST_MESSAGE(x)
@@ -61,8 +62,6 @@ namespace Etcd {
                     throw Error("etcd: bad server response: " + sReader.getFormattedErrorMessages());
                 return sJson;
             }
-            if (sCode == 404)
-                return Json::Value();
             throw Error("etcd: http code: " + std::to_string(sCode) + ", message: " + sResult);
         }
 
@@ -94,10 +93,16 @@ namespace Etcd {
             request("kv/put", sRoot);
         }
 
-        void remove(const std::string& aKey)
+        void remove(const std::string& aKey, bool aRange = false)
         {
             Json::Value sRoot;
-            sRoot["key"] = Format::Base64(m_Params.prefix + aKey);
+            std::string sKey = m_Params.prefix + aKey;
+            sRoot["key"] = Format::Base64(sKey);
+            if (aRange)
+            {
+                sKey.push_back(0xFF);
+                sRoot["range_end"] = Format::Base64(sKey);
+            }
             request("kv/deleterange", sRoot);
         }
 
