@@ -101,6 +101,8 @@ BOOST_AUTO_TEST_CASE(hex)
     BOOST_CHECK_EQUAL(Parser::from_hex("414243313d"), "ABC1=");
     BOOST_CHECK_EQUAL(Format::to_hex_c_string("ABC1="), "\\x41\\x42\\x43\\x31\\x3d");
 
+    BOOST_CHECK_EQUAL(Parser::from_hex_mixed("ABC"), "ABC");
+    BOOST_CHECK_EQUAL(Parser::from_hex_mixed("\\x41B\\n"), "AB\n");
 }
 BOOST_AUTO_TEST_CASE(atoi)
 {
