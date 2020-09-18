@@ -19,10 +19,11 @@ some information about stuff
 - asio_http - asio http server and client
 - asio_mysqld - asio mysql server
 - avx - bit of simd
+- bloom - bloom filters
 - cache - some caching
 - cbor - cbor format implementation
 - container - containers, IoC.
-- etcd - etcd client
+- etcd - etcd v3 (json) client
 - file - file operations
 - httpd - httpd with pipelining and no asio
 - iconv - c++ wrapper for iconv
@@ -30,13 +31,14 @@ some information about stuff
 - ml - machine learning: FTRL, LR.
 - mpl - some template magic
 - msgpack - incomplete msgpack serialization
+- mq - message queue over http, etcd used to avoid duplicates.
 - networking - epoll based networking
 - protobuf - fast protobuf parser with polymorphic allocator support
 - prometheus - small client library
 - resource - embed binary data into elf, tar file for example.
 - rpc - simple rpc over udp
-- ssl - openssl wrapper
-- time - cctz wrapper
+- ssl - openssl
+- time - cctz wrapper, time helpers
 - utf8 - utf8 validator
 
 ### scripts
