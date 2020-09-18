@@ -19,7 +19,7 @@ namespace asio_http
     {
         std::string host;
         std::string port;
-        Request     request;
+        Request     request;    // verb, endpoint, version(10)
 
         time_t      connect = 100;  // timeout in ms
         time_t      total   = 3000;
@@ -37,14 +37,16 @@ namespace asio_http
             aPromise->set_exception(std::make_exception_ptr(std::runtime_error(aMsg + ec.message())));
         };
 
+        sStream.expires_after(std::chrono::milliseconds(aRequest.connect));
         auto const sAddr = sResolver.async_resolve(aRequest.host, aRequest.port, yield[ec]);
         if (ec) { sReport("resolve: "); return; }
 
-        sStream.expires_after(std::chrono::milliseconds(aRequest.connect));
         sStream.async_connect(sAddr, yield[ec]);
         if (ec) { sReport("connect: "); return; }
 
         sStream.expires_after(std::chrono::milliseconds(aRequest.total));
+        if (!aRequest.request.body().empty())
+            aRequest.request.prepare_payload();
         http::async_write(sStream, aRequest.request, yield[ec]);
         if (ec) { sReport("write: "); return; }
 
