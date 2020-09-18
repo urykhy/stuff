@@ -16,7 +16,6 @@
 using namespace std::chrono_literals;
 
 BOOST_AUTO_TEST_SUITE(Threads)
-
 BOOST_AUTO_TEST_SUITE(pipeline)
 BOOST_AUTO_TEST_CASE(sort)
 {
@@ -64,27 +63,8 @@ BOOST_AUTO_TEST_CASE(impl)
     while (!p.idle()) Threads::sleep(0.1);
     tg.wait();  // call stop in Pipeline/SafeQueueThread
 }
-BOOST_AUTO_TEST_SUITE_END()
+BOOST_AUTO_TEST_SUITE_END() // pipeline
 
-BOOST_AUTO_TEST_CASE(collect)
-{
-    Threads::Group tg;
-    Threads::Asio q;
-    q.start(tg);
-    Threads::Collect c(q.service(), [](std::string&& a){
-        BOOST_CHECK_EQUAL(a, "123asdiop");
-    });
-
-    std::vector<std::string> test_data({"123","asd","iop"});
-    for (const auto& x : test_data)
-    {
-        c.push(x);
-        Threads::sleep(0.1);
-    }
-    while (!c.empty())
-        Threads::sleep(0.1);
-    tg.wait();
-}
 BOOST_AUTO_TEST_CASE(wg)
 {
     Threads::Group tg;
@@ -162,4 +142,67 @@ BOOST_AUTO_TEST_CASE(for_each)
     });
     BOOST_CHECK_EQUAL(500500, sResult);
 }
-BOOST_AUTO_TEST_SUITE_END()
+BOOST_AUTO_TEST_SUITE_END() // Threads
+
+BOOST_AUTO_TEST_SUITE(Asio)
+
+// via: https://stackoverflow.com/questions/26694423/how-resume-the-execution-of-a-stackful-coroutine-in-the-context-of-its-strand/26728121#26728121
+template <typename Signature, typename CompletionToken>
+auto async_add_one(CompletionToken token, int value) {
+    // Initialize the async completion handler and result
+    // Careful to make sure token is a copy, as completion's handler takes a reference
+    using completion_type = boost::asio::async_completion<CompletionToken, Signature>;
+    completion_type completion{ token };
+
+    BOOST_TEST_MESSAGE("spawning thread");
+    std::thread([handler = completion.completion_handler, value]() {
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+
+        BOOST_TEST_MESSAGE("resume coroutine");
+        // separate using statement is important
+        // as asio_handler_invoke is overloaded based on handler's type
+        using boost::asio::asio_handler_invoke;
+        asio_handler_invoke(std::bind(handler, value + 1), &handler);
+    }).detach();
+
+    // Yield the coroutine.
+    BOOST_TEST_MESSAGE("yield coroutine");
+    return completion.result.get();
+}
+BOOST_AUTO_TEST_CASE(callback)
+{
+    Threads::Group tg;
+    Threads::Asio q;
+    q.start(tg);
+
+    q.spawn([](boost::asio::yield_context yield)
+    {
+        BOOST_TEST_MESSAGE("started");
+        const auto result1 = async_add_one<void(int)>(yield, 0);
+        BOOST_CHECK_EQUAL(result1, 1);
+        const auto result2 = async_add_one<void(int)>(yield, 41);
+        BOOST_CHECK_EQUAL(result2, 42);
+        BOOST_TEST_MESSAGE("finished");
+    });
+    sleep(3);
+}
+BOOST_AUTO_TEST_CASE(collect)
+{
+    Threads::Group tg;
+    Threads::Asio q;
+    q.start(tg);
+    Threads::Collect c(q.service(), [](std::string&& a){
+        BOOST_CHECK_EQUAL(a, "123asdiop");
+    });
+
+    std::vector<std::string> test_data({"123","asd","iop"});
+    for (const auto& x : test_data)
+    {
+        c.push(x);
+        Threads::sleep(0.1);
+    }
+    while (!c.empty())
+        Threads::sleep(0.1);
+    tg.wait();
+}
+BOOST_AUTO_TEST_SUITE_END() // Asio

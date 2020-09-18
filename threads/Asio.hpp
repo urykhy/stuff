@@ -1,5 +1,6 @@
 #pragma once
 #include <boost/asio.hpp>
+#include <boost/asio/spawn.hpp>
 #include "Group.hpp"
 
 namespace Threads
@@ -19,6 +20,12 @@ namespace Threads
         void insert(std::function<void(void)> f) {
             io_service.post(f);
         }
+
+        void spawn(std::function<void(boost::asio::yield_context)>&& aFunc)
+        {
+            boost::asio::spawn(service(), std::move(aFunc));
+        }
+
         void term() {
             io_service.stop();
         }

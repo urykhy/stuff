@@ -10,7 +10,6 @@
 
 #include <Client.hpp>
 #include <time/Time.hpp>
-#include <threads/Periodic.hpp> // for sleep
 #include <threads/Group.hpp>
 
 namespace MySQL::Upload

@@ -9,7 +9,6 @@
 
 namespace Threads
 {
-
     template<class T>
     struct ListWrapper
     {
@@ -119,24 +118,51 @@ namespace Threads
 
     // just a queue and thread to process tasks
     template<class T, class Q = ListWrapper<T>>
-    class SafeQueueThread
+    struct SafeQueueThread
     {
+        struct Params
+        {
+            bool retry = false; // retry on exception
+            float delay = 1;    // sleep before next retry in seconds
+            std::function<bool(const T&)> check = [](const T&) -> bool { return true; };    // condition to pick task from queue
+        };
+    private:
         const std::function<void(T& t)> m_Handler;
+        const Params m_Params;
+
         SafeQueue<T, Q> m_Queue;
         std::atomic<uint64_t> m_Done{0};
-    public:
-        template<class F> SafeQueueThread(F aHandler)
-        : m_Handler(aHandler) { }
 
-        void start(Group& aGroup, unsigned count = 1, std::function<bool(const T&)> aCheck = [](const T&) -> bool { return true; })
+        void handle(T& aItem)
         {
-            aGroup.start([this, aCheck]() {
+            while (!m_Queue.exiting())
+            {
+                try {
+                    m_Handler(aItem);
+                    return;
+                } catch (...) {
+                    if (!m_Params.retry)
+                        return;
+                    Threads::sleep(m_Params.delay);
+                }
+            }
+        }
+
+    public:
+        template<class F> SafeQueueThread(F aHandler, const Params& aParams = Params())
+        : m_Handler(aHandler)
+        , m_Params(aParams)
+        { }
+
+        void start(Group& aGroup, unsigned count = 1)
+        {
+            aGroup.start([this]() {
                 while (!m_Queue.exiting())
                 {
                     T sItem;
-                    if (m_Queue.wait(sItem, aCheck))
+                    if (m_Queue.wait(sItem, m_Params.check))
                     {
-                        m_Handler(sItem);
+                        handle(sItem);
                         m_Done++;
                     }
                 }
@@ -147,5 +173,6 @@ namespace Threads
         void insert(const T& aItem) { m_Queue.insert(aItem); }
         void insert(T&& aItem)      { m_Queue.insert(std::move(aItem)); }
         bool idle() const           { return m_Done == m_Queue.count(); }
+        size_t size() const         { return m_Queue.count() - m_Done; }
     };
 }

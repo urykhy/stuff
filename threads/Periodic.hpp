@@ -1,19 +1,8 @@
 #pragma once
-#include <cmath>
-#include <iostream>
 #include "Group.hpp"
 
 namespace Threads
 {
-    inline void sleep(float f)
-    {
-        const struct timespec sleep_time{
-            time_t(std::floor(f)),
-            long((f - std::floor(f)) * 1000000000)
-        };
-        nanosleep(&sleep_time, nullptr);
-    }
-
     class Periodic
     {
         volatile bool m_Stop{false};

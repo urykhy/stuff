@@ -40,16 +40,13 @@ namespace Threads
         , m_Join([this, aJoiner](Task& t){
             aJoiner(t.data);
             m_NextJoin++;
-        })
+        }, {.check = [this](const Task& t){ return t.serial == m_NextJoin; }})
         { }
 
         void start(Group& aGroup, int aCount)
         {
             m_Worker.start(aGroup, aCount);
-            m_Join.start(aGroup, 1, [this](const Task& t) {
-                //BOOST_TEST_MESSAGE("check order " << t.serial << " vs " << m_NextJoin);
-                return t.serial == m_NextJoin;
-            });
+            m_Join.start(aGroup);
         }
 
         void insert(const T& aItem)
