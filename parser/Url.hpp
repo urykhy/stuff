@@ -1,12 +1,15 @@
 #pragma once
 
+#include <stdexcept>
 #include <string>
+
+#include <string/String.hpp>
 
 #include "Hex.hpp"
 #include "Parser.hpp"
 
 namespace Parser {
-    inline std::string from_url(const std::string& aData)
+    inline std::string url_decode(const std::string& aData)
     {
         enum
         {
@@ -43,6 +46,57 @@ namespace Parser {
         }
 
         return sResult;
+    }
+
+    // get hostname, port, query from url
+    inline auto url(const std::string& aUrl)
+    {
+        struct Parsed
+        {
+            std::string host;
+            std::string port = "80";
+            std::string query = "/";
+        };
+        Parsed sParsed;
+
+        if (!String::starts_with(aUrl, "http://"))
+            throw std::invalid_argument("url must start with http://");
+
+        enum State
+        {
+            HOST,
+            PORT,
+            QUERY
+        };
+        unsigned sState = HOST;
+
+        for (size_t sPos = 7; sPos < aUrl.size(); sPos++) {
+            char c = aUrl[sPos];
+
+            switch (sState) {
+            case HOST:
+                switch (c) {
+                case ':':
+                    sState++;
+                    sParsed.port.clear();
+                    break;
+                case '/': sState = QUERY; break;
+                default: sParsed.host.push_back(c);
+                }
+                break;
+            case PORT:
+                switch (c) {
+                case '/': sState++; break;
+                default: sParsed.port.push_back(c);
+                }
+                break;
+            case QUERY:
+                sParsed.query.push_back(c);
+                break;
+            }
+        }
+
+        return sParsed;
     }
 
     template <class T>

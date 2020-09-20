@@ -13,7 +13,7 @@ namespace Format
         }
     }
 
-    inline std::string to_url(const std::string& aData)
+    inline std::string url_encode(const std::string& aData)
     {
         std::string sResult;
         sResult.reserve(aData.size() * 3);

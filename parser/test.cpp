@@ -130,8 +130,21 @@ BOOST_AUTO_TEST_CASE(uleb128)
 }
 BOOST_AUTO_TEST_CASE(url)
 {
-    BOOST_CHECK_EQUAL("https%3a%2f%2fwww.urlencoder.org%2f", Format::to_url("https://www.urlencoder.org/"));
-    BOOST_CHECK_EQUAL("https://www.urlencoder.org/", Parser::from_url("https%3A%2F%2Fwww.urlencoder.org%2F"));
+    BOOST_CHECK_EQUAL("https%3a%2f%2fwww.urlencoder.org%2f", Format::url_encode("https://www.urlencoder.org/"));
+    BOOST_CHECK_EQUAL("https://www.urlencoder.org/", Parser::url_decode("https%3A%2F%2Fwww.urlencoder.org%2F"));
+
+    auto sParsed = Parser::url("http://localhost/ping");
+    BOOST_CHECK_EQUAL(sParsed.host, "localhost");
+    BOOST_CHECK_EQUAL(sParsed.port, "80");
+    BOOST_CHECK_EQUAL(sParsed.query, "/ping");
+
+    sParsed = Parser::url("http://localhost:2345/pong");
+    BOOST_CHECK_EQUAL(sParsed.host, "localhost");
+    BOOST_CHECK_EQUAL(sParsed.port, "2345");
+    BOOST_CHECK_EQUAL(sParsed.query, "/pong");
+
+    sParsed = Parser::url("http://localhost");
+    BOOST_CHECK_EQUAL(sParsed.query, "/");
 }
 BOOST_AUTO_TEST_CASE(autoindex)
 {
