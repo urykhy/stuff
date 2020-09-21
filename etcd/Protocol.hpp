@@ -6,7 +6,10 @@
 
 namespace Etcd {
     using Error = std::runtime_error;
-}
+
+    struct TxnErrorTag;
+    using TxnError = Exception::Error<TxnErrorTag>;
+} // namespace Etcd
 
 namespace Etcd::Protocol {
 

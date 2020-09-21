@@ -2,9 +2,9 @@
 
 #include <json/json.h>
 
+#include <asio_http/Client.hpp>
 #include <asio_http/Router.hpp>
 #include <etcd/Etcd.hpp>
-#include <parser/Url.hpp>
 #include <threads/SafeQueue.hpp>
 #include <time/Meter.hpp>
 #include <unsorted/Log4cxx.hpp>
@@ -34,13 +34,13 @@ namespace MQ {
 
         Json::Value parseState(const std::string& aState)
         {
-            Json::Value  sJson;
+            Json::Value  sResponse;
             Json::Reader sReader;
-            if (!sReader.parse(aState, sJson))
+            if (!sReader.parse(aState, sResponse))
                 throw Error("mq.server: bad server response: " + sReader.getFormattedErrorMessages());
-            if (!sJson.isArray())
+            if (!sResponse.isArray())
                 throw Error("mq.server: bad server response: array expected");
-            return sJson;
+            return sResponse;
         }
 
         std::string formatState(const Json::Value& aJson)
@@ -49,12 +49,19 @@ namespace MQ {
             return Json::writeString(sBuilder, aJson);
         }
 
-        void process_i(const std::string& aClient, const std::string& aHash, const std::string& aBody)
+        Json::Value etcd_request(asio_http::asio::io_service& aService, const std::string& aAPI, std::string&& aBody, asio_http::asio::yield_context yield)
         {
-            Etcd::Client      sEtcd(m_Params.etcd);
-            const std::string sOld = sEtcd.get(aClient);
-            Json::Value       sState;
+            auto sResult = asio_http::async(aService, {.method = asio_http::http::verb::post, .url = m_Params.etcd.url + "/v3/" + aAPI, .body = std::move(aBody)}, yield).get();
+            return Etcd::Protocol::parseResponse(static_cast<unsigned>(sResult.result()), sResult.body());
+        }
+
+        void process_i(asio_http::asio::io_service& aService, const std::string& aClient, const std::string& aHash, const std::string& aBody, asio_http::asio::yield_context yield)
+        {
+            const std::string sKey     = m_Params.etcd.prefix + aClient;
             bool              sInitial = true;
+            Json::Value       sState;
+            Json::Value       sResponse = etcd_request(aService, "kv/range", Etcd::Protocol::get(sKey), yield);
+            const std::string sOld      = Parser::Base64(sResponse["kvs"][0]["value"].asString());
 
             if (!sOld.empty()) {
                 sInitial = false;
@@ -63,7 +70,7 @@ namespace MQ {
 
             for (Json::Value::ArrayIndex i = 0; i != sState.size(); i++)
                 if (sState[i].asString() == aHash) {
-                    INFO("duplicate block " << aHash << " from " << aClient);
+                    INFO("duplicate block " << aHash);
                     return;
                 }
 
@@ -74,16 +81,21 @@ namespace MQ {
                 sState.removeIndex(0, &sTmp);
             }
 
-            if (sInitial)
-                sEtcd.atomicPut(aClient, formatState(sState));
-            else
-                sEtcd.atomicUpdate(aClient, sOld, formatState(sState));
-            DEBUG("accept block " << aHash << " from " << aClient);
+            if (sInitial) {
+                auto sResponse = etcd_request(aService, "kv/txn", Etcd::Protocol::atomicPut(sKey, formatState(sState)), yield);
+                if (not Etcd::Protocol::isTransactionOk(sResponse))
+                    throw Etcd::TxnError("transaction error");
+            } else {
+                auto sResponse = etcd_request(aService, "kv/txn", Etcd::Protocol::atomicUpdate(sKey, sOld, formatState(sState)), yield);
+                if (not Etcd::Protocol::isTransactionOk(sResponse))
+                    throw Etcd::TxnError("transaction error");
+            }
+            DEBUG("accept block " << aHash);
 
             m_Queue.insert(aBody);
         }
 
-        void process(const asio_http::Request& aRequest, asio_http::Response& aResponse)
+        void process(asio_http::asio::io_service& aService, const asio_http::Request& aRequest, asio_http::Response& aResponse, asio_http::asio::yield_context yield)
         {
             namespace http = boost::beast::http;
 
@@ -122,8 +134,9 @@ namespace MQ {
                 return;
             }
 
+            log4cxx::NDC ndc("client:" + sClient);
             try {
-                process_i(sClient, sHash, aRequest.body());
+                process_i(aService, sClient, sHash, aRequest.body(), yield);
                 aResponse.result(http::status::ok);
             } catch (const std::exception& e) {
                 WARN("fail to process: " << e.what());
@@ -146,13 +159,13 @@ namespace MQ {
         void configure(asio_http::RouterPtr aRouter)
         {
             namespace http = boost::beast::http;
-            aRouter->insert(m_Params.endpoint, [this](const asio_http::Request& aRequest, asio_http::Response& aResponse) {
+            aRouter->insert(m_Params.endpoint, [this](asio_http::asio::io_service& aService, const asio_http::Request& aRequest, asio_http::Response& aResponse, asio_http::asio::yield_context yield) {
                 if (aRequest.method() != http::verb::put) {
                     aResponse.result(http::status::method_not_allowed);
                     return;
                 }
                 log4cxx::NDC ndc("mq.server");
-                process(aRequest, aResponse);
+                process(aService, aRequest, aResponse, yield);
             });
         }
 

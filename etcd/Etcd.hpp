@@ -22,9 +22,6 @@ namespace Etcd {
             std::string prefix = "test:";
         };
 
-        struct TxnErrorTag;
-        using TxnError = Exception::Error<TxnErrorTag>;
-
         struct Pair
         {
             std::string key;

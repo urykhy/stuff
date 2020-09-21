@@ -105,11 +105,11 @@ BOOST_AUTO_TEST_CASE(atomic)
 {
     const std::string sKey = "atomic/name";
     sClient.atomicPut(sKey, "test");
-    BOOST_CHECK_THROW(sClient.atomicPut(sKey, "test"), Etcd::Client::TxnError);
+    BOOST_CHECK_THROW(sClient.atomicPut(sKey, "test"), Etcd::TxnError);
 
     sClient.atomicUpdate(sKey, "test", "success");
     BOOST_CHECK_EQUAL(sClient.get(sKey), "success");
-    BOOST_CHECK_THROW(sClient.atomicUpdate(sKey, "test", "success"), Etcd::Client::TxnError);
+    BOOST_CHECK_THROW(sClient.atomicUpdate(sKey, "test", "success"), Etcd::TxnError);
 
     sClient.remove(sKey);
 }

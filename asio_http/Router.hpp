@@ -5,6 +5,7 @@
 
 namespace asio_http
 {
+    namespace asio = boost::asio;
     namespace beast = boost::beast;
     namespace http = beast::http;
 
@@ -13,7 +14,7 @@ namespace asio_http
 
     struct Router
     {
-        using Handler = std::function<void(const Request&, Response&)>;
+        using Handler = std::function<void(asio::io_service&, const Request&, Response&, asio::yield_context)>;
 
     private:
         std::list<std::pair<std::string, Handler>> m_Locations;
@@ -31,12 +32,12 @@ namespace asio_http
             m_Locations.push_back({aLoc, aHandler});
         }
 
-        void call(const Request& aRequest, Response& aResponse) const
+        void call(asio::io_service& aService, Request& aRequest, Response& aResponse, asio::yield_context yield) const
         {
             for (auto& [sLoc, sHandler]: m_Locations)
                 if (match(sLoc, aRequest))
                 {
-                    sHandler(aRequest, aResponse);
+                    sHandler(aService, aRequest, aResponse, yield);
                     return;
                 }
 

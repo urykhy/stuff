@@ -15,7 +15,7 @@ namespace Prometheus {
     {
         namespace http = boost::beast::http;
 
-        aRouter->insert("/metrics", [](const asio_http::Request& aRequest, asio_http::Response& aResponse) {
+        aRouter->insert("/metrics", [](asio_http::asio::io_service&, const asio_http::Request& aRequest, asio_http::Response& aResponse, asio_http::asio::yield_context yield) {
             if (aRequest.method() != http::verb::get) {
                 aResponse.result(http::status::method_not_allowed);
                 return;

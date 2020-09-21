@@ -49,10 +49,10 @@ BOOST_AUTO_TEST_CASE(router)
     Prometheus::start(sGroup);
     sAsio.start(sGroup);
 
-    asio_http::ClientRequest sRequest{"127.0.0.1", "2081", {asio_http::http::verb::get, "/metrics", 10}};
-    auto                     sResponse = asio_http::async(sAsio, std::move(sRequest)).get();
+    asio_http::ClientRequest sRequest{.method = asio_http::http::verb::get, .url = "http://127.0.0.1:2081/metrics"};
+
+    auto sResponse = asio_http::async(sAsio, std::move(sRequest)).get();
     BOOST_CHECK_EQUAL(sResponse.result(), asio_http::http::status::ok);
-    BOOST_TEST_MESSAGE("metrics: \n"
-                       << sResponse.body());
+    BOOST_TEST_MESSAGE("metrics: \n" << sResponse.body());
 }
 BOOST_AUTO_TEST_SUITE_END()

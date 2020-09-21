@@ -11,12 +11,9 @@
 namespace asio_http
 {
     namespace asio = boost::asio;
-    namespace beast = boost::beast;
-    namespace http = beast::http;
-    namespace net = boost::asio;
     using tcp = boost::asio::ip::tcp;
 
-    inline void session(beast::tcp_stream& aStream, RouterPtr aRouter, net::yield_context yield)
+    inline void session(asio::io_service& aService, beast::tcp_stream& aStream, RouterPtr aRouter, asio::yield_context yield)
     {
         beast::error_code  ec;
         beast::flat_buffer sBuffer;
@@ -30,8 +27,11 @@ namespace asio_http
                 break;
 
             Response sResponse;
-            aRouter->call(sRequest, sResponse);
-            sResponse.set(http::field::content_length, sResponse.body().size());
+            aRouter->call(aService, sRequest, sResponse, yield[ec]);
+            if (ec)
+                break;
+
+            sResponse.prepare_payload();
             sResponse.set(http::field::server, "Beast/cxx");
 
             http::async_write(aStream, sResponse, yield[ec]);
@@ -43,26 +43,26 @@ namespace asio_http
         aStream.socket().shutdown(tcp::socket::shutdown_send, ec);
     }
 
-    inline void server(std::shared_ptr<tcp::acceptor> aAcceptor, std::shared_ptr<tcp::socket> aSocket, RouterPtr aRouter)
+    inline void server(asio::io_service& aService, std::shared_ptr<tcp::acceptor> aAcceptor, std::shared_ptr<tcp::socket> aSocket, RouterPtr aRouter)
     {
-        aAcceptor->async_accept(*aSocket, [=](beast::error_code ec)
+        aAcceptor->async_accept(*aSocket, [aService = std::ref(aService), aAcceptor, aSocket, aRouter](beast::error_code ec)
         {
             if (!ec)
             {
                 aSocket->set_option(tcp::no_delay(true));
-                boost::asio::spawn(aAcceptor->get_executor(), [sStream = beast::tcp_stream(std::move(*aSocket)), aRouter] (boost::asio::yield_context yield) mutable {
-                    session(sStream, aRouter, yield);
+                boost::asio::spawn(aAcceptor->get_executor(), [aService, sStream = beast::tcp_stream(std::move(*aSocket)), aRouter] (boost::asio::yield_context yield) mutable {
+                    session(aService, sStream, aRouter, yield);
                 });
             }
-            server(aAcceptor, aSocket, aRouter);
+            server(aService, aAcceptor, aSocket, aRouter);
         });
     }
 
     void startServer(Threads::Asio& aContext, uint16_t aPort, RouterPtr aRouter)
     {
-        auto const sAddress = net::ip::make_address("0.0.0.0");
+        auto const sAddress = asio::ip::make_address("0.0.0.0");
         auto sAcceptor = std::make_shared<tcp::acceptor>(aContext.service(), tcp::endpoint(sAddress, aPort));
         auto sSocket = std::make_shared<tcp::socket>(aContext.service());
-        server(sAcceptor, sSocket, aRouter);
+        server(aContext.service(), sAcceptor, sSocket, aRouter);
     }
 }
