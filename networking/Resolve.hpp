@@ -2,6 +2,7 @@
 
 #include <arpa/inet.h>
 #include <errno.h>
+#include <net/if.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <string.h>
@@ -22,9 +23,19 @@ namespace Util {
         return sTmp.s_addr;
     }
 
+    inline std::string formatAddr(const struct in_addr& aAddr)
+    {
+        return std::string(inet_ntoa(aAddr));
+    }
     inline std::string formatAddr(const struct sockaddr_in& aAddr)
     {
-        return std::string(inet_ntoa(aAddr.sin_addr)) + ":" + std::to_string(ntohs(aAddr.sin_port));
+        return formatAddr(aAddr.sin_addr) + ":" + std::to_string(ntohs(aAddr.sin_port));
+    }
+    inline std::string formatAddr(const uint32_t aAddr)
+    {
+        struct in_addr sTmp;
+        sTmp.s_addr = aAddr;
+        return formatAddr(sTmp);
     }
 
     inline uint32_t resolveName(const std::string& aName)
@@ -45,4 +56,18 @@ namespace Util {
         }
         return 0;
     }
+
+    inline std::string interfaceName(int aIndex)
+    {
+        if (aIndex == 0) {
+            return "<n/a>";
+        }
+        char sBuffer[IF_NAMESIZE];
+        memset(sBuffer, 0, sizeof(sBuffer));
+        if (if_indextoname(aIndex, sBuffer)) {
+            return sBuffer;
+        }
+        return std::to_string(aIndex);
+    }
+
 } // namespace Util
