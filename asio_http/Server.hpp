@@ -6,20 +6,19 @@
 #include <boost/asio/spawn.hpp>
 
 #include <threads/Asio.hpp>
+
 #include "Router.hpp"
 
-namespace asio_http
-{
+namespace asio_http {
     namespace asio = boost::asio;
-    using tcp = boost::asio::ip::tcp;
+    using tcp      = boost::asio::ip::tcp;
 
     inline void session(asio::io_service& aService, beast::tcp_stream& aStream, RouterPtr aRouter, asio::yield_context yield)
     {
         beast::error_code  ec;
         beast::flat_buffer sBuffer;
 
-        while(true)
-        {
+        while (true) {
             aStream.expires_after(std::chrono::seconds(30));
             Request sRequest;
             http::async_read(aStream, sBuffer, sRequest, yield[ec]);
@@ -45,12 +44,10 @@ namespace asio_http
 
     inline void server(asio::io_service& aService, std::shared_ptr<tcp::acceptor> aAcceptor, std::shared_ptr<tcp::socket> aSocket, RouterPtr aRouter)
     {
-        aAcceptor->async_accept(*aSocket, [aService = std::ref(aService), aAcceptor, aSocket, aRouter](beast::error_code ec)
-        {
-            if (!ec)
-            {
+        aAcceptor->async_accept(*aSocket, [aService = std::ref(aService), aAcceptor, aSocket, aRouter](beast::error_code ec) {
+            if (!ec) {
                 aSocket->set_option(tcp::no_delay(true));
-                boost::asio::spawn(aAcceptor->get_executor(), [aService, sStream = beast::tcp_stream(std::move(*aSocket)), aRouter] (boost::asio::yield_context yield) mutable {
+                boost::asio::spawn(aAcceptor->get_executor(), [aService, sStream = beast::tcp_stream(std::move(*aSocket)), aRouter](boost::asio::yield_context yield) mutable {
                     session(aService, sStream, aRouter, yield);
                 });
             }
@@ -60,9 +57,9 @@ namespace asio_http
 
     void startServer(Threads::Asio& aContext, uint16_t aPort, RouterPtr aRouter)
     {
-        auto const sAddress = asio::ip::make_address("0.0.0.0");
-        auto sAcceptor = std::make_shared<tcp::acceptor>(aContext.service(), tcp::endpoint(sAddress, aPort));
-        auto sSocket = std::make_shared<tcp::socket>(aContext.service());
+        auto const sAddress  = asio::ip::make_address("0.0.0.0");
+        auto       sAcceptor = std::make_shared<tcp::acceptor>(aContext.service(), tcp::endpoint(sAddress, aPort));
+        auto       sSocket   = std::make_shared<tcp::socket>(aContext.service());
         server(aContext.service(), sAcceptor, sSocket, aRouter);
     }
-}
+} // namespace asio_http

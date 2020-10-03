@@ -18,10 +18,13 @@ namespace asio_http {
 
     struct ClientRequest
     {
+        using Header  = std::pair<http::field, std::string>;
+        using Headers = std::list<Header>;
+
         http::verb  method = http::verb::get;
         std::string url;
         std::string body;
-        std::list<std::pair<http::field, std::string>> headers;
+        Headers     headers;
         time_t      connect = 100; // timeout in ms
         time_t      total   = 3000;
     };
@@ -66,8 +69,8 @@ namespace asio_http {
             return;
         }
 
-        boost::beast::flat_buffer sBuffer;
-        Response                  sResponse;
+        beast::flat_buffer sBuffer;
+        Response           sResponse;
 
         http::async_read(sStream, sBuffer, sResponse, yield[ec]);
         if (ec) {
