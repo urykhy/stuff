@@ -13,11 +13,11 @@ namespace Threads
     void ForEach(const D& aData, P&& aPartition, H&& aHandler, unsigned aCount = 4)
     {
         Group sGroup;
-        for (unsigned aPart = 0; aPart < aCount; aPart++)
-            sGroup.start([&aData, &aPartition, &aHandler, aPart, aCount]()
+        for (unsigned sPart = 0; sPart < aCount; sPart++)
+            sGroup.start([&aData, &aPartition, &aHandler, sPart, aCount]()
             {
                 for (auto& x : aData)
-                    if (aPartition(x) % aCount == aPart)
+                    if (aPartition(x) % aCount == sPart)
                         aHandler(x);
             });
     }
