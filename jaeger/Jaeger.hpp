@@ -7,14 +7,11 @@
 #include "Agent.h"
 
 #include <variant>
+#include <mpl/Mpl.hpp>
 #include <time/Meter.hpp>
 
 namespace Jaeger
 {
-    // helpers to use variant
-    template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
-    template<class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
-
     struct Metric
     {
         struct Tag
@@ -36,7 +33,7 @@ namespace Jaeger
             using Type = jaegertracing::thrift::TagType;
             jaegertracing::thrift::Tag sTag;
             sTag.key = aTag.name;
-            std::visit(overloaded {
+            std::visit(Mpl::overloaded {
                 [&sTag](const std::string& arg) { sTag.vType = Type::STRING; sTag.vStr    = arg; sTag.__isset.vStr    = true; },
                 [&sTag](const char*        arg) { sTag.vType = Type::STRING; sTag.vStr    = arg; sTag.__isset.vStr    = true; },
                 [&sTag](double             arg) { sTag.vType = Type::DOUBLE; sTag.vDouble = arg; sTag.__isset.vDouble = true; },
