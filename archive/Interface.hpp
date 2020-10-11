@@ -9,6 +9,13 @@ namespace Archive {
         {
             size_t usedSrc = 0;
             size_t usedDst = 0;
+
+            Pair& operator+=(const Pair& aOther)
+            {
+                usedSrc += aOther.usedSrc;
+                usedDst += aOther.usedDst;
+                return *this;
+            }
         };
         struct Finish
         {

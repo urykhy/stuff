@@ -133,8 +133,10 @@ namespace Archive {
             if (m_InputEnd < BUFFER_SIZE)
                 sResult.usedSrc = collectInput(aSrc, aSrcLen);
 
-            if (m_InputEnd == BUFFER_SIZE)
+            if (m_InputEnd == BUFFER_SIZE) {
                 compressBuffer();
+                sResult += flushBuffer(aDst, aDstLen);
+            }
 
             return sResult;
         }
@@ -146,7 +148,8 @@ namespace Archive {
 
             if (m_InputEnd != 0) {
                 compressBuffer();
-                return {flushBuffer(aDst, aDstLen).usedDst, false};
+                if (m_End > 0)
+                    return {flushBuffer(aDst, aDstLen).usedDst, false};
             }
 
             if (m_Stage == STARTED) {

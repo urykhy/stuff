@@ -10,6 +10,7 @@
 #include "Bzip2.hpp"
 #include "Gzip.hpp"
 #include "LZ4.hpp"
+#include "Util.hpp"
 #include "XZ.hpp"
 #include "Zstd.hpp"
 
@@ -26,6 +27,8 @@ std::string simpleFilter(const std::string& aStr)
         auto sInfo      = sFilter.filter(aStr.data() + sInputPos, sInputSize, &sBuffer[0], sBuffer.size());
         sInputPos += sInfo.usedSrc;
         sResult.append(sBuffer.substr(0, sInfo.usedDst));
+        if (sInfo.usedDst == 0 and sInfo.usedSrc == 0)
+            throw std::logic_error("Archive::filter make no progress");
     }
 
     while (true) {
@@ -33,6 +36,8 @@ std::string simpleFilter(const std::string& aStr)
         sResult.append(sBuffer.substr(0, sInfo.usedDst));
         if (sInfo.done)
             break;
+        if (sInfo.usedDst == 0)
+            throw std::logic_error("Archive::filter make no progress");
     }
 
     return sResult;
@@ -98,5 +103,24 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(concat, T, FilterTypes)
 
     const std::string sClear = simpleFilter<typename T::D>(sC1 + sC2);
     BOOST_CHECK_EQUAL(sClear, "hello world");
+}
+BOOST_AUTO_TEST_CASE(ZstdThreads)
+{
+    const std::string sData = File::to_string("/bin/bash");
+    BOOST_TEST_MESSAGE("source file size: " << sData.size());
+
+    Zstd::C      sCompressor1(3);
+    Time::Meter  sMeter;
+    const auto   sC1    = Archive::filter(&sCompressor1, sData);
+    const double sTime1 = sMeter.get().to_double();
+
+    Zstd::C sCompressor2(3, 4); // use 4 threads
+    sMeter.reset();
+    const auto   sC2    = Archive::filter(&sCompressor2, sData);
+    const double sTime2 = sMeter.get().to_double();
+
+    BOOST_CHECK_CLOSE(float(sC1.size()), float(sC2.size()), 1);
+    BOOST_TEST_MESSAGE("1 thread  time: " << sTime1);
+    BOOST_TEST_MESSAGE("4 threads time: " << sTime2);
 }
 BOOST_AUTO_TEST_SUITE_END()

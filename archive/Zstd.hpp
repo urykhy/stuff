@@ -56,13 +56,16 @@ namespace Archive {
         }
 
     public:
-        WriteZstd(int aLevel = 3)
+        WriteZstd(int aLevel = 3, int aThreads = 1)
         {
             Util::Raii sGuard([this]() { ZSTD_freeCStream(m_State); });
             m_State = ZSTD_createCStream();
             if (!m_State)
                 throw std::runtime_error("ReadZstd: fail to createCStream");
             check("initCStream", ZSTD_initCStream(m_State, aLevel));
+            check("ZSTD_c_checksumFlag", ZSTD_CCtx_setParameter(m_State, ZSTD_c_checksumFlag, 1));
+            if (aThreads > 1)
+                check("set ZSTD_c_nbWorkers", ZSTD_CCtx_setParameter(m_State, ZSTD_c_nbWorkers, aThreads));
             sGuard.dismiss();
         }
         Pair filter(const char* aSrc, size_t aSrcLen, char* aDst, size_t aDstLen) override
