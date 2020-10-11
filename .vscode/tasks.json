@@ -1,0 +1,53 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "meson: configure for debug",
+      "type": "shell",
+      "command": "meson build --buildtype=debug",
+      "problemMatcher": [],
+      "options": {
+        "cwd": "${workspaceFolder}/${relativeFileDirname}"
+      },
+      "presentation": {
+        "showReuseMessage": false,
+        "reveal": "always"
+      }
+    },
+    {
+      "label": "meson: build all",
+      "type": "shell",
+      "command": "ninja",
+      "problemMatcher": ["$gcc"],
+      "options": {
+        "cwd": "${workspaceFolder}/${relativeFileDirname}/build"
+      },
+      "presentation": {
+        "showReuseMessage": false,
+        "reveal": "always"
+      }
+    },
+    {
+      "label": "meson: run test",
+      "type": "shell",
+      "command": "./a.out -l all",
+      "problemMatcher": [],
+      "options": {
+        "cwd": "${workspaceFolder}/${relativeFileDirname}/build"
+      },
+      "dependsOn": [
+        "meson: build all"
+      ],
+      "presentation": {
+        "showReuseMessage": false,
+        "reveal": "always"
+      }
+    },
+    {
+      "label": "clang-format for all project",
+      "type": "shell",
+      "command": "clang-format -i -style=file */*.hpp */*.cpp",
+      "problemMatcher": []
+    }
+  ]
+}
