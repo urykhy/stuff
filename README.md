@@ -16,6 +16,7 @@ some information about stuff
 ### experiments:
 - af_alg - use AF_ALG socket on linux to avoid openssl.
 - aio - linux native async io
+- archive - single api to gzip/bz2/xz/zstd/lz4
 - asio_http - asio http server and client
 - asio_mysqld - asio mysql server
 - avx - bit of simd

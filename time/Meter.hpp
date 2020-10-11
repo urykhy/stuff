@@ -79,13 +79,14 @@ namespace Time {
     // old style meter
     class Meter
     {
-        const time_val m_Start;
+        time_val m_Start;
 
     public:
         Meter()
         : m_Start(get_time())
         {}
         time_val get() const { return get_time() - m_Start; }
+        void reset() { m_Start = get_time(); }
     };
 
     // new style, with <chrono>
