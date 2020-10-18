@@ -15,11 +15,11 @@ namespace Curl
 {
     inline File::Tmp download(const std::string& aUrl, const Curl::Client::Params& aParams)
     {
-        File::Tmp sTmp(File::get_filename(aUrl));   // FIXME: cut query
+        File::Tmp sTmp(File::getFilename(aUrl));   // FIXME: cut query
         Client sClient(aParams);
 
         int sCode = sClient.GET(aUrl, [&sTmp](void* aPtr, size_t aSize) -> size_t {
-            sTmp.write(aPtr, aSize);
+            sTmp.write((const char*)aPtr, aSize);
             return aSize;
         });
         if (sCode != 200)

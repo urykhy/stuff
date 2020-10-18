@@ -1,6 +1,8 @@
 #define BOOST_TEST_MODULE Suites
 #include <boost/test/unit_test.hpp>
 #include "Bloom.hpp"
+
+#define FILE_NO_ARCHIVE
 #include <file/File.hpp>
 
 // data.txt from https://github.com/daank94/bloomfilter/tree/master/data
@@ -11,8 +13,8 @@ BOOST_AUTO_TEST_CASE(basic)
     Bloom::Set sFilter(4 * 1024);
     std::vector<std::string> sStrings;
 
-    File::by_string("../data.txt", [&sStrings](auto&& s){
-        sStrings.push_back(std::move(s));
+    File::by_string("../data.txt", [&sStrings](std::string_view s){
+        sStrings.push_back(std::string(s));
     });
     BOOST_CHECK_EQUAL(sStrings.size(), 5000);
 

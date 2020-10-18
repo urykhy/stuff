@@ -152,7 +152,7 @@ BOOST_AUTO_TEST_CASE(Tmp)
 {
     Curl::Client::Params sParams;
     auto sTmp = Curl::download("http://127.0.0.1:8080/hello", sParams);
-    BOOST_TEST_MESSAGE("downloaded to " << sTmp.filename());
+    BOOST_TEST_MESSAGE("downloaded to " << sTmp.name());
     BOOST_CHECK_EQUAL(sTmp.size(), 12);
 
     // step 2. massive loader
@@ -163,7 +163,7 @@ BOOST_AUTO_TEST_CASE(Tmp)
     {
         std::unique_lock<std::mutex> lk(sMutex);
         sCounter++;
-        BOOST_TEST_MESSAGE("mass download " << aUrl << " to " << sTmp.filename());
+        BOOST_TEST_MESSAGE("mass download " << aUrl << " to " << sTmp.name());
         BOOST_CHECK_EQUAL(sTmp.size(), 12);
     });
     BOOST_CHECK_EQUAL(sCounter, sUrls.size());

@@ -1,83 +1,69 @@
 #pragma once
 
-#include <stdlib.h>
-#include <unistd.h>
-#include <string>
 #include <filesystem>
-#include <exception/Error.hpp>
+#include <memory>
 
-namespace File
-{
-    class Tmp
+#include <exception/Error.hpp>
+#include <unsorted/Raii.hpp>
+
+#include "Writer.hpp"
+
+namespace File {
+    class Tmp : public IWriter
     {
-        int m_FD = -1;
+        std::string                 m_Name;
+        std::unique_ptr<FileWriter> m_File;
+        std::unique_ptr<BufWriter>  m_Writer;
 
     public:
         using Error = Exception::Error<Tmp>;
-
-        Tmp(const Tmp&) = delete;
-        Tmp(Tmp&& aOther)
-        : m_FD(aOther.m_FD)
-        {
-            aOther.m_FD = -1;
-        }
-
-        Tmp& operator=(const Tmp&) = delete;
-        Tmp& operator=(Tmp&& aOther)
-        {
-            close();
-            m_FD = aOther.m_FD;
-            aOther.m_FD = -1;
-            return *this;
-        }
 
         Tmp(const std::string& aName)
         {
             auto sPath = std::filesystem::temp_directory_path();
             sPath /= aName + ".tmp-XXXXXX";
-            std::string sTmp = sPath.native();
+            m_Name = sPath.native();
 
-            m_FD = mkstemp(sTmp.data());
-            if (m_FD == -1)
+            int sFD = mkstemp(m_Name.data());
+            if (sFD == -1)
                 throw Error("File::Tmp: fail to create tmp file");
+
+            Util::Raii sGuard([sFD]() { ::close(sFD); });
+            m_File = std::make_unique<FileWriter>(sFD);
+            sGuard.dismiss();
+            m_Writer = std::make_unique<BufWriter>(m_File.get());
         }
-        ~Tmp() throw()
+
+        Tmp(Tmp&& aOld)
+        : m_Name(std::move(aOld.m_Name))
+        , m_File(std::move(aOld.m_File))
+        , m_Writer(std::move(aOld.m_Writer))
+        {}
+
+        void write(const char* aPtr, size_t aSize) override
         {
+            m_Writer->write(aPtr, aSize);
+        }
+        void flush() override
+        {
+            m_Writer->flush();
+        }
+        void sync() override
+        {
+            m_Writer->sync();
+        }
+        void close() override
+        {
+            m_Writer->close();
+        }
+        virtual ~Tmp() noexcept(false)
+        {
+            std::error_code ec; // avoid throw
+            std::filesystem::remove(name(), ec);
             close();
         }
 
-        void close()
-        {
-            if (m_FD != -1)
-            {
-                std::error_code ec; // avoid throw
-                std::filesystem::remove(filename(), ec);
-                ::close(m_FD);
-                m_FD = -1;
-            }
-        }
-
-        void write(const void* aPtr, ssize_t aSize)
-        {
-            ssize_t sLen = ::write(m_FD, aPtr, aSize);
-            if (sLen != aSize)
-                throw Error(Exception::with_errno("File:Tmp: fail to write into tmp file", errno));
-        }
-
-        std::string filename() const
-        {
-            std::string sTmp(PATH_MAX, '\0');
-            std::string sLink = "/proc/self/fd/" + std::to_string(m_FD);
-            int sSize = readlink(sLink.c_str(), sTmp.data(), sTmp.size());
-            if (sSize == -1)
-                throw Error(Exception::with_errno("File:Tmp: fail to get tmp file name", errno));
-            sTmp.resize(sSize);
-            return sTmp;
-        }
-
-        uint64_t size() const
-        {
-            return std::filesystem::file_size(filename());
-        }
+        const std::string& name() const { return m_Name; }
+        size_t             size() { return std::filesystem::file_size(name()); }
     };
 } // namespace File

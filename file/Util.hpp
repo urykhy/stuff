@@ -2,15 +2,14 @@
 
 #include <string>
 
-namespace File
-{
-    inline std::string get_filename(const std::string& str)
+namespace File {
+    inline std::string getFilename(const std::string& str)
     {
         size_t found = str.find_last_of("/");
         return str.substr(found + 1);
     }
 
-    inline std::string get_basename(const std::string& str)
+    inline std::string getBasename(const std::string& str)
     {
         size_t found = str.find_last_of("/");
         if (found == std::string::npos)
@@ -18,7 +17,7 @@ namespace File
         return str.substr(0, found);
     }
 
-    inline std::string get_extension(const std::string& aFilename, bool aSkipTmp = true)
+    inline std::string getExtension(const std::string& aFilename, bool aSkipTmp = true)
     {
         size_t found = aFilename.find_last_of(".");
         if (found == std::string::npos)

@@ -2,7 +2,6 @@
 
 #include <curl/Curl.hpp>
 #include <exception/Error.hpp>
-#include <file/Util.hpp>
 #include <format/Hex.hpp>
 #include <parser/Atoi.hpp>
 #include <parser/Base64.hpp>

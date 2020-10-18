@@ -2,6 +2,8 @@
 
 #include <sys/types.h>
 
+#include <memory>
+
 namespace Archive {
     struct IFilter
     {
@@ -26,4 +28,5 @@ namespace Archive {
         virtual Finish finish(char* aDst, size_t aDstLen) { return {0, true}; }
         virtual ~IFilter(){};
     };
+    using FilterPtr = std::unique_ptr<IFilter>;
 } // namespace Archive

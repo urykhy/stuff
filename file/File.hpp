@@ -1,62 +1,154 @@
 #pragma once
 
+#include <map>
 #include <string>
-#include <string_view>
-#include <fstream>
 
-#include "Decompress.hpp"
+#ifndef FILE_NO_ARCHIVE
+#include <archive/Bzip2.hpp>
+#include <archive/Gzip.hpp>
+#include <archive/LZ4.hpp>
+#include <archive/XZ.hpp>
+#include <archive/Zstd.hpp>
+#endif
 
-namespace File
-{
-    inline std::string to_string(const std::string& aFilename)
+#include "Reader.hpp"
+#include "Util.hpp"
+#include "Writer.hpp"
+
+namespace File {
+    enum FILTER
+    {
+        PLAIN,
+        GZIP,
+        BZ2,
+        XZ,
+        LZ4,
+        ZSTD
+    };
+
+    inline FILTER getFilterType(const std::string& aName)
+    {
+        const static std::map<std::string, FILTER> sDict{
+            {"gz", GZIP},
+            {"bz2", BZ2},
+            {"xz", XZ},
+            {"lz4", LZ4},
+            {"zst", ZSTD}};
+
+        FILTER sFormat = PLAIN;
+        auto   sIt     = sDict.find(getExtension(aName));
+        if (sIt != sDict.end())
+            sFormat = sIt->second;
+#ifdef FILE_NO_ARCHIVE
+        if (sFormat != PLAIN)
+            throw std::runtime_error("File library without archive support");
+#endif
+        return sFormat;
+    }
+
+    inline Archive::FilterPtr makeReadFilter(FILTER aFormat)
+    {
+        switch (aFormat) {
+#ifndef FILE_NO_ARCHIVE
+        case GZIP: return std::make_unique<Archive::ReadGzip>(); break;
+        case BZ2: return std::make_unique<Archive::ReadBzip2>(); break;
+        case XZ: return std::make_unique<Archive::ReadXZ>(); break;
+        case LZ4: return std::make_unique<Archive::ReadLZ4>(); break;
+        case ZSTD: return std::make_unique<Archive::ReadZstd>(); break;
+#endif
+        default: return nullptr;
+        }
+    }
+
+    inline Archive::FilterPtr makeWriteFilter(FILTER aFormat)
+    {
+        switch (aFormat) {
+#ifndef FILE_NO_ARCHIVE
+        case GZIP: return std::make_unique<Archive::WriteGzip>(); break;
+        case BZ2: return std::make_unique<Archive::WriteBzip2>(); break;
+        case XZ: return std::make_unique<Archive::WriteXZ>(); break;
+        case LZ4: return std::make_unique<Archive::WriteLZ4>(); break;
+        case ZSTD: return std::make_unique<Archive ::WriteZstd>(); break;
+#endif
+        default: return nullptr;
+        }
+    }
+
+    template <class T>
+    inline void read(const std::string& aName, T&& aHandler)
+    {
+        FileReader sFile(aName);
+        auto       sType = getFilterType(aName);
+
+        if (sType == PLAIN) {
+            BufReader sReader(&sFile);
+            aHandler(&sReader);
+        } else {
+            auto         sFilter = makeReadFilter(sType);
+            FilterReader sReader(&sFile, sFilter.get());
+            aHandler(&sReader);
+        }
+    }
+
+    template <class T>
+    inline void write(const std::string& aName, T&& aHandler)
+    {
+        FileWriter sFile(aName);
+        auto       sType = getFilterType(aName);
+
+        if (sType == PLAIN) {
+            BufWriter sWriter(&sFile);
+            aHandler(&sWriter);
+        } else {
+            auto         sFilter = makeWriteFilter(sType);
+            FilterWriter sWriter(&sFile, sFilter.get());
+            aHandler(&sWriter);
+        }
+    }
+
+    // read helpers
+
+    template <class T>
+    inline void by_chunk(const std::string& aName, T&& aHandler, size_t aBufferSize = DEFAULT_BUFFER_SIZE)
+    {
+        read(aName, [aHandler, aBufferSize](IReader* aReader) mutable {
+            std::string sTmp(aBufferSize, ' ');
+            while (not aReader->eof()) {
+                size_t sLen = aReader->read(sTmp.data(), sTmp.size());
+                aHandler(std::string_view(sTmp.data(), sLen));
+            }
+        });
+    }
+
+    inline std::string to_string(const std::string& aName)
+    {
+        std::string sResult;
+        by_chunk(aName, [&](const std::string_view aStr) mutable {
+            sResult.append(aStr.begin(), aStr.end());
+        });
+        return sResult;
+    }
+
+    template <class T>
+    void by_string(const std::string& aName, T aHandler)
     {
         std::string sBuf;
-        read_file(aFilename, [&sBuf](auto& aStream)
-        {
-            sBuf.assign((std::istreambuf_iterator<char>(aStream)), std::istreambuf_iterator<char>());
-        });
-        return sBuf;
-    }
-
-    template<class T>
-    void by_string(const std::string& aFilename, T aHandler)
-    {
-        read_file(aFilename, [aHandler = std::move(aHandler)](auto& aStream) mutable
-        {
-            std::string sBuf;
-            try {
-                while (std::getline(aStream, sBuf))
-                    aHandler(sBuf);
-            } catch (...) {
-                if (!aStream.eof())
-                    throw;
-            }
-        });
-    }
-
-    // aHandler must return number of bytes processed
-    template<class T>
-    inline void by_chunk(const std::string& aName, T aHandler, size_t aBufferSize = 1024 * 1024)
-    {
-        read_file(aName, [aHandler = std::move(aHandler), aBufferSize](auto& aStream)
-        {
-            uint64_t sOffset = 0;
-            std::string sBuffer(aBufferSize, '\0');
-            while (aStream.good())
-            {
-                try {
-                    aStream.read(sBuffer.data() + sOffset, aBufferSize - sOffset);
-                } catch (...) {
-                    if (!aStream.eof())
-                        throw;
+        by_chunk(aName, [&](const std::string_view aStr) {
+            sBuf.append(aStr.begin(), aStr.end());
+            size_t sPos = 0;
+            while (true) {
+                size_t sNL = sBuf.find('\n', sPos);
+                if (sNL != std::string::npos) {
+                    aHandler(std::string_view(&sBuf[sPos], sNL - sPos));
+                    sPos = sNL + 1;
+                } else {
+                    break;
                 }
-                auto sLen = aStream.gcount();
-                auto sUsed = aHandler(std::string_view(sBuffer.data(), sLen + sOffset));
-                if (sUsed == 0 and sLen + sOffset == aBufferSize)
-                    throw std::runtime_error("File::by_chunk: no progress");
-                sOffset = sLen + sOffset - sUsed;
-                memmove(sBuffer.data(), sBuffer.data() + sUsed, sOffset);
             }
+            sBuf.erase(0, sPos);
         });
+        if (!sBuf.empty())
+            aHandler(std::string_view(sBuf));
     }
-}
+
+} // namespace File

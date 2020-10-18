@@ -3,7 +3,7 @@
 #include <sys/resource.h>
 #include <sys/time.h>
 
-#include <file/List.hpp>
+#include <file/Dir.hpp>
 #include <time/Meter.hpp>
 
 #include "Metrics.hpp"
@@ -38,8 +38,8 @@ namespace Prometheus {
                 fclose(sFile);
             }
             m_RSS.set(sRSS * m_PageSize);
-            m_FDS.set(File::CountDir("/proc/self/fd"));
-            m_Thr.set(File::CountDir("/proc/self/task"));
+            m_FDS.set(File::countFiles("/proc/self/fd"));
+            m_Thr.set(File::countFiles("/proc/self/task"));
 
             struct rusage sUsage;
             if (getrusage(RUSAGE_SELF, &sUsage) == 0) {
