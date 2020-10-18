@@ -9,7 +9,7 @@
 #include "SRV.hpp"
 #include "TcpSocket.hpp"
 #include "TimerFd.hpp"
-#include "UdpPipe.hpp"
+#include "UdpSocket.hpp"
 
 #include <unsorted/Taskset.hpp>
 
@@ -48,34 +48,6 @@ BOOST_AUTO_TEST_CASE(socket)
     BOOST_TEST_MESSAGE("buffer size: " << sBufSize.first << "/" << sBufSize.second);
     BOOST_CHECK(sBufSize.first == 8192);
     BOOST_CHECK(sBufSize.second == 32768);
-}
-BOOST_AUTO_TEST_CASE(pipe)
-{
-    const std::string  BUFFER = "test123";
-    constexpr size_t   COUNT  = 12;
-    constexpr uint16_t PORT   = 2091;
-
-    Threads::Group sGroup;
-    sGroup.start([&]() {
-        Threads::Group         sCG;
-        Udp::Consumer<Message> sConsumer(6, PORT, [&](auto& aMsg) {
-            BOOST_CHECK_EQUAL(BUFFER.size() + 1, aMsg.size);
-            BOOST_CHECK_EQUAL(BUFFER, aMsg.data.data);
-        });
-        sConsumer.start(sCG);
-        std::this_thread::sleep_for(100ms);
-        sCG.wait();
-    });
-    std::this_thread::sleep_for(50ms);
-
-    sGroup.start([&]() {
-        Udp::Producer sProd("localhost", PORT);
-        for (size_t i = 0; i < COUNT; i++)
-            sProd.write(BUFFER.data(), BUFFER.size() + 1); // asciiZ string
-    });
-
-    std::this_thread::sleep_for(50ms);
-    sGroup.wait();
 }
 BOOST_AUTO_TEST_CASE(mread)
 {

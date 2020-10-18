@@ -3,9 +3,12 @@
 #include <chrono>
 using namespace std::chrono_literals;
 
+#include <thread>
+
+#include <networking/Resolve.hpp>
+#include <networking/UdpSocket.hpp>
+#include <unsorted/Uuid.hpp>
 #include "Jaeger.hpp"
-#include "unsorted/Uuid.hpp"
-#include <networking/UdpPipe.hpp>
 
 BOOST_AUTO_TEST_SUITE(Jaeger)
 BOOST_AUTO_TEST_CASE(simple)
@@ -31,7 +34,7 @@ BOOST_AUTO_TEST_CASE(simple)
 
     // serialize and send via UDP
     const std::string sMessage = sMetric.serialize();
-    Udp::Producer sUdp("jaeger-agent.jaeger.docker", 6831); // jaeger agent : 6831
+    Udp::Socket sUdp(Util::resolveAddr("jaeger-agent.jaeger.docker"), 6831); // jaeger agent : 6831
     sUdp.write(sMessage.data(), sMessage.size());
 }
 BOOST_AUTO_TEST_SUITE_END()
