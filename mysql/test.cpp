@@ -35,7 +35,7 @@ BOOST_AUTO_TEST_CASE(simple)
     Time::XMeter m1;
     c.Query("select emp_no, salary, from_date, to_date from salaries");
     c.Use([&sData](const MySQL::Row& aRow){
-        sData.push_back(Entry{aRow.as_int(0), aRow.as_int(1), aRow.as_str(2), aRow.as_str(3)});
+        sData.push_back(Entry{aRow[0].as_int64(), aRow[1].as_int64(), aRow[2].as_string(), aRow[3].as_string()});
     });
     BOOST_TEST_MESSAGE("elapsed " << m1.duration().count()/1000/1000.0 << " ms");
     BOOST_TEST_MESSAGE("got " << sData.size() << " rows");
@@ -53,7 +53,7 @@ BOOST_AUTO_TEST_CASE(pool)
     auto xc = sPool.get();
     xc->Query("select version()");
     xc->Use([](const MySQL::Row& aRow){
-        BOOST_TEST_MESSAGE(aRow.as_str(0));
+        BOOST_TEST_MESSAGE(aRow[0].as_string());
     });
     sPool.release(xc);
     BOOST_CHECK_EQUAL(xc, nullptr);
@@ -64,7 +64,7 @@ BOOST_AUTO_TEST_CASE(updateable)
     struct Departments
     {
         using Container = std::map<std::string, std::string>;
-        static void parse(Container& aDest, const MySQL::Row& aRow) { aDest[aRow.as_str(0)] = aRow.as_str(1); }
+        static void parse(Container& aDest, const MySQL::Row& aRow) { aDest[aRow[0].as_string()] = aRow[1].as_string(); }
         static std::string query() { return "select dept_no, dept_name from departments"; }
     };
 
@@ -84,6 +84,10 @@ BOOST_AUTO_TEST_CASE(upload)
         PRIMARY KEY  (`ID`)
     ) ENGINE=NDBCLUSTER DEFAULT CHARSET=utf8;
 */
+    MySQL::Connection c(cfg);
+    c.Query("use test");
+    c.Query("truncate table newdata");
+
     MySQL::Upload::Worker sWorker("/tmp/", cfg);
     MySQL::Upload::Queue  sQueue("/tmp/");
     Threads::Group tg;    // create last one
@@ -97,6 +101,13 @@ BOOST_AUTO_TEST_CASE(upload)
     sQueue.push(sList);
     Threads::sleep(2);
     // automagical `wait` in Threads::Group d-tor
+
+    unsigned sRowCount = 0;
+    c.Query("select count(1) from newdata");
+    c.Use([&sRowCount](const MySQL::Row& sRow) mutable {
+        sRowCount = sRow[0].as_int64();
+    });
+    BOOST_CHECK_EQUAL(sRowCount, 6);
 }
 BOOST_AUTO_TEST_CASE(prepare)
 {
@@ -161,7 +172,10 @@ BOOST_AUTO_TEST_CASE(format)
     const auto sResult = MySQL::Format<FormatPolicy>(sData);
     BOOST_CHECK_EQUAL_COLLECTIONS(sResult.begin(), sResult.end(), sExpected.begin(), sExpected.end());
 }
-BOOST_AUTO_TEST_CASE(task_queue)
+BOOST_AUTO_TEST_SUITE_END()
+
+BOOST_AUTO_TEST_SUITE(TaskQueue)
+BOOST_AUTO_TEST_CASE(simple)
 {
     // insert tasks:  INSERT INTO task_queue(task) VALUES ('one'),('two'),('three');
     // refresh tasks: UPDATE task_queue SET status='new';
@@ -199,9 +213,8 @@ BOOST_AUTO_TEST_CASE(task_queue)
     std::this_thread::sleep_for(1s);
     BOOST_CHECK_EQUAL(sCount, 3);
 }
-BOOST_AUTO_TEST_CASE(task_queue_mock)
+BOOST_AUTO_TEST_CASE(mock)
 {
-    size_t sCount = 0;
     struct TestHandler : MySQL::TaskQueue::HandlerFace
     {
         size_t&     m_Count;
@@ -222,18 +235,19 @@ BOOST_AUTO_TEST_CASE(task_queue_mock)
         }
         virtual ~TestHandler() {}
     };
+    size_t sCount = 0;
     TestHandler sHandler(sCount);
 
     MySQL::Mock::SqlSet sExpectedSQL{
         {"BEGIN", {}}
-      , {"SELECT id, task, worker, hint FROM task_queue WHERE (status = 'new') OR (status = 'started' and updated < DATE_SUB(NOW(), INTERVAL 1 HOUR)) ORDER BY id ASC LIMIT 1 FOR UPDATE SKIP LOCKED"
+      , {"SELECT id, task, worker, hint FROM task_queue WHERE  ((status = 'new') OR (status = 'started' AND (worker = 'test' OR updated < DATE_SUB(NOW(), INTERVAL 1 HOUR)))) ORDER BY id ASC LIMIT 1 FOR UPDATE SKIP LOCKED"
             , {{"12", "mock task", "", "existing hint"}}
         }
-      , {"UPDATE task_queue SET status='started', worker='test' WHERE id = 12", {}}
+      , {"UPDATE task_queue SET status = 'started', worker = 'test' WHERE id = 12", {}}
       , {"COMMIT", {}}
-      , {"UPDATE task_queue SET status='done' WHERE id = 12", {}}
+      , {"UPDATE task_queue SET status = 'done' WHERE id = 12", {}}
       , {"BEGIN", {}}
-      , {"SELECT id, task, worker, hint FROM task_queue WHERE (status = 'new') OR (status = 'started' and updated < DATE_SUB(NOW(), INTERVAL 1 HOUR)) ORDER BY id ASC LIMIT 1 FOR UPDATE SKIP LOCKED"
+      , {"SELECT id, task, worker, hint FROM task_queue WHERE  ((status = 'new') OR (status = 'started' AND (worker = 'test' OR updated < DATE_SUB(NOW(), INTERVAL 1 HOUR)))) ORDER BY id ASC LIMIT 1 FOR UPDATE SKIP LOCKED"
             , {}}
       , {"ROLLBACK", {}}
     };
@@ -245,6 +259,66 @@ BOOST_AUTO_TEST_CASE(task_queue_mock)
     sQueue.start(sGroup);
 
     std::this_thread::sleep_for(100ms);
+    BOOST_CHECK_EQUAL(sCount, 1);
+}
+BOOST_AUTO_TEST_CASE(mock_window)
+{
+    struct TestHandler : MySQL::TaskQueue::HandlerFace
+    {
+        size_t&     m_Count;
+        TestHandler(size_t& aCount) : m_Count(aCount) {}
+        std::string prepare(const std::string& task) noexcept override {
+            return "";
+        }
+        bool process(const std::string& task, const std::string& hint) override {
+            BOOST_TEST_MESSAGE("process task " << task << " with hint " << hint);
+            m_Count++;
+            return true;
+        }
+        void report(const char* e) noexcept override {
+            BOOST_TEST_MESSAGE("exception: " << e);
+        }
+        virtual ~TestHandler() {}
+    };
+    size_t sCount = 0;
+    TestHandler sHandler(sCount);
+
+    MySQL::Mock::SqlSet sExpectedSQL{
+        {"BEGIN", {}}
+      , {"SELECT id, task, worker, hint FROM task_queue WHERE id % 4 = 2 AND ((status = 'new') OR (status = 'started' AND (worker = 'test' OR updated < DATE_SUB(NOW(), INTERVAL 1 HOUR)))) ORDER BY id ASC LIMIT 1 FOR UPDATE SKIP LOCKED"
+            , {{"94", "test1", "", "hint1"}}
+        }
+      , {"SELECT count(1) FROM task_queue WHERE id % 4 = 2 AND id < 94 AND id >= (SELECT min(id) FROM task_queue WHERE id % 4 = 2 AND status='started')"
+            , {{"50"}} /* window is 42, we can't start this task */
+        }
+      , {"ROLLBACK", {}}
+      , {"BEGIN", {}}
+      , {"SELECT id, task, worker, hint FROM task_queue WHERE id % 4 = 2 AND ((status = 'new') OR (status = 'started' AND (worker = 'test' OR updated < DATE_SUB(NOW(), INTERVAL 1 HOUR)))) ORDER BY id ASC LIMIT 1 FOR UPDATE SKIP LOCKED"
+            , {{"94", "test1", "", "hint1"}}
+        }
+      , {"SELECT count(1) FROM task_queue WHERE id % 4 = 2 AND id < 94 AND id >= (SELECT min(id) FROM task_queue WHERE id % 4 = 2 AND status='started')"
+            , {{"40"}}  /* window is 42. process it */
+        }
+      , {"UPDATE task_queue SET status = 'started', worker = 'test' WHERE id = 94", {}}
+      , {"COMMIT", {}}
+      , {"UPDATE task_queue SET status = 'done' WHERE id = 94", {}}
+      , {"BEGIN", {}}
+      , {"SELECT id, task, worker, hint FROM task_queue WHERE id % 4 = 2 AND ((status = 'new') OR (status = 'started' AND (worker = 'test' OR updated < DATE_SUB(NOW(), INTERVAL 1 HOUR)))) ORDER BY id ASC LIMIT 1 FOR UPDATE SKIP LOCKED"
+            , {}}
+      , {"ROLLBACK", {}}
+    };
+    MySQL::Mock sMock(sExpectedSQL);
+
+    MySQL::TaskQueue::Config  sQueueCfg;
+    sQueueCfg.period = 1;
+    sQueueCfg.shard_count = 4;
+    sQueueCfg.shard_id = 2;
+    sQueueCfg.window = 42;
+    MySQL::TaskQueue::Manager sQueue(sQueueCfg, sMock, &sHandler);
+    Threads::Group sGroup;
+    sQueue.start(sGroup);
+
+    std::this_thread::sleep_for(1100ms);
     BOOST_CHECK_EQUAL(sCount, 1);
 }
 BOOST_AUTO_TEST_SUITE_END()

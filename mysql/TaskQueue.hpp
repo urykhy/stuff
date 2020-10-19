@@ -1,27 +1,34 @@
 #pragma once
 
+#include <fmt/core.h>
+
 #include <chrono>
 #include <optional>
 
-#include "Client.hpp"
-#include "Quote.hpp"
 #include <threads/Group.hpp>
 
-namespace MySQL::TaskQueue
-{
+#include "Client.hpp"
+#include "Quote.hpp"
+
+namespace MySQL::TaskQueue {
     struct Config
     {
-        std::string   table = "task_queue";
-        std::string   instance = "test";
-        time_t        period = 10;
-        bool          resume = true; // resume tasks by other worker
+        std::string table    = "task_queue";
+        std::string instance = "test";
+        time_t      period   = 10;
+        bool        resume   = true; // resume tasks by other worker
+
+        unsigned shard_count = 0; // sharding
+        unsigned shard_id    = 0;
+
+        unsigned window = 0; // max lag between started tasks
     };
 
     struct HandlerFace
     {
-        virtual std::string prepare(const std::string& task) noexcept = 0; // return hint to resume task. can be empty string
+        virtual std::string prepare(const std::string& task) noexcept                 = 0; // return hint to resume task. can be empty string
         virtual bool        process(const std::string& task, const std::string& hint) = 0; // return true if success
-        virtual void        report(const char* msg) noexcept = 0; // report exceptions
+        virtual void        report(const char* msg) noexcept                          = 0; // report exceptions
         virtual ~HandlerFace() {}
     };
 
@@ -40,62 +47,103 @@ namespace MySQL::TaskQueue
             std::string hint;
         };
 
+        std::string shard()
+        {
+            if (m_Config.shard_count > 0)
+                return "id % " + std::to_string(m_Config.shard_count) + " = " + std::to_string(m_Config.shard_id) + " AND";
+            return "";
+        }
+
+        std::string resume()
+        {
+            // resume only self tasks
+            if (!m_Config.resume)
+                return "worker = '" + m_Config.instance + "'";
+
+            // resume task by other worker
+            return "(worker = '" + m_Config.instance + "' OR updated < DATE_SUB(NOW(), INTERVAL 1 HOUR))";
+        }
+
         std::optional<Task> get_task()
         {
             std::optional<Task> sTask;
-            const std::string sQuery = "SELECT id, task, worker, hint "
-                                       "FROM " + m_Config.table + " "
-                                       "WHERE (status = 'new') OR (status = 'started' and "
-                                       + (m_Config.resume ? "updated < DATE_SUB(NOW(), INTERVAL 1 HOUR)" : "worker='" + m_Config.instance + "'") +
-                                       ") "
-                                       "ORDER BY id ASC LIMIT 1 "
-                                       "FOR UPDATE SKIP LOCKED";
-            m_Connection->Query(sQuery);
-            m_Connection->Use([&sTask](const MySQL::Row& aRow){
+            m_Connection->Query(fmt::format(
+                "SELECT id, task, worker, hint "
+                "FROM {0} "
+                "WHERE {1} ((status = 'new') OR (status = 'started' AND {2})) "
+                "ORDER BY id ASC LIMIT 1 FOR UPDATE SKIP LOCKED",
+                m_Config.table,
+                shard(),
+                resume()));
+            m_Connection->Use([&sTask](const MySQL::Row& aRow) {
                 sTask.emplace();
-                sTask->id     = aRow.as_int(0);
-                sTask->task   = aRow.as_str(1);
-                sTask->worker = aRow.as_str(2);
-                sTask->hint   = aRow.as_str(3);
+                sTask->id     = aRow[0].as_int64();
+                sTask->task   = aRow[1].as_string();
+                sTask->worker = aRow[2].as_string();
+                sTask->hint   = aRow[3].as_string();
             });
+            if (sTask and m_Config.window > 0) {
+                m_Connection->Query(fmt::format(
+                    "SELECT count(1) "
+                    "FROM {0} "
+                    "WHERE {1} id < {2} AND id >= (SELECT min(id) FROM {0} WHERE {1} status='started')",
+                    m_Config.table,
+                    shard(),
+                    sTask->id));
+                unsigned sCount = 0;
+                m_Connection->Use([&sCount](const MySQL::Row& aRow) {
+                    sCount = aRow[0].as_int64();
+                });
+                if (sCount > m_Config.window)
+                    sTask = std::nullopt;
+            }
             return sTask;
         }
 
         void one_step_i()
         {
             m_Connection->ensure();
-            m_Connection->Query("BEGIN");    // transaction required for `SELECT FOR UPDATE`
+            m_Connection->Query("BEGIN"); // start transaction for `SELECT FOR UPDATE`
             std::optional<Task> sTask = get_task();
-            if (!sTask)
-            {
+            if (!sTask) {
                 m_Connection->Query("ROLLBACK");
                 wait(m_Config.period);
                 return;
             }
 
             std::string sUpdateHint;
-            if (sTask->hint.empty())
-            {
+            if (sTask->hint.empty()) {
                 sTask->hint = m_Handler->prepare(sTask->task);
                 if (!sTask->hint.empty())
                     sUpdateHint = ", hint = '" + Quote(sTask->hint) + "' ";
             }
-            m_Connection->Query("UPDATE " + m_Config.table + " SET status='started', worker='" + m_Config.instance + "'" + sUpdateHint + " WHERE id = " + std::to_string(sTask->id));
+            m_Connection->Query(fmt::format(
+                "UPDATE {0} "
+                "SET status = 'started', worker = '{1}' {2}"
+                "WHERE id = {3}",
+                m_Config.table,
+                m_Config.instance,
+                sUpdateHint,
+                sTask->id));
             m_Connection->Query("COMMIT");
 
-            bool sStatusCode = m_Handler->process(sTask->task, sTask->hint);
-            const std::string sStatusStr = sStatusCode ? "done" : "error";
-            m_Connection->Query("UPDATE " + m_Config.table + " SET status='" + sStatusStr + "' WHERE id = " + std::to_string(sTask->id));
+            bool              sStatusCode = m_Handler->process(sTask->task, sTask->hint);
+            const std::string sStatusStr  = sStatusCode ? "done" : "error";
+
+            m_Connection->Query(fmt::format(
+                "UPDATE {0} "
+                "SET status = '{1}' "
+                "WHERE id = {2}",
+                m_Config.table,
+                sStatusStr,
+                sTask->id));
         }
 
         void one_step()
         {
-            try
-            {
+            try {
                 one_step_i();
-            }
-            catch (const std::exception& e)
-            {
+            } catch (const std::exception& e) {
                 m_Connection->close();
                 m_Handler->report(e.what());
                 wait(1); // do not flood with errors
@@ -118,14 +166,13 @@ namespace MySQL::TaskQueue
 
         void start(Threads::Group& aGroup)
         {
-            aGroup.start([this]()
-            {
+            aGroup.start([this]() {
                 while (!m_Exit)
                     one_step();
             });
-            aGroup.at_stop([this](){
+            aGroup.at_stop([this]() {
                 m_Exit = true;
             });
         }
     };
-}
+} // namespace MySQL::TaskQueue

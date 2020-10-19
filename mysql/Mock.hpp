@@ -50,7 +50,7 @@ namespace MySQL
                 if (m_SQL[m_Serial].query == aQuery)
                     BOOST_TEST_MESSAGE("MOCK: " << m_SQL[m_Serial].query);
                 else
-                    BOOST_REQUIRE_MESSAGE(false, "MOCK: Unexpected query: " << aQuery);
+                    BOOST_REQUIRE_MESSAGE(false, "MOCK: Unexpected query: " << aQuery << ", while waiting for: " << m_SQL[m_Serial].query);
 
                 if (!m_SQL[m_Serial].result.empty())
                 {

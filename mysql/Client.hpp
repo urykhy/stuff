@@ -27,28 +27,36 @@ namespace MySQL
         const MYSQL_ROW& m_Row;
         const unsigned m_Size;
 
-        void validate(unsigned id) const
+        class Cell
         {
-            if (id >= m_Size)
-                throw std::out_of_range(std::string("MySQL::Row"));
-            if (m_Row[id] == nullptr)
-                throw std::logic_error(std::string("MySQL::Null"));
-        }
+            const char* m_Ptr = nullptr;
+
+        public:
+            Cell(const char* aPtr) : m_Ptr(aPtr) {}
+
+            int64_t as_int64() const
+            {
+                if (is_null())
+                    throw std::logic_error(std::string("MySQL::Null"));
+                return Parser::Atoi<int64_t>(m_Ptr);
+            }
+            std::string as_string() const
+            {
+                if (is_null())
+                    throw std::logic_error(std::string("MySQL::Null"));
+                return m_Ptr;
+            }
+            bool is_null() const { return m_Ptr == nullptr; }
+        };
 
     public:
         Row(const MYSQL_ROW& aRow, const unsigned aSize)
         : m_Row(aRow), m_Size(aSize) {}
 
-        int64_t as_int(unsigned id) const
-        {
-            validate(id);
-            return Parser::Atoi<int64_t>(m_Row[id]);
-        }
-
-        std::string as_str(unsigned id) const
-        {
-            validate(id);
-            return m_Row[id];
+        Cell operator[](unsigned index) const {
+            if (index >= m_Size)
+                throw std::out_of_range(std::string("MySQL::Row"));
+            return Cell{m_Row[index]};
         }
     };
 
