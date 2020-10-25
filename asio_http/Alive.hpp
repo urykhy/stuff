@@ -2,10 +2,7 @@
 
 #include <set>
 
-#include <boost/multi_index/hashed_index.hpp>
-#include <boost/multi_index/member.hpp>
-#include <boost/multi_index/ordered_index.hpp>
-#include <boost/multi_index_container.hpp>
+#include <container/Pool.hpp>
 
 #include "Client.hpp"
 
@@ -66,89 +63,12 @@ namespace asio_http::Alive {
     };
     using ConnectionPtr = std::shared_ptr<Connection>;
 
-    namespace mi = boost::multi_index;
-
     class Manager : public std::enable_shared_from_this<Manager>
     {
-        enum
-        {
-            KEEP_ALIVE_TIMEOUT = 10
-        };
-
-        struct Rec
-        {
-            ConnectionPtr data;
-            uint64_t      serial;
-            time_t        deadline;
-
-            struct _key
-            {};
-            struct _deadline
-            {};
-
-            Rec()
-            : serial(0)
-            , deadline(0)
-            {}
-            Rec(ConnectionPtr aPtr)
-            : data(aPtr)
-            , serial(aPtr->serial)
-            , deadline(::time(nullptr) + KEEP_ALIVE_TIMEOUT)
-            {}
-        };
-
-        using Store = boost::multi_index_container<
-            Rec,
-            mi::indexed_by<
-                mi::ordered_unique<
-                    mi::tag<Rec::_key>, mi::member<Rec, uint64_t, &Rec::serial>>,
-                mi::ordered_non_unique<
-                    mi::tag<Rec::_deadline>, mi::member<Rec, time_t, &Rec::deadline>>>>;
-
-        using Set = std::map<Connection::Peer, Store>;
-        Set m_Alive;
-
-        std::optional<ConnectionPtr> get(const Connection::Peer& aPeer)
-        {
-            auto sIt = m_Alive.find(aPeer);
-            if (sIt == m_Alive.end())
-                return {};
-
-            auto& sList = sIt->second;
-            if (sList.empty())
-                return {};
-
-            auto& sKeyList = mi::get<Rec::_key>(sList);
-            auto  sKeyIt   = sKeyList.begin();
-            auto  sPtr     = sKeyIt->data;
-            sKeyList.erase(sKeyIt);
-
-            return sPtr;
-        }
-
-        void put(ConnectionPtr aPtr)
-        {
-            m_Alive[aPtr->peer].insert(aPtr);
-        }
-
-        void cleanup()
-        {
-            const time_t sNow = ::time(nullptr);
-            for (auto& [sPeer, sData] : m_Alive) {
-                auto& sStore = mi::get<Rec::_deadline>(sData);
-                while (!sStore.empty()) {
-                    auto sIt = sStore.begin();
-                    if (sIt->deadline < sNow)
-                        sStore.erase(sIt);
-                    else
-                        break;
-                }
-            }
-        }
-
-        asio::io_service&        m_Service;
-        asio::deadline_timer     m_Timer;
-        asio::io_service::strand m_Strand;
+        Container::KeyPool<Connection::Peer, ConnectionPtr> m_Alive;
+        asio::io_service&                                   m_Service;
+        asio::deadline_timer                                m_Timer;
+        asio::io_service::strand                            m_Strand;
 
     public:
         Manager(asio::io_service& aService)
@@ -163,7 +83,7 @@ namespace asio_http::Alive {
             m_Timer.expires_from_now(boost::posix_time::seconds(1));
             m_Timer.async_wait(m_Strand.wrap([this, p = this->shared_from_this()](boost::system::error_code ec) {
                 if (!ec) {
-                    cleanup();
+                    m_Alive.cleanup();
                     start_cleaner();
                 }
             }));
@@ -183,7 +103,7 @@ namespace asio_http::Alive {
         {
             auto             sParsed = Parser::url(aRequest.url);
             Connection::Peer sPeer{std::move(sParsed.host), std::move(sParsed.port)};
-            auto             sAlive = get(sPeer);
+            auto             sAlive = m_Alive.get(sPeer);
 
             if (sAlive) {
                 auto sPtr     = *sAlive;
@@ -264,7 +184,7 @@ namespace asio_http::Alive {
 
             aPtr->promise->set_value(std::move(sResponse));
             aPtr->promise.reset();
-            aPtr->manager->put(aPtr);
+            aPtr->manager->m_Alive.insert(aPtr->peer, aPtr);
         }
     };
 

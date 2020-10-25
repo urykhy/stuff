@@ -5,7 +5,7 @@
 #include <chrono>
 #include <map>
 
-#include "Merge.hpp"
+#include "Algorithm.hpp"
 #include "ListArray.hpp"
 #include "IoC.hpp"
 #include "RequestQueue.hpp"

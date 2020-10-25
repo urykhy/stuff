@@ -11,7 +11,9 @@
 
 namespace container
 {
-    using namespace boost::multi_index;
+    namespace {
+        namespace mi = boost::multi_index;
+    }
 
     template<class V>
     struct RequestQueue
@@ -29,9 +31,9 @@ namespace container
         struct by_deadline {};
         using Store = boost::multi_index_container<
             Rec,
-            indexed_by<
-                ordered_unique    <tag<by_serial>,   member<Rec, uint64_t, &Rec::serial>>,
-                ordered_non_unique<tag<by_deadline>, member<Rec, uint64_t, &Rec::deadline>>
+            mi::indexed_by<
+                mi::ordered_unique    <mi::tag<by_serial>,   mi::member<Rec, uint64_t, &Rec::serial>>,
+                mi::ordered_non_unique<mi::tag<by_deadline>, mi::member<Rec, uint64_t, &Rec::deadline>>
             >
         >;
         using    Lock = std::unique_lock<std::mutex>;

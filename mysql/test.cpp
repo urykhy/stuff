@@ -45,9 +45,10 @@ BOOST_AUTO_TEST_CASE(simple)
 }
 BOOST_AUTO_TEST_CASE(pool)
 {
-    Container::Pool<MySQL::Connection> sPool([](){
+    using Ptr = std::shared_ptr<MySQL::Connection>;
+    Container::ProducePool<Ptr> sPool([](){
         return std::make_shared<MySQL::Connection>(cfg);
-    }, [](auto c) -> bool {
+    }, [](Ptr c) -> bool {
         return c->ping();
     });
     auto xc = sPool.get();
@@ -55,7 +56,7 @@ BOOST_AUTO_TEST_CASE(pool)
     xc->Use([](const MySQL::Row& aRow){
         BOOST_TEST_MESSAGE(aRow[0].as_string());
     });
-    sPool.release(xc);
+    sPool.insert(xc);
     BOOST_CHECK_EQUAL(xc, nullptr);
     BOOST_CHECK_EQUAL(sPool.size(), 1);
 }
