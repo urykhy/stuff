@@ -40,7 +40,9 @@ def _get_names(name, labels):
     project = labels.get('com.docker.compose.project')
     if project and project.endswith("docker"):
         project = project[:-6]
-    if service > 0 and project > 0:
+    if service > 0 and service == project:
+        name = str(service)
+    elif service > 0 and project > 0:
         name = '%s.%s' % (str(service), str(project))
     #name = name.replace("_",".") # if enabled - dns zone filled with crapy names from `--rm` containers
     return [name]
