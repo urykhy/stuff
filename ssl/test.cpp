@@ -19,7 +19,21 @@ BOOST_AUTO_TEST_CASE(encrypt_aes_gcm)
     using namespace SSLxx::GCM;
     const std::string sMessage = "test123";
     const std::string sKey = SSLxx::Scrypt("123","salt", 32); // 256bit key for aes256
-    Config sCfg{EVP_aes_256_gcm(), "0123456789abcdef", sKey};
+    Config sCfg{EVP_aes_256_gcm(), "0123456789ab", sKey}; // 96 bit iv
+    auto sResult = Encrypt(sMessage, sCfg);
+    BOOST_TEST_MESSAGE("key:       " << Format::to_hex(sKey));
+    BOOST_TEST_MESSAGE("plain:     " << Format::to_hex(sMessage));
+    BOOST_TEST_MESSAGE("encrypted: " << Format::to_hex(sResult.data));
+    BOOST_TEST_MESSAGE("tag:       " << Format::to_hex(sResult.tag));
+    auto sDecrypt = Decrypt(sResult, sCfg);
+    BOOST_CHECK_EQUAL(sDecrypt, sMessage);
+}
+BOOST_AUTO_TEST_CASE(encrypt_chacha20_poly1305)
+{
+    using namespace SSLxx::GCM;
+    const std::string sMessage = "test123";
+    const std::string sKey = SSLxx::Scrypt("123","salt", 32); // 256bit key
+    Config sCfg{EVP_chacha20_poly1305(), "0123456789ab", sKey}; // 96 bit iv
     auto sResult = Encrypt(sMessage, sCfg);
     BOOST_TEST_MESSAGE("key:       " << Format::to_hex(sKey));
     BOOST_TEST_MESSAGE("plain:     " << Format::to_hex(sMessage));
