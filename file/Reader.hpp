@@ -43,7 +43,7 @@ namespace File {
                 throw Exception::ErrnoError("FileReader: fail to fadvise: " + aName);
             sGuard.dismiss();
         }
-        size_t read(char* aPtr, size_t aSize) override
+        size_t read(void* aPtr, size_t aSize) override
         {
             ssize_t sRC = ::read(m_FD, aPtr, aSize);
             if (sRC == -1)
@@ -102,8 +102,9 @@ namespace File {
         , m_Buffer(aLen, ' ')
         {}
 
-        size_t read(char* aPtr, size_t aLen) override
+        size_t read(void* aPtr, size_t aLen) override
         {
+            char* sPtr = (char*)aPtr;
             if (eof())
                 return 0;
 
@@ -112,7 +113,7 @@ namespace File {
                 if (avail() == 0)
                     refill();
                 auto sMinSize = std::min(aLen - sUsed, avail());
-                memcpy(aPtr + sUsed, ptr(), sMinSize);
+                memcpy(sPtr + sUsed, ptr(), sMinSize);
                 m_Pos += sMinSize;
                 sUsed += sMinSize;
                 if (eof())
@@ -121,8 +122,8 @@ namespace File {
             return sUsed;
         }
 
-        bool eof() { return avail() == 0 and m_Reader->eof(); }
-        void close() { m_Reader->close(); }
+        bool eof() override { return avail() == 0 and m_Reader->eof(); }
+        void close() override { m_Reader->close(); }
     };
 
     class FilterReader : public BufReader
@@ -142,8 +143,9 @@ namespace File {
         , m_Filter(aFilter)
         {}
 
-        size_t read(char* aPtr, size_t aLen) override
+        size_t read(void* aPtr, size_t aLen) override
         {
+            char* sPtr = (char*)aPtr;
             if (m_Eof)
                 return 0;
 
@@ -154,11 +156,11 @@ namespace File {
 
                 size_t sAvailSrc = avail();
                 if (sAvailSrc > 0) {
-                    auto sInfo = m_Filter->filter(ptr(), avail(), aPtr + sUsed, aLen - sUsed);
+                    auto sInfo = m_Filter->filter(ptr(), avail(), sPtr + sUsed, aLen - sUsed);
                     m_Pos += sInfo.usedSrc;
                     sUsed += sInfo.usedDst;
                 } else if (m_Reader->eof()) {
-                    auto sInfo = m_Filter->finish(aPtr + sUsed, aLen - sUsed);
+                    auto sInfo = m_Filter->finish(sPtr + sUsed, aLen - sUsed);
                     sUsed += sInfo.usedDst;
                     if (sInfo.done) {
                         m_Eof = true;
@@ -170,7 +172,25 @@ namespace File {
         }
 
         bool eof() override { return m_Eof; }
-        void close() { m_Reader->close(); }
+        void close() override { m_Reader->close(); }
+    };
+
+    class ExactReader : public IExactReader
+    {
+        IReader* m_Parent;
+    public:
+        ExactReader(IReader* aParent)
+        : m_Parent(aParent) {}
+
+        size_t read(void* aPtr, size_t aSize) override
+        {
+            size_t sSize = m_Parent->read(aPtr, aSize);
+            if (sSize < aSize)
+                throw std::invalid_argument("ExactReader: eof");
+            return sSize;
+        }
+        bool eof() override { return m_Parent->eof(); }
+        void close() override { m_Parent->close(); }
     };
 
 } // namespace File

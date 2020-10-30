@@ -30,7 +30,7 @@ namespace File {
             if (m_FD == -1)
                 throw Exception::ErrnoError("FileWriter: fail to open: " + aName);
         }
-        void write(const char* aPtr, size_t aSize) override
+        void write(const void* aPtr, size_t aSize) override
         {
             ssize_t sRC = ::write(m_FD, aPtr, aSize);
             if (sRC == -1)
@@ -83,12 +83,13 @@ namespace File {
         , m_Buffer(aLen, ' ')
         {}
 
-        void write(const char* aPtr, size_t aSize) override
+        void write(const void* aPtr, size_t aSize) override
         {
-            size_t sUsed = 0;
+            const char* sPtr  = (const char*)aPtr;
+            size_t      sUsed = 0;
             while (sUsed < aSize) {
                 size_t sMin = std::min(aSize - sUsed, avail());
-                memcpy(ptr(), aPtr + sUsed, sMin);
+                memcpy(ptr(), sPtr + sUsed, sMin);
                 m_End += sMin;
                 sUsed += sMin;
                 if (m_End == m_Buffer.size()) {
@@ -130,11 +131,12 @@ namespace File {
         , m_Filter(aFilter)
         {}
 
-        void write(const char* aPtr, size_t aSize) override
+        void write(const void* aPtr, size_t aSize) override
         {
-            size_t sUsed = 0;
+            const char* sPtr  = (const char*)aPtr;
+            size_t      sUsed = 0;
             while (sUsed < aSize) {
-                auto sInfo = m_Filter->filter(aPtr + sUsed, aSize - sUsed, ptr(), avail());
+                auto sInfo = m_Filter->filter(sPtr + sUsed, aSize - sUsed, ptr(), avail());
                 m_End += sInfo.usedDst;
                 sUsed += sInfo.usedSrc;
                 if (m_End == m_Buffer.size()) {
@@ -144,6 +146,8 @@ namespace File {
         }
         void close() override
         {
+            if (m_Filter == nullptr)
+                return;
             while (true) {
                 auto sInfo = m_Filter->finish(ptr(), avail());
                 m_End += sInfo.usedDst;
@@ -152,11 +156,11 @@ namespace File {
                     break;
             }
             m_Writer->close();
+            m_Filter = nullptr;
         }
         virtual ~FilterWriter()
         {
             close();
         }
     };
-
 } // namespace File

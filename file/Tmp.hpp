@@ -40,7 +40,7 @@ namespace File {
         , m_Writer(std::move(aOld.m_Writer))
         {}
 
-        void write(const char* aPtr, size_t aSize) override
+        void write(const void* aPtr, size_t aSize) override
         {
             m_Writer->write(aPtr, aSize);
         }

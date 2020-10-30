@@ -19,7 +19,7 @@ namespace Curl
         Client sClient(aParams);
 
         int sCode = sClient.GET(aUrl, [&sTmp](void* aPtr, size_t aSize) -> size_t {
-            sTmp.write((const char*)aPtr, aSize);
+            sTmp.write(aPtr, aSize);
             return aSize;
         });
         if (sCode != 200)
