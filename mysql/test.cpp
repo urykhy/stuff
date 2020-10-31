@@ -75,6 +75,18 @@ BOOST_AUTO_TEST_CASE(updateable)
     auto r = upd.find("d008");
     BOOST_CHECK(r);
     BOOST_CHECK_EQUAL(r.value(), "Research");
+
+    // dump and restore
+    cbor::omemstream sDump;
+    upd.dump(&sDump);
+    BOOST_TEST_MESSAGE("serialized to " << sDump.str().size() << " bytes");
+
+    cbor::imemstream sRestore(sDump.str());
+    MySQL::Updateable<Departments> upd2;
+    upd2.restore(&sRestore);
+    r = upd2.find("d006");
+    BOOST_CHECK_EQUAL(r.value(), "Quality Management");
+
 };
 BOOST_AUTO_TEST_CASE(upload)
 {
