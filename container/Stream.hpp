@@ -1,69 +1,103 @@
 #pragma once
 
-#include <cstdint>
 #include <string.h>
+
+#include <cstdint>
 #include <string>
-#include <boost/utility/string_ref.hpp>
+#include <string_view>
 
-namespace Container
-{
-    typedef std::string binary;
+#include <file/Interface.hpp>
 
-    class imemstream
+namespace Container {
+    using binary = std::string;
+
+    class imemstream : public File::IMemReader
     {
-        const boost::string_ref m_Data;
-        size_t m_Offset = 0;
-        void ensure(size_t aSize) { if (aSize + m_Offset > m_Data.size()) throw EndOfBuffer(); }
+        const std::string_view m_Data;
+        size_t                 m_Offset = 0;
+
+        void ensure(size_t aSize)
+        {
+            if (aSize + m_Offset > m_Data.size())
+                throw EndOfBuffer();
+        }
+
     public:
+        struct EndOfBuffer : std::invalid_argument
+        {
+            EndOfBuffer()
+            : std::invalid_argument("Premature end of buffer")
+            {}
+        };
 
-        struct EndOfBuffer : std::runtime_error { EndOfBuffer() : std::runtime_error("End of buffer") {} };
+        imemstream(const binary& aBuffer)
+        : m_Data((const char*)&aBuffer[0], aBuffer.size())
+        {}
 
-        imemstream(const binary& aBuffer): m_Data((const char*)&aBuffer[0], aBuffer.size()) { }
-
-        boost::string_ref substring(size_t aSize) {
-            ensure(aSize);
-            boost::string_ref sResult = m_Data.substr(m_Offset, aSize);
-            m_Offset += aSize;
-            return sResult;
-        }
-
-        void read(void* aBuffer, size_t aSize) {
-            ensure(aSize);
-            memcpy(aBuffer, m_Data.data() + m_Offset, aSize);
-            m_Offset += aSize;
-        }
-
-        template<class T>
-        void read(T& aData) {
+        template <class T>
+        void read(T& aData)
+        {
             read(&aData, sizeof(aData));
         }
 
-        void unget() {
+        void unget()
+        {
             if (m_Offset == 0)
                 throw EndOfBuffer();
             m_Offset--;
         }
 
-        void skip(size_t aSize) {
+        void skip(size_t aSize)
+        {
             ensure(aSize);
             m_Offset += aSize;
         }
 
-        bool empty() const { return m_Data.empty(); }
+        std::string_view rest() { return substring(m_Data.size() - m_Offset); }
 
-        boost::string_ref rest() { return substring(m_Data.size() - m_Offset); }
+        // File::IMemReader
+        std::string_view substring(size_t aSize) override
+        {
+            ensure(aSize);
+            std::string_view sResult = m_Data.substr(m_Offset, aSize);
+            m_Offset += aSize;
+            return sResult;
+        }
+
+        // File::IReader
+        size_t read(void* aBuffer, size_t aSize) override
+        {
+            ensure(aSize);
+            memcpy(aBuffer, m_Data.data() + m_Offset, aSize);
+            m_Offset += aSize;
+            return aSize;
+        }
+
+        bool eof() override { return m_Data.empty(); }
+        void close() override {}
     };
 
-    class omemstream
+    class omemstream : public File::IWriter
     {
-        binary& m_Data;
+        std::string m_Data;
+
     public:
+        omemstream(const unsigned aLen = File::DEFAULT_BUFFER_SIZE)
+        {
+            m_Data.reserve(aLen);
+        }
 
-        omemstream(binary& aData) : m_Data(aData) {}
+        std::string& str() { return m_Data; }
+
         void put(uint8_t aByte) { m_Data.push_back(aByte); }
-        void write(const void* aData, size_t aSize) {  m_Data.insert(m_Data.end(), (const uint8_t*)aData, (const uint8_t*)aData + aSize); }
 
-        template<class T>
+        template <class T>
         void write(const T& t) { write(&t, sizeof(t)); }
+
+        // File::IWriter
+        void write(const void* aData, size_t aSize) override { m_Data.insert(m_Data.end(), (const uint8_t*)aData, (const uint8_t*)aData + aSize); }
+        void flush() override {}
+        void sync() override {}
+        void close() override {}
     };
-}
+} // namespace Container
