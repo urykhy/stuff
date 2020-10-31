@@ -43,8 +43,9 @@ BOOST_AUTO_TEST_CASE(simple)
                 return sResult.write(aStream, yield);
             }
             OkResponse sOk;
-            sOk.serialize(sBuffer);
-            return write(aStream, yield, sBuffer);
+            asio_mysql::omemstream sStream;
+            sOk.serialize(sStream);
+            return write(aStream, yield, sStream.str());
         }
         ~Impl() override {}
     };

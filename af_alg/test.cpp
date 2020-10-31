@@ -105,14 +105,13 @@ BOOST_AUTO_TEST_CASE(auth_enc)
     const std::string sInput("one 16byte block");
 
     // authenc.c#crypto_authenc_extractkeys
-    std::string sKey;
-    Container::omemstream sBuilder(sKey);
+    Container::omemstream sBuilder;
     sBuilder.write((uint16_t)8);    // rta_len
     sBuilder.write((uint16_t)1);    // rta_type CRYPTO_AUTHENC_KEYA_PARAM
     sBuilder.write(htobe32(PASSSWORD16.size()));    // enckeylen
-    sKey.append(PASSSWORD16);
+    sBuilder.str().append(PASSSWORD16);
 
-    af_alg::CryptoCfg sCfg{"authenc(hmac(sha1),cbc(aes))", IV16, sKey, true, 8};
+    af_alg::CryptoCfg sCfg{"authenc(hmac(sha1),cbc(aes))", IV16, sBuilder.str(), true, 8};
     af_alg::CryptoImpl sImpl(sCfg);
     const std::string sEncrypted = sImpl(sInput);
     BOOST_TEST_MESSAGE("encrypted: " << Format::to_hex(sEncrypted));

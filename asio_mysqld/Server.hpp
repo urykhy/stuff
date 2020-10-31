@@ -27,13 +27,14 @@ namespace asio_mysql
     {
         beast::error_code  ec;
         Container::binary sBuffer;
+        omemstream sStream;
 
         aStream.expires_after(std::chrono::seconds(2));
 
         // server greeting
         Handshake10 sHandshake;
-        sHandshake.serialize(sBuffer);
-        ec = write(aStream, yield, sBuffer);
+        sHandshake.serialize(sStream);
+        ec = write(aStream, yield, sStream.str());
         if (ec)
             return;
 
@@ -46,8 +47,8 @@ namespace asio_mysql
 
         // send ok packet
         OkResponse sOk;
-        sOk.serialize(sBuffer);
-        ec = write(aStream, yield, sBuffer);
+        sOk.serialize(sStream);
+        ec = write(aStream, yield, sStream.str());
         if (ec)
             return;
 

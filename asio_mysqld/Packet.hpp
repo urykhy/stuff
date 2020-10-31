@@ -30,7 +30,7 @@ namespace asio_mysql
     struct omemstream : Container::omemstream
     {
         using Container::omemstream::write;
-        omemstream(Container::binary& aData) : Container::omemstream(aData) {}
+        omemstream() {}
 
         void writeLenEnc(uint64_t aValue) // length encode
         {
@@ -108,10 +108,9 @@ namespace asio_mysql
         char        reserved[10]        = {"\x0\x0\x0\x0\x0\x0\x0\x0\x0"};
         char        auth_plugin_data_l  = 0;    // Rest of the plugin provided data (scramble). LengthEncodedString
 
-        void serialize(binary& aBinary) const
+        void serialize(omemstream& sStream) const
         {
-            aBinary.clear();
-            omemstream sStream(aBinary);
+            sStream.str().clear();
             sStream.write(this, sizeof(*this));
         }
     } __attribute__((packed));
@@ -142,29 +141,27 @@ namespace asio_mysql
         uint32_t last_insert_id = 0;
         std::string status;
 
-        void serialize(binary& aBinary) const
+        void serialize(omemstream& aStream) const
         {
-            aBinary.clear();
-            omemstream sStream(aBinary);
-            sStream.put(header);
-            sStream.writeLenEnc(affected_rows);
-            sStream.writeLenEnc(last_insert_id);
+            aStream.str().clear();
+            aStream.put(header);
+            aStream.writeLenEnc(affected_rows);
+            aStream.writeLenEnc(last_insert_id);
             uint16_t status_flags = 0;  // FIXME: capabilities & CLIENT_TRANSACTIONS
-            sStream.write(&status_flags, sizeof(status_flags));
-            sStream.write(status.data(), status.size());
+            aStream.write(&status_flags, sizeof(status_flags));
+            aStream.write(status.data(), status.size());
         }
     };
 
     struct EofPacket
     {
-        void serialize(binary& aBinary) const
+        void serialize(omemstream& aStream) const
         {
-            aBinary.clear();
-            omemstream sStream(aBinary);
-            sStream.write(uint8_t(0xFE));
+            aStream.str().clear();
+            aStream.write(uint8_t(0xFE));
             // FIXME: capabilities & CLIENT_PROTOCOL_41
-            sStream.write(uint16_t(0)); // number of warnings
-            sStream.write(uint16_t(0)); // server status
+            aStream.write(uint16_t(0)); // number of warnings
+            aStream.write(uint16_t(0)); // server status
         }
     };
 
@@ -193,41 +190,40 @@ namespace asio_mysql
         uint16_t column_flags  = 0;     // Column Definition Flags
         uint8_t  decimals      = 0;     // decimals
 
-        void serialize(binary& aBinary) const
+        void serialize(omemstream& aStream) const
         {
-            aBinary.clear();
-            omemstream sStream(aBinary);
-            sStream.writeLenEnc("def"); // catalog
-            sStream.writeLenEnc(schema);
-            sStream.writeLenEnc(table);
-            sStream.writeLenEnc("");    // original table
-            sStream.writeLenEnc(name);
-            sStream.writeLenEnc("");    // original name
-            sStream.write(uint8_t(0x0c));
-            sStream.write(character_set);
-            sStream.write(column_length);
-            sStream.write(column_type);
-            sStream.write(column_flags);
-            sStream.write(decimals);
-            sStream.write(uint16_t(0));
+            aStream.str().clear();
+            aStream.writeLenEnc("def"); // catalog
+            aStream.writeLenEnc(schema);
+            aStream.writeLenEnc(table);
+            aStream.writeLenEnc("");    // original table
+            aStream.writeLenEnc(name);
+            aStream.writeLenEnc("");    // original name
+            aStream.write(uint8_t(0x0c));
+            aStream.write(character_set);
+            aStream.write(column_length);
+            aStream.write(column_type);
+            aStream.write(column_flags);
+            aStream.write(decimals);
+            aStream.write(uint16_t(0));
         }
     };
 
     struct ResultRow
     {
-        std::string data;
+        std::shared_ptr<omemstream> stream;
+
+        ResultRow() : stream(std::make_shared<omemstream>()) {}
 
         ResultRow& append(const std::string& aData)
         {
-            omemstream sStream(data);
-            sStream.writeLenEnc(aData);
+            stream->writeLenEnc(aData);
             return *this;
         }
 
         ResultRow& append() // null
         {
-            omemstream sStream(data);
-            sStream.write(uint8_t(0xFB));
+            stream->write(uint8_t(0xFB));
             return *this;
         }
     };
@@ -254,38 +250,37 @@ namespace asio_mysql
         {
             uint8_t sSerial = 1;
             beast::error_code ec;
-            Container::binary sBuffer;
 
             // number of fields
-            omemstream sStream(sBuffer);
+            omemstream sStream;
             sStream.writeLenEnc(columns.size());
-            ec = asio_mysql::write(aStream, yield[ec], sBuffer, sSerial++);
+            ec = asio_mysql::write(aStream, yield[ec], sStream.str(), sSerial++);
             if (ec) return ec;
 
             // catalog
             for (auto& x : columns)
             {
-                x.serialize(sBuffer);
-                ec = asio_mysql::write(aStream, yield[ec], sBuffer, sSerial++);
+                x.serialize(sStream);
+                ec = asio_mysql::write(aStream, yield[ec], sStream.str(), sSerial++);
                 if (ec) return ec;
             }
 
             // EOF marker
             EofPacket sEof;
-            sEof.serialize(sBuffer);
-            ec = asio_mysql::write(aStream, yield[ec], sBuffer, sSerial++);
+            sEof.serialize(sStream);
+            ec = asio_mysql::write(aStream, yield[ec], sStream.str(), sSerial++);
             if (ec) return ec;
 
             // actual data. each row is a packet
             for (auto& x : rows)
             {
-                ec = asio_mysql::write(aStream, yield[ec], x.data, sSerial++);
+                ec = asio_mysql::write(aStream, yield[ec], x.stream->str(), sSerial++);
                 if (ec) return ec;
             }
 
             // EOF marker
-            sEof.serialize(sBuffer);
-            ec = asio_mysql::write(aStream, yield[ec], sBuffer, sSerial++);
+            sEof.serialize(sStream);
+            ec = asio_mysql::write(aStream, yield[ec], sStream.str(), sSerial++);
             return ec;
         }
     };

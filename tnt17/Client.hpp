@@ -77,34 +77,31 @@ namespace tnt17
         Request formatSelect(const IndexSpec& aIndex, const K& aKey)
         {
             const uint64_t sSerial = m_Serial++;
-            MsgPack::binary sBuffer;
-            MsgPack::omemstream sStream(sBuffer);
+            MsgPack::omemstream sStream;
             formatHeader(sStream, CODE_SELECT, sSerial);
             formatSelectBody(sStream, m_Space, aIndex);
             T::formatKey(sStream, aKey);
-            return Request{sSerial, sBuffer};
+            return Request{sSerial, sStream.str()};
         }
 
         Request formatInsert(const T& aData)
         {
             const uint64_t sSerial = m_Serial++;
-            MsgPack::binary sBuffer;
-            MsgPack::omemstream sStream(sBuffer);
+            MsgPack::omemstream sStream;
             formatHeader(sStream, CODE_INSERT, sSerial);
             formatInsertBody(sStream, m_Space, aData);
-            return Request{sSerial, sBuffer};
+            return Request{sSerial, sStream.str()};
         }
 
         template<class K>
         Request formatDelete(const IndexSpec& aIndex, const K& aKey)
         {
             const uint64_t sSerial = m_Serial++;
-            MsgPack::binary sBuffer;
-            MsgPack::omemstream sStream(sBuffer);
+            MsgPack::omemstream sStream;
             formatHeader(sStream, CODE_DELETE, sSerial);
             formatDeleteBody(sStream, m_Space, aIndex);
             T::formatKey(sStream, aKey);
-            return Request{sSerial, sBuffer};
+            return Request{sSerial, sStream.str()};
         }
 
         void call(const Request& aRequest, Handler&& aHandler, unsigned aTimeoutMS = 10)
@@ -217,7 +214,7 @@ namespace tnt17
                 yield async_read(m_Socket
                                , boost::asio::buffer(&m_Greetings, sizeof(m_Greetings))
                                , resume_reader());
-                BOOST_TEST_MESSAGE("greeting from " << boost::string_ref(m_Greetings.version, 64));
+                BOOST_TEST_MESSAGE("greeting from " << std::string_view(m_Greetings.version, 64));
                 on_established();
 
                 while (true)

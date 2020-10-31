@@ -87,7 +87,8 @@ namespace Container {
             m_Data.reserve(aLen);
         }
 
-        std::string& str() { return m_Data; }
+        std::string&       str() { return m_Data; }
+        const std::string& str() const { return m_Data; }
 
         void put(uint8_t aByte) { m_Data.push_back(aByte); }
 
