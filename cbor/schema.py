@@ -21,7 +21,7 @@ def write_hpp(j, f):
         print >>f, x["name"]+" = std::nullopt;"
     print >>f, "}"
 
-    print >>f, "void write(cbor::omemstream& out) const {"
+    print >>f, "void cbor_write(cbor::ostream& out) const {"
     print >>f, "size_t sCount = 0;"
     for x in j["fields"]:
         print >>f, "if ("+x["name"]+") {sCount++;}"
@@ -34,7 +34,7 @@ def write_hpp(j, f):
         print >>f, "}"
     print >>f, "}"
 
-    print >>f, "void read(cbor::imemstream& in) {"
+    print >>f, "void cbor_read(cbor::istream& in) {"
     print >>f, "size_t sCount = cbor::get_uint(in, cbor::ensure_type(in, cbor::CBOR_MAP));"
     print >>f, "for (size_t i = 0; i < sCount; i++) {"
     print >>f, "uint32_t sId = 0; cbor::read(in, sId);"
