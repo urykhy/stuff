@@ -1,5 +1,7 @@
 #pragma once
 
+#include <boost/core/noncopyable.hpp>
+
 #include <mpl/Mpl.hpp>
 
 #include "System.hpp"
@@ -7,17 +9,13 @@
 namespace ECS {
 
     template <class... V>
-    class Entity
+    class Entity : public boost::noncopyable
     {
     protected:
         using S = System<V...>;
         uint64_t m_ID;
 
         Entity() = delete;
-
-        Entity(const Entity& aOther) = delete;
-        Entity& operator=(const Entity& aOther) = delete;
-
         Entity(uint64_t aID)
         : m_ID(aID)
         {}
