@@ -118,14 +118,18 @@ namespace XTest {
             }
             return sLinks.value();
         }
-        void link(uint32_t id, uint32_t ref)
+        void link(uint32_t id, uint32_t ref, bool touch = false)
         {
             if (id == ref)
                 return;
             getLinks(id)->set.insert(ref);
+            if (touch)
+                touchLinks(id);
         }
-        void unlink(uint32_t id, uint32_t ref)
+        void unlink(uint32_t id, uint32_t ref, bool touch = false)
         {
+            if (touch)
+                touchLinks(id);
             auto sLinksPtr = getLinks(id);
             sLinksPtr->set.erase(ref);
             if (sLinksPtr->set.empty())
