@@ -4,6 +4,7 @@
 #include <curl/Curl.hpp>
 #include <networking/Resolve.hpp>
 #include <threads/WaitGroup.hpp>
+#include <profile/Profile.hpp>
 
 #include "Router.hpp"
 
@@ -250,6 +251,10 @@ BOOST_AUTO_TEST_CASE(slow)
 }
 BOOST_AUTO_TEST_CASE(bench)
 {
+    //std::thread sProfiler([](){ Profile::OffCPU("/tmp/flamegraph-offcpu.svg", 1); });
+    //std::thread sProfiler([](){ Profile::CPU("/tmp/flamegraph-cpu.svg", 3, 1000); });
+    //Threads::sleep(0.1);
+
     Util::EPoll    sEPoll;
     Threads::Group sGroup;
     sEPoll.start(sGroup);
@@ -279,5 +284,7 @@ BOOST_AUTO_TEST_CASE(bench)
     BOOST_CHECK_EQUAL(WithServer::m_RequestCount, COUNT);
     BOOST_CHECK_EQUAL(sSuccess, COUNT);
     BOOST_TEST_MESSAGE("" << sSuccess << " successful requests from " << COUNT << " done in " << sDuration << " = " << unsigned(sSuccess / sDuration) << " rps");
+
+    //sProfiler.join();
 }
 BOOST_AUTO_TEST_SUITE_END()
