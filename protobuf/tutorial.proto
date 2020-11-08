@@ -25,6 +25,25 @@ message AddressBook {
     repeated Person people = 1;
 }
 
+message PersonView {
+    required string name = 1; // use:string_view
+    required int32 id = 2;
+    optional string email = 3; // use:string_view
+
+    enum PhoneType {
+        MOBILE = 0;
+        HOME = 1;
+        WORK = 2;
+    }
+
+    message PhoneNumber {
+        required string number = 1; // use:string_view
+        optional PhoneType type = 2 [default = HOME];
+    }
+
+    repeated PhoneNumber phones = 4;
+}
+
 message xtest {
     optional fixed32 i32 = 1; // fixed
     optional sint32  s32 = 2; // zigzag

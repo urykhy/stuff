@@ -1,9 +1,9 @@
 #pragma once
 
-#include <boost/utility/string_ref.hpp>
 #include <cstring>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 
 /*
     dirty and incomplete parser for protobuf
@@ -22,7 +22,7 @@
 
 namespace Protobuf
 {
-    using Buffer = boost::string_ref;
+    using Buffer = std::string_view;
     struct EndOfBuffer : std::runtime_error { EndOfBuffer() : std::runtime_error("End of buffer") {} };
     struct BadTag      : std::runtime_error { BadTag()      : std::runtime_error("Bad tag") {} };
     struct BadInput    : std::runtime_error { BadInput()    : std::runtime_error("Bad input") {} };

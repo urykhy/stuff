@@ -177,9 +177,15 @@ BOOST_AUTO_TEST_CASE(person)
     std::pmr::monotonic_buffer_resource sPool{std::data(sBuffer), std::size(sBuffer)};
     pmr_tutorial::Person sCustom(&sPool);
     sCustom.ParseFromString(sBuf);
+    BOOST_CHECK(!sCustom.m_Error);
+
+    pmr_tutorial::PersonView sView(&sPool);
+    sView.ParseFromString(sBuf);
+    BOOST_CHECK(!sView.m_Error);
 
     // print in json
     Json::FastWriter sWriter;
     BOOST_TEST_MESSAGE("json: " << sWriter.write(sCustom.toJson()));
+    BOOST_TEST_MESSAGE("view: " << sWriter.write(sView.toJson()));
 }
 BOOST_AUTO_TEST_SUITE_END()

@@ -63,10 +63,12 @@ class Entry:
         self.kind       = get_by_name("kind", i)
         self.proto_type = get_by_name("type", i)
         self.packed     = get_by_name("packed", i) == "true"
+        self.string_view = "use:string_view" in (get_by_name("comment", i) or "")
         self.cxx_type   = self._type(self.proto_type)
         self.encoding   = self._encoding(self.proto_type)
         self.container  = 'std::pmr::list' if self.kind == "repeated" else 'std::optional'
-        self.pmr        = True if self.proto_type == "string" or self.proto_type == "bytes" or self._customType() else False
+        self.string     = self.proto_type == "string" or self.proto_type == "bytes"
+        self.pmr        = True if (not self.string_view and self.string) or self._customType() else False
         self.jsonType   = self._jsonType(self.proto_type)
 
     def _customType(self):
@@ -96,6 +98,8 @@ class Entry:
                  'fixed64': 'uint64_t',
                  'float'  : 'float'
         }
+        if self.string_view and name in ('string','bytes'):
+            return 'std::string_view'
         if name in xtype:
             return xtype[name]
         return name
@@ -109,10 +113,13 @@ class Entry:
                  'sint64' : 'Json::Int64',
                  'uint64' : 'Json::UInt64',
                  'fixed64': 'Json::UInt64',
+                 'float'  : 'float',
         }
         if name in xtype:
             return xtype[name]
-        return 'Json::Value'
+        if self.proto_type in localEnums:
+            return 'Json::UInt'
+        return 'std::string'
 
     def make_decl(self):
         return f"{self.container}<{self.cxx_type}> {self.name}; // id = {self.id}"
@@ -138,7 +145,7 @@ class Entry:
         print ("{", file=buf)
 
         # small sanity check
-        if self.pmr or self.packed:
+        if self.string or self.pmr or self.packed:
             print ("if (aField.tag != Protobuf::FieldInfo::TAG_LENGTH) { m_Error = true; return Protobuf::ACT_SKIP; }", file=buf)
         else:
             print ("if (aField.tag == Protobuf::FieldInfo::TAG_LENGTH) { m_Error = true; return Protobuf::ACT_SKIP; }", file=buf)
@@ -185,10 +192,10 @@ class Entry:
         elif self.pmr and self.kind == "repeated":
             print (f"if (!{self.name}.empty()) {{"
                    f"auto& sItem = sRoot[\"{self.name}\"];"
-                   f"for (auto& x : {self.name}) {{ sItem.append(Json::Value(x.c_str())); }}"
+                   f"for (auto& x : {self.name}) {{ sItem.append(Json::Value(x.data())); }}"
                    "}", file=buf)
         elif self.pmr:
-            print (f"if ({self.name}) {{ sRoot[\"{self.name}\"] = {self.name}->c_str(); }}", file=buf)
+            print (f"if ({self.name}) {{ sRoot[\"{self.name}\"] = {self.name}->data(); }}", file=buf)
         elif self.kind == "repeated":
             print (f"if (!{self.name}.empty()) {{"
                    f"auto& sItem = sRoot[\"{self.name}\"];"

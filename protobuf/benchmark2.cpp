@@ -43,7 +43,6 @@ void BM_Arena(benchmark::State& state)
 }
 BENCHMARK(BM_Arena)->Arg(P_COUNT)->Threads(1)->Threads(4)->UseRealTime()->Unit(benchmark::kMillisecond);
 
-
 void BM_PMR(benchmark::State& state)
 {
     thread_local std::pmr::monotonic_buffer_resource sPool(1024*1024);
@@ -64,5 +63,26 @@ void BM_PMR(benchmark::State& state)
     state.SetItemsProcessed(state.iterations() * state.range(0));
 }
 BENCHMARK(BM_PMR)->Arg(P_COUNT)->Threads(1)->Threads(4)->UseRealTime()->Unit(benchmark::kMillisecond);
+
+void BM_PMR_View(benchmark::State& state)
+{
+    thread_local std::pmr::monotonic_buffer_resource sPool(1024*1024);
+    thread_local std::pmr::polymorphic_allocator<pmr_tutorial::PersonView> sAlloc(&sPool);
+    for (auto _ : state)
+    {
+        Container::ListArray<pmr_tutorial::PersonView*> sData;
+        for (unsigned i = 0; i < state.range(0); i++)
+        {
+            auto sPtr = sAlloc.allocate(1);
+            sAlloc.construct(sPtr, &sPool);
+            sData.push_back(sPtr);
+            sData.back()->ParseFromString(gBuf);
+        }
+        sData.clear();
+        sPool.release();
+    }
+    state.SetItemsProcessed(state.iterations() * state.range(0));
+}
+BENCHMARK(BM_PMR_View)->Arg(P_COUNT)->Threads(1)->Threads(4)->UseRealTime()->Unit(benchmark::kMillisecond);
 
 BENCHMARK_MAIN();
