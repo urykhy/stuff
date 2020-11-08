@@ -80,11 +80,11 @@ namespace Allocator {
         }
 
         void
-        deallocate(pointer p, size_type /*n*/)
+        deallocate(pointer p, size_type n)
         {
             Impl* buf = Guard<Impl>::get();
             assert(buf);
-            buf->deallocate(p);
+            buf->deallocate(p, n);
         }
 
         pointer

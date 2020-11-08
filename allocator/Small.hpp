@@ -23,7 +23,7 @@ namespace Allocator {
             assert(s == sizeof(T));
             auto x = Guard<Allocator>::get();
             assert(x);
-            x->deallocate((T*)a);
+            x->deallocate((T*)a, s);
         }
     };
 

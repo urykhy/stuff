@@ -2,6 +2,7 @@
 
 #include <stdexcept>
 #include <string.h>
+#include <boost/core/noncopyable.hpp>
 
 #ifdef CONFIG_WITH_VALGRIND
 #include <valgrind/valgrind.h>
@@ -20,21 +21,17 @@
 namespace Allocator {
 
     // simple buffer to allocate from, and release at once
-    // TODO: add option to allocate from heap if capacity exceded
-    struct Arena
+    template<unsigned S>
+    struct ArenaBase : public boost::noncopyable
     {
         enum
         {
-            SIZE = 4096
+            SIZE = S
         };
-
     private:
-        Arena(const Arena& r) = delete;
-        Arena& operator=(const Arena& r) = delete;
-
         typedef unsigned char BufferT[SIZE];
         size_t current = 0;
-        BufferT buffer; // now buffer can be allocated at stack
+        BufferT buffer;
 
         template <class T>
         static T align(T aPtr, size_t aSize)
@@ -44,13 +41,13 @@ namespace Allocator {
         }
 
     public:
-        explicit Arena()
+        explicit ArenaBase()
         {
             memset(buffer, 0, SIZE);
             VALGRIND_CREATE_MEMPOOL(buffer, 0, 0);
         }
 
-        ~Arena() throw()
+        ~ArenaBase() throw()
         {
             VALGRIND_DESTROY_MEMPOOL(buffer);
         }
@@ -73,7 +70,7 @@ namespace Allocator {
         }
 
         void
-        deallocate(void* p __attribute__((unused)))
+        deallocate(void* p __attribute__((unused)), size_t n __attribute__((unused)))
         {
             VALGRIND_MEMPOOL_FREE(buffer, p);
         }
@@ -91,5 +88,7 @@ namespace Allocator {
             VALGRIND_MEMPOOL_TRIM(buffer, 0, 0);
         }
     };
+
+    using Arena = ArenaBase<4096>;
 
 } // namespace Allocator
