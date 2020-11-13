@@ -253,14 +253,14 @@ BOOST_AUTO_TEST_CASE(mock)
 
     MySQL::Mock::SqlSet sExpectedSQL{
         {"BEGIN", {}}
-      , {"SELECT id, task, worker, hint FROM task_queue WHERE  ((status = 'new') OR (status = 'started' AND (worker = 'test' OR updated < DATE_SUB(NOW(), INTERVAL 1 HOUR)))) ORDER BY id ASC LIMIT 1 FOR UPDATE SKIP LOCKED"
+      , {"SELECT id, task, worker, hint FROM task_queue WHERE ((status = 'new') OR (status = 'started' AND (worker = 'test' OR updated < DATE_SUB(NOW(), INTERVAL 1 HOUR)))) ORDER BY id ASC LIMIT 1 FOR UPDATE SKIP LOCKED"
             , {{"12", "mock task", "", "existing hint"}}
         }
       , {"UPDATE task_queue SET status = 'started', worker = 'test' WHERE id = 12", {}}
       , {"COMMIT", {}}
       , {"UPDATE task_queue SET status = 'done' WHERE id = 12", {}}
       , {"BEGIN", {}}
-      , {"SELECT id, task, worker, hint FROM task_queue WHERE  ((status = 'new') OR (status = 'started' AND (worker = 'test' OR updated < DATE_SUB(NOW(), INTERVAL 1 HOUR)))) ORDER BY id ASC LIMIT 1 FOR UPDATE SKIP LOCKED"
+      , {"SELECT id, task, worker, hint FROM task_queue WHERE ((status = 'new') OR (status = 'started' AND (worker = 'test' OR updated < DATE_SUB(NOW(), INTERVAL 1 HOUR)))) ORDER BY id ASC LIMIT 1 FOR UPDATE SKIP LOCKED"
             , {}}
       , {"ROLLBACK", {}}
     };
@@ -298,25 +298,25 @@ BOOST_AUTO_TEST_CASE(mock_window)
 
     MySQL::Mock::SqlSet sExpectedSQL{
         {"BEGIN", {}}
-      , {"SELECT id, task, worker, hint FROM task_queue WHERE id % 4 = 2 AND ((status = 'new') OR (status = 'started' AND (worker = 'test' OR updated < DATE_SUB(NOW(), INTERVAL 1 HOUR)))) ORDER BY id ASC LIMIT 1 FOR UPDATE SKIP LOCKED"
+      , {"SELECT id, task, worker, hint FROM task_queue WHERE ((status = 'new') OR (status = 'started' AND (worker = 'test' OR updated < DATE_SUB(NOW(), INTERVAL 1 HOUR)))) ORDER BY id ASC LIMIT 1 FOR UPDATE SKIP LOCKED"
             , {{"94", "test1", "", "hint1"}}
         }
-      , {"SELECT count(1) FROM task_queue WHERE id % 4 = 2 AND id < 94 AND id >= (SELECT min(id) FROM task_queue WHERE id % 4 = 2 AND status='started')"
+      , {"SELECT count(1) FROM task_queue WHERE id < 94 AND id >= (SELECT min(id) FROM task_queue WHERE status='started')"
             , {{"50"}} /* window is 42, we can't start this task */
         }
       , {"ROLLBACK", {}}
       , {"BEGIN", {}}
-      , {"SELECT id, task, worker, hint FROM task_queue WHERE id % 4 = 2 AND ((status = 'new') OR (status = 'started' AND (worker = 'test' OR updated < DATE_SUB(NOW(), INTERVAL 1 HOUR)))) ORDER BY id ASC LIMIT 1 FOR UPDATE SKIP LOCKED"
+      , {"SELECT id, task, worker, hint FROM task_queue WHERE ((status = 'new') OR (status = 'started' AND (worker = 'test' OR updated < DATE_SUB(NOW(), INTERVAL 1 HOUR)))) ORDER BY id ASC LIMIT 1 FOR UPDATE SKIP LOCKED"
             , {{"94", "test1", "", "hint1"}}
         }
-      , {"SELECT count(1) FROM task_queue WHERE id % 4 = 2 AND id < 94 AND id >= (SELECT min(id) FROM task_queue WHERE id % 4 = 2 AND status='started')"
+      , {"SELECT count(1) FROM task_queue WHERE id < 94 AND id >= (SELECT min(id) FROM task_queue WHERE status='started')"
             , {{"40"}}  /* window is 42. process it */
         }
       , {"UPDATE task_queue SET status = 'started', worker = 'test' WHERE id = 94", {}}
       , {"COMMIT", {}}
       , {"UPDATE task_queue SET status = 'done' WHERE id = 94", {}}
       , {"BEGIN", {}}
-      , {"SELECT id, task, worker, hint FROM task_queue WHERE id % 4 = 2 AND ((status = 'new') OR (status = 'started' AND (worker = 'test' OR updated < DATE_SUB(NOW(), INTERVAL 1 HOUR)))) ORDER BY id ASC LIMIT 1 FOR UPDATE SKIP LOCKED"
+      , {"SELECT id, task, worker, hint FROM task_queue WHERE ((status = 'new') OR (status = 'started' AND (worker = 'test' OR updated < DATE_SUB(NOW(), INTERVAL 1 HOUR)))) ORDER BY id ASC LIMIT 1 FOR UPDATE SKIP LOCKED"
             , {}}
       , {"ROLLBACK", {}}
     };
@@ -324,8 +324,6 @@ BOOST_AUTO_TEST_CASE(mock_window)
 
     MySQL::TaskQueue::Config  sQueueCfg;
     sQueueCfg.period = 1;
-    sQueueCfg.shard_count = 4;
-    sQueueCfg.shard_id = 2;
     sQueueCfg.window = 42;
     MySQL::TaskQueue::Manager sQueue(sQueueCfg, sMock, &sHandler);
     Threads::Group sGroup;

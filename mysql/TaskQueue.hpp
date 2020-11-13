@@ -16,10 +16,14 @@ namespace MySQL::TaskQueue {
         std::string table    = "task_queue";
         std::string instance = "test";
         time_t      period   = 10;
-        bool        resume   = true; // resume tasks by other worker
 
-        unsigned shard_count = 0; // sharding
-        unsigned shard_id    = 0;
+        enum Isolation
+        {
+            STRICT, // process own tasks only
+            RESUME, // resume own tasks only
+            NONE    // resume tasks by other instance
+        };
+        Isolation isolation = NONE;
 
         unsigned window = 0; // max lag between started tasks
     };
@@ -47,21 +51,21 @@ namespace MySQL::TaskQueue {
             std::string hint;
         };
 
-        std::string shard()
+        std::string isolation()
         {
-            if (m_Config.shard_count > 0)
-                return "id % " + std::to_string(m_Config.shard_count) + " = " + std::to_string(m_Config.shard_id) + " AND";
+            if (m_Config.isolation == Config::STRICT)
+                return fmt::format("worker = '{0}' AND ", m_Config.instance);
             return "";
         }
 
         std::string resume()
         {
-            // resume only self tasks
-            if (!m_Config.resume)
-                return "worker = '" + m_Config.instance + "'";
-
-            // resume task by other worker
-            return "(worker = '" + m_Config.instance + "' OR updated < DATE_SUB(NOW(), INTERVAL 1 HOUR))";
+            switch (m_Config.isolation) {
+            case Config::STRICT: return fmt::format("(status = 'new' OR status = 'started')");
+            case Config::RESUME: return fmt::format("(status = 'new') OR (status = 'started' AND worker = '{0}')", m_Config.instance);
+            case Config::NONE: return fmt::format("(status = 'new') OR (status = 'started' AND (worker = '{0}' OR updated < DATE_SUB(NOW(), INTERVAL 1 HOUR)))", m_Config.instance);
+            default: throw std::logic_error("TaskQueue::Manager::Resume");
+            };
         }
 
         std::optional<Task> get_task()
@@ -70,10 +74,10 @@ namespace MySQL::TaskQueue {
             m_Connection->Query(fmt::format(
                 "SELECT id, task, worker, hint "
                 "FROM {0} "
-                "WHERE {1} ((status = 'new') OR (status = 'started' AND {2})) "
+                "WHERE {1}({2}) "
                 "ORDER BY id ASC LIMIT 1 FOR UPDATE SKIP LOCKED",
                 m_Config.table,
-                shard(),
+                isolation(),
                 resume()));
             m_Connection->Use([&sTask](const MySQL::Row& aRow) {
                 sTask.emplace();
@@ -86,9 +90,9 @@ namespace MySQL::TaskQueue {
                 m_Connection->Query(fmt::format(
                     "SELECT count(1) "
                     "FROM {0} "
-                    "WHERE {1} id < {2} AND id >= (SELECT min(id) FROM {0} WHERE {1} status='started')",
+                    "WHERE {1}id < {2} AND id >= (SELECT min(id) FROM {0} WHERE {1}status='started')",
                     m_Config.table,
-                    shard(),
+                    isolation(),
                     sTask->id));
                 unsigned sCount = 0;
                 m_Connection->Use([&sCount](const MySQL::Row& aRow) {
