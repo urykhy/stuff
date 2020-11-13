@@ -52,6 +52,7 @@ namespace Container
 
         public:
             const T& operator*() const { return *current; }
+            const T* operator->() const { return &(operator*()); }
 
             bool operator==(const const_iterator& r) const
             {
