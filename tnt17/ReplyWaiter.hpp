@@ -1,26 +1,29 @@
 #pragma once
 
+#include <functional>
 #include <map>
 #include <mutex>
-#include <functional>
 
-#include "Error.hpp"
 #include <boost/asio.hpp>
+
 #include <time/Meter.hpp>
 
-namespace tnt17
-{
+#include "Error.hpp"
+
+namespace tnt17 {
+
+    using Promise = std::promise<std::string_view>;
+    using Future  = std::future<std::string_view>;
+
     // must be used with external timer / locking
     struct ReplyWaiter
     {
-        using Promise = std::promise<std::string>;
-        using Future  = std::future<std::string>;
         using Handler = std::function<void(Future&&)>;
 
     private:
-        std::map<uint64_t, Handler>       m_Waiters;    // serial to handler
-        std::multimap<uint64_t, uint64_t> m_Timeouts;   // timeout to serial
-        std::exception_ptr                m_Error;      // if not null - we in failed state, call all handlers with error
+        std::map<uint64_t, Handler>       m_Waiters;  // serial to handler
+        std::multimap<uint64_t, uint64_t> m_Timeouts; // timeout to serial
+        std::exception_ptr                m_Error;    // if not null - we in failed state, call all handlers with error
 
         // call handler with error
         void call(const Handler& aHandler, std::exception_ptr aPtr)
@@ -38,8 +41,8 @@ namespace tnt17
             m_Timeouts.clear();
             m_Waiters.clear();
         }
-    public:
 
+    public:
         bool empty() const { return m_Waiters.size(); }
 
         // insert call
@@ -67,18 +70,15 @@ namespace tnt17
         // periodic check for timeouts
         void on_timer()
         {
-            if (m_Error != nullptr)
-            {
+            if (m_Error != nullptr) {
                 flush_int();
                 return;
             }
 
             auto sNow = Time::get_time().to_ms();
-            for (auto it = m_Timeouts.begin(); it != m_Timeouts.end() && it->first < sNow;)
-            {
+            for (auto it = m_Timeouts.begin(); it != m_Timeouts.end() && it->first < sNow;) {
                 auto sIt = m_Waiters.find(it->second);
-                if (sIt != m_Waiters.end())
-                {
+                if (sIt != m_Waiters.end()) {
                     call(sIt->second, std::make_exception_ptr(NetworkError(boost::system::errc::timed_out)));
                     m_Waiters.erase(sIt);
                 }

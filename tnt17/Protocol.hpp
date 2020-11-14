@@ -1,4 +1,5 @@
 
+#include <mpl/Mpl.hpp>
 #include <msgpack/MsgPack.hpp>
 
 #include "Error.hpp"
@@ -89,9 +90,19 @@ namespace tnt17 {
             iterator = x;
             return *this;
         }
+
+        enum
+        {
+            ITER_EQ  = 0, // key == x ASC order
+            ITER_REQ = 1, // key == x DESC order
+            ITER_ALL = 2, // all tuples
+            ITER_LT  = 3, // key <  x
+            ITER_LE  = 4, // key <= x
+            ITER_GE  = 5, // key >= x
+            ITER_GT  = 6, // key >  x
+        };
     };
 
-    template <class T>
     class Protocol
     {
         std::atomic<uint64_t> m_Serial{1};
@@ -106,8 +117,16 @@ namespace tnt17 {
             CODE_CALL   = 0xa
         };
 
-        template <class S>
-        void formatHeader(S& aStream, int aCode, int aSync)
+        static void write(MsgPack::omemstream& aStream, const std::string& aKey)
+        {
+            MsgPack::write_string(aStream, aKey);
+        }
+        static void write(omemstream& aStream, const uint64_t& aKey)
+        {
+            MsgPack::write_uint(aStream, aKey);
+        }
+
+        void formatHeader(MsgPack::omemstream& aStream, int aCode, int aSync)
         {
             using namespace MsgPack;
             write_map_size(aStream, 2);
@@ -117,13 +136,12 @@ namespace tnt17 {
             write_uint(aStream, aSync);
         }
 
-        template <class S>
-        void formatSelectBody(S& aStream, int aSpaceId, const IndexSpec& aIndex)
+        void formatSelectBody(MsgPack::omemstream& aStream, const IndexSpec& aIndex)
         {
             using namespace MsgPack;
             write_map_size(aStream, 6);
             write_uint(aStream, 0x10);
-            write_uint(aStream, aSpaceId);
+            write_uint(aStream, m_Space);
             write_uint(aStream, 0x11);
             write_uint(aStream, aIndex.id);
             write_uint(aStream, 0x12);
@@ -136,28 +154,43 @@ namespace tnt17 {
             write_array_size(aStream, 1);
         }
 
-        template <class S, class V>
-        void formatInsertBody(S& aStream, int aSpaceId, const V& aValue)
+        template <class V>
+        void formatInsertBody(MsgPack::omemstream& aStream, const V& aValue)
         {
             using namespace MsgPack;
             write_map_size(aStream, 2);
             write_uint(aStream, 0x10);
-            write_uint(aStream, aSpaceId);
+            write_uint(aStream, m_Space);
             write_uint(aStream, 0x21);
             aValue.serialize(aStream);
         }
 
-        template <class S>
-        void formatDeleteBody(S& aStream, int aSpaceId, const IndexSpec& aIndex)
+        void formatDeleteBody(MsgPack::omemstream& aStream, const IndexSpec& aIndex)
         {
             using namespace MsgPack;
             write_map_size(aStream, 3);
             write_uint(aStream, 0x10);
-            write_uint(aStream, aSpaceId);
+            write_uint(aStream, m_Space);
             write_uint(aStream, 0x11);
             write_uint(aStream, aIndex.id);
             write_uint(aStream, 0x20);
             write_array_size(aStream, 1);
+        }
+
+        template <class... A>
+        void formatCallBody(MsgPack::omemstream& aStream, const std::string& aName, const A&... aArgs)
+        {
+            using namespace MsgPack;
+            write_map_size(aStream, 2);
+            write_uint(aStream, 0x22);
+            write_string(aStream, aName);
+            write_uint(aStream, 0x21);
+            write_array_size(aStream, sizeof...(A));
+            Mpl::for_each_argument(
+                [&aStream](const auto& x) {
+                    write(aStream, x);
+                },
+                aArgs...);
         }
 
     public:
@@ -177,17 +210,18 @@ namespace tnt17 {
             const uint64_t      sSerial = m_Serial++;
             MsgPack::omemstream sStream;
             formatHeader(sStream, CODE_SELECT, sSerial);
-            formatSelectBody(sStream, m_Space, aIndex);
-            T::formatKey(sStream, aKey);
+            formatSelectBody(sStream, aIndex);
+            write(sStream, aKey);
             return Request{sSerial, sStream.str()};
         }
 
+        template <class T>
         Request formatInsert(const T& aData)
         {
             const uint64_t      sSerial = m_Serial++;
             MsgPack::omemstream sStream;
             formatHeader(sStream, CODE_INSERT, sSerial);
-            formatInsertBody(sStream, m_Space, aData);
+            formatInsertBody(sStream, aData);
             return Request{sSerial, sStream.str()};
         }
 
@@ -197,22 +231,23 @@ namespace tnt17 {
             const uint64_t      sSerial = m_Serial++;
             MsgPack::omemstream sStream;
             formatHeader(sStream, CODE_DELETE, sSerial);
-            formatDeleteBody(sStream, m_Space, aIndex);
-            T::formatKey(sStream, aKey);
+            formatDeleteBody(sStream, aIndex);
+            write(sStream, aKey);
+            return Request{sSerial, sStream.str()};
+        }
+
+        template <class... A>
+        Request formatCall(const std::string& aName, const A&... aArgs)
+        {
+            const uint64_t      sSerial = m_Serial++;
+            MsgPack::omemstream sStream;
+            formatHeader(sStream, CODE_CALL, sSerial);
+            formatCallBody(sStream, aName, aArgs...);
             return Request{sSerial, sStream.str()};
         }
     };
 
 #if 0
-    template<class P, class A>
-    void formatCallBody(P& aStream, const std::string& aName, const A& aArgs)
-    {
-        using namespace MsgPack;
-        write_map_size(aStream, 2);
-        write(aStream, 0x22);    write(aStream, aName);
-        write(aStream, 0x21);    write_array_size(aStream, 1);    write(aStream, aArgs);
-    }
-
     template<class P>
     void formatAuthBody(P& aStream, const std::string& aName, const boost::string_ref& aHash)
     {

@@ -2,8 +2,7 @@
 
 #include "Client.hpp"
 
-namespace tnt17::cache
-{
+namespace tnt17::cache {
     struct Entry
     {
         std::string key;
@@ -14,7 +13,8 @@ namespace tnt17::cache
         {
             using namespace MsgPack;
             uint32_t array_len = read_array_size(in);
-            assert (array_len == 3);
+            if (array_len != 3)
+                throw std::invalid_argument("msgpack array size is not 3");
             read_string(in, key);
             read_uint(in, timestamp);
             read_string(in, value);
@@ -24,21 +24,14 @@ namespace tnt17::cache
             using namespace MsgPack;
             write_array_size(out, 3);
             write_string(out, key);
-            write_uint(out,   timestamp);
+            write_uint(out, timestamp);
             write_string(out, value);
-        }
-
-        template<class S>
-        static void formatKey(S& aStream, const std::string& aKey)
-        {
-            MsgPack::write_string(aStream, aKey);
         }
     };
 
     struct Engine
     {
-        using XClient    = Client<Entry>;
-        using XClientPtr = std::shared_ptr<XClient>;
+        using ClientPtr = std::shared_ptr<Client>;
 
         using Result  = std::optional<Entry>;
         using Promise = std::promise<Result>;
@@ -46,24 +39,18 @@ namespace tnt17::cache
         using Handler = std::function<void(Future&&)>;
 
     private:
-        XClientPtr m_Client;
+        ClientPtr m_Client;
 
-        // convert vector<T> to optional<T>
         auto makeCallback(Handler&& aHandler)
         {
-            return [sHandler = std::move(aHandler)](auto&& aResult)
-            {
+            return [sHandler = std::move(aHandler)](tnt17::Future&& aResult) {
                 Promise sPromise;
-                try
-                {
+                try {
                     Result sResult;
-                    const auto sTmp = aResult.get();
-                    if (sTmp.size() > 0)
-                        sResult = sTmp[0];
-                    sPromise.set_value(sResult);
-                }
-                catch(const std::exception& e)
-                {
+                    if (tnt17::parse<Entry>(aResult, [&sResult](auto&& x) { sResult = std::move(x); }) > 1)
+                        throw std::invalid_argument("got more than one response element");
+                    sPromise.set_value(std::move(sResult));
+                } catch (const std::exception& e) {
                     sPromise.set_exception(std::current_exception());
                 }
                 sHandler(sPromise.get_future());
@@ -72,7 +59,7 @@ namespace tnt17::cache
 
     public:
         Engine(boost::asio::io_service& aLoop, const tcp::endpoint& aAddr, unsigned aSpace)
-        : m_Client(std::make_shared<XClient>(aLoop, aAddr, aSpace))
+        : m_Client(std::make_shared<Client>(aLoop, aAddr, aSpace))
         {
             m_Client->start();
         }
@@ -93,13 +80,39 @@ namespace tnt17::cache
         void Set(const Entry& aData, Handler aHandler)
         {
             auto sRequest = m_Client->formatInsert(aData);
-            m_Client->call(sRequest,makeCallback(std::move(aHandler)));
+            m_Client->call(sRequest, makeCallback(std::move(aHandler)));
         }
 
         void Delete(const std::string& aKey, Handler aHandler)
         {
             auto sRequest = m_Client->formatDelete(IndexSpec{}, aKey);
-            m_Client->call(sRequest,makeCallback(std::move(aHandler)));
+            m_Client->call(sRequest, makeCallback(std::move(aHandler)));
+        }
+
+        template <class H>
+        void Expire(time_t aMinimal, unsigned aLimit, H&& aHandler)
+        {
+            struct ExpireResult
+            {
+                uint32_t affected = 0;
+
+                void parse(MsgPack::imemstream& in)
+                {
+                    MsgPack::read_uint(in, affected);
+                }
+            };
+            auto sRequest = m_Client->formatCall("expire_cache", aMinimal, aLimit);
+            m_Client->call(sRequest, [aHandler = std::move(aHandler)](auto&& aResult) {
+                std::promise<uint32_t> sPromise;
+                try {
+                    tnt17::parse<ExpireResult>(aResult, [&sPromise](auto&& x) {
+                        sPromise.set_value(x.affected);
+                    });
+                } catch (const std::exception& e) {
+                    sPromise.set_exception(std::current_exception());
+                }
+                aHandler(sPromise.get_future());
+            });
         }
     };
-} // namespace tnt17
+} // namespace tnt17::cache

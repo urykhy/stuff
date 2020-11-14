@@ -30,6 +30,10 @@ namespace Container {
             {}
         };
 
+        imemstream(const std::string_view& aBuffer)
+        : m_Data(aBuffer)
+        {}
+
         imemstream(const binary& aBuffer)
         : m_Data((const char*)&aBuffer[0], aBuffer.size())
         {}

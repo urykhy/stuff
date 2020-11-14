@@ -26,8 +26,21 @@ function get_by_ids(args)
     return unpack(res)
 end
 
-s = box.schema.space.create('cache')
-s:create_index('primary', {type = 'hash', parts = {1, 'string'}})
-
 -- box.space.test.index.primary:select(0, {iterator = "ALL", limit=10})
 -- get_by_ids({1,2,4,5,6,7,8,9,10})
+
+s = box.schema.space.create('cache')
+s:create_index('primary', {type = 'hash', parts = {1, 'string'}})
+s:create_index('timestamp', {type = 'tree', parts = {2, 'unsigned'}, unique = false})
+
+function expire_cache(aMinimal, aLimit)
+    local tuples = box.space.cache.index[1]:select(aMinimal, {iterator = "LT", limit=aLimit})
+    if #tuples > 0 then
+        for _, tuple in pairs(tuples) do
+		    box.space.cache:delete(require('fun').map(function(x) return tuple[x.fieldno] end, box.space.cache.index[0].parts):totable())
+	    end
+    end
+    return #tuples
+end
+
+-- box.space.cache.index[0]:select("", {iterator = "ALL", limit=10})
