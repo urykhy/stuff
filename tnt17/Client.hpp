@@ -82,7 +82,7 @@ namespace tnt17
                 }
 
                 m_Waiter.insert(aRequest.serial, aTimeoutMS, [p, aHandler = std::move(aHandler)](ReplyWaiter::Future&& aString){
-                    p->callback(aHandler, std::move(aString));
+                    p->on_reply(aHandler, std::move(aString));
                 });
                 m_Queue.emplace_back(Message(aRequest.body));
                 if (sWriteOut) {
@@ -185,7 +185,7 @@ namespace tnt17
                     yield boost::asio::async_read(m_Socket, boost::asio::buffer(&m_ReplyHeader, sizeof(m_ReplyHeader)), resume_reader());
                     m_ReplyData.resize(m_ReplyHeader.decode());
                     yield boost::asio::async_read(m_Socket, boost::asio::buffer(m_ReplyData), resume_reader());
-                    callback(m_ReplyData);
+                    on_reply(m_ReplyData);
                 }
             }
         }
@@ -194,8 +194,8 @@ namespace tnt17
         }
 #include <boost/asio/unyield.hpp>
 
-        // stage1 callback. parse server reply
-        void callback(std::string& aReply)
+        // stage1 callback. parse tnt protocol
+        void on_reply(std::string& aReply)
         {
             Header sHeader;
             Reply  sReply;
@@ -218,15 +218,15 @@ namespace tnt17
                 sPromise.set_value(sRestStr);
             } else {
                 // normal error from server: just a bad client call. connection can be used
-                sPromise.set_exception(std::make_exception_ptr(RemoteError(sReply.error)));
+                sPromise.set_exception(std::make_exception_ptr(TntError(sReply.error)));
             }
 
             // jump to stage 2 callback
             m_Waiter.call(sHeader.sync, sPromise.get_future());
         }
 
-        // stage 2 callback, from m_Waiter
-        void callback(const Handler& aHandler, ReplyWaiter::Future&& aString)
+        // stage 2 callback, from m_Waiter. parse actual response body
+        void on_reply(const Handler& aHandler, ReplyWaiter::Future&& aString)
         {
             Promise sPromise;
             std::string sString;
@@ -248,7 +248,7 @@ namespace tnt17
                     x.parse(sStream);
                 sPromise.set_value(sResult);
             } catch (const std::exception& e) {   // fail to parse response
-                sPromise.set_exception(std::make_exception_ptr(ProtocolError(e.what())));
+                sPromise.set_exception(std::make_exception_ptr(NetworkError(boost::system::errc::protocol_error)));
             }
             aHandler(sPromise.get_future());
         }
@@ -270,15 +270,7 @@ namespace tnt17
             m_State.set_error();                    // set error state
             set_timer();                            // setup 1ms timer
             close_socket();                         // close socket
-
-            std::exception_ptr sPtr = nullptr;
-            // FIXME: pass real msgpack error ?
-            if (ec == boost::system::errc::protocol_error)
-                sPtr = std::make_exception_ptr(ProtocolError("fail to parse response"));
-            else
-                sPtr = std::make_exception_ptr(NetworkError(ec));
-
-            m_Waiter.flush(sPtr);                   // drop all pending requests with error
+            m_Waiter.flush(std::make_exception_ptr(NetworkError(ec))); // drop all pending requests with error
         }
     private:
 

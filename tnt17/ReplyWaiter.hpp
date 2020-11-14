@@ -79,7 +79,7 @@ namespace tnt17
                 auto sIt = m_Waiters.find(it->second);
                 if (sIt != m_Waiters.end())
                 {
-                    call(sIt->second, std::make_exception_ptr(RemoteError("timeout")));
+                    call(sIt->second, std::make_exception_ptr(NetworkError(boost::system::errc::timed_out)));
                     m_Waiters.erase(sIt);
                 }
                 it = m_Timeouts.erase(it);

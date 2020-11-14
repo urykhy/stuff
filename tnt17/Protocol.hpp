@@ -11,7 +11,7 @@ namespace tnt17 {
     inline void assertProto(bool aFlag)
     {
         if (!aFlag)
-            throw ProtocolError("bad msgpack message");
+            throw NetworkError(boost::system::errc::protocol_error);
     }
 
     struct Header
