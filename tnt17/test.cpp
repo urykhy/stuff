@@ -6,7 +6,6 @@
 #include <threads/WaitGroup.hpp>
 
 #include "Client.hpp"
-#include "Fetch.hpp"
 #include "Cache.hpp"
 
 #include <chrono>
@@ -69,51 +68,6 @@ BOOST_AUTO_TEST_CASE(simple)
     });
     sWait.wait_for(50ms);
 
-    sClient->stop();
-    std::this_thread::sleep_for(10ms);
-    sGroup.wait();  // stop threads
-}
-BOOST_AUTO_TEST_CASE(fetch)
-{
-    Threads::Asio  sLoop;
-    Threads::Group sGroup;
-    sLoop.start(sGroup, 4); // 4 asio threads
-
-    const auto sAddr = tnt17::endpoint("127.0.0.1", 2090);
-    using C = tnt17::Client<DataEntry>;
-
-    auto sClient = std::make_shared<C>(sLoop.service(), sAddr, 512 /*space id*/);
-    sClient->start();
-
-    using FQ = tnt17::FetchQueue<DataEntry>;
-    using FE = tnt17::Fetch<DataEntry>;
-    FQ sQueue;
-    sQueue.requests = {1,2,3,4,10,11,12};
-
-    auto sFetch = std::make_shared<FE>(sClient, sQueue);
-    sFetch->start();
-    while (!sFetch->is_done()) std::this_thread::sleep_for(1ms);
-
-    BOOST_TEST_MESSAGE("fetch completed");
-
-    unsigned sKeys = 0;
-    for (auto& x : sQueue.responses)
-    {
-        switch (x.pk)
-        {
-        case 1: BOOST_CHECK_EQUAL(x.value, "Roxette"); break;
-        case 2: BOOST_CHECK_EQUAL(x.value, "Scorpions"); break;
-        case 3: BOOST_CHECK_EQUAL(x.value, "Ace of Base"); break;
-        case 4: BOOST_CHECK(false); break;  // there is no key in tnt, so - no data
-        case 10: BOOST_CHECK_EQUAL(x.value, "NightWish"); break;
-        case 11: BOOST_CHECK_EQUAL(x.value, "NightWish"); break;
-        case 12: BOOST_CHECK_EQUAL(x.value, "NightWish"); break;
-        }
-        sKeys++;
-    }
-    BOOST_CHECK_EQUAL(sKeys, 6); // 1,2,3,10,11,12 must be found
-
-    sFetch->stop();
     sClient->stop();
     std::this_thread::sleep_for(10ms);
     sGroup.wait();  // stop threads
