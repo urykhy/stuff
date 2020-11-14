@@ -15,18 +15,14 @@ namespace tnt17
     // framed server and client
     template<class T>
     class Client : public std::enable_shared_from_this<Client<T>>
+                 , public Protocol<T>
     {
     public:
         using Result = std::vector<T>;
         using Promise = std::promise<Result>;
         using Future  = std::future<Result>;
         using Handler = std::function<void(Future&&)>;
-
-        struct Request
-        {
-            uint64_t serial = 0;
-            std::string body;
-        };
+        using Request = typename Protocol<T>::Request;
 
     private:
         const uint64_t RECONNECT_MS = 1000;
@@ -36,7 +32,6 @@ namespace tnt17
         ba::deadline_timer     m_Timer;
         tcp::socket            m_Socket;
         const tcp::endpoint    m_Addr;
-        const unsigned         m_Space;     // tnt space id
         ba::coroutine          m_Writer;
         ba::coroutine          m_Reader;
         std::list<Message>     m_Queue;     // write out queue
@@ -51,7 +46,6 @@ namespace tnt17
         } __attribute__((packed));
         Greetings m_Greetings;
 
-        std::atomic<uint64_t>  m_Serial{1};
         ReplyWaiter            m_Waiter;
 
         typename Message::Header m_ReplyHeader;
@@ -59,11 +53,11 @@ namespace tnt17
 
     public:
         Client(boost::asio::io_service& aLoop, const tcp::endpoint& aAddr, unsigned aSpace)
-        : m_Strand(aLoop)
+        : Protocol<T>(aSpace)
+        , m_Strand(aLoop)
         , m_Timer(aLoop)
         , m_Socket(aLoop)
         , m_Addr(aAddr)
-        , m_Space(aSpace)
         { }
 
         void start()
@@ -72,37 +66,6 @@ namespace tnt17
         }
 
         bool is_alive() { return m_State.is_alive(); }
-
-        template<class K>
-        Request formatSelect(const IndexSpec& aIndex, const K& aKey)
-        {
-            const uint64_t sSerial = m_Serial++;
-            MsgPack::omemstream sStream;
-            formatHeader(sStream, CODE_SELECT, sSerial);
-            formatSelectBody(sStream, m_Space, aIndex);
-            T::formatKey(sStream, aKey);
-            return Request{sSerial, sStream.str()};
-        }
-
-        Request formatInsert(const T& aData)
-        {
-            const uint64_t sSerial = m_Serial++;
-            MsgPack::omemstream sStream;
-            formatHeader(sStream, CODE_INSERT, sSerial);
-            formatInsertBody(sStream, m_Space, aData);
-            return Request{sSerial, sStream.str()};
-        }
-
-        template<class K>
-        Request formatDelete(const IndexSpec& aIndex, const K& aKey)
-        {
-            const uint64_t sSerial = m_Serial++;
-            MsgPack::omemstream sStream;
-            formatHeader(sStream, CODE_DELETE, sSerial);
-            formatDeleteBody(sStream, m_Space, aIndex);
-            T::formatKey(sStream, aKey);
-            return Request{sSerial, sStream.str()};
-        }
 
         void call(const Request& aRequest, Handler&& aHandler, unsigned aTimeoutMS = 10)
         {

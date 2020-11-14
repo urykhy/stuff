@@ -1,10 +1,10 @@
 
-#include "Error.hpp"
 #include <msgpack/MsgPack.hpp>
 
-namespace tnt17
-{
-    using binary = MsgPack::binary;
+#include "Error.hpp"
+
+namespace tnt17 {
+    using binary     = MsgPack::binary;
     using omemstream = MsgPack::omemstream;
     using imemstream = MsgPack::imemstream;
 
@@ -16,32 +16,38 @@ namespace tnt17
 
     struct Header
     {
-        uint64_t code = 0;
-        uint64_t sync = 0;
+        uint64_t code      = 0;
+        uint64_t sync      = 0;
         uint64_t schema_id = 0;
 
         void parse(imemstream& aStream)
         {
             using namespace MsgPack;
             int tmp = 0;
-            tmp = read_map_size(aStream); assertProto(tmp == 3);
-            read_uint(aStream, tmp); assertProto(tmp == 0); read_uint(aStream, code);
-            read_uint(aStream, tmp); assertProto(tmp == 1); read_uint(aStream, sync);
-            read_uint(aStream, tmp); assertProto(tmp == 5); read_uint(aStream, schema_id);
+            tmp     = read_map_size(aStream);
+            assertProto(tmp == 3);
+            read_uint(aStream, tmp);
+            assertProto(tmp == 0);
+            read_uint(aStream, code);
+            read_uint(aStream, tmp);
+            assertProto(tmp == 1);
+            read_uint(aStream, sync);
+            read_uint(aStream, tmp);
+            assertProto(tmp == 5);
+            read_uint(aStream, schema_id);
         }
     };
 
     struct Reply
     {
-        bool ok = false;
+        bool        ok = false;
         std::string error;
 
         void parse(imemstream& aStream)
         {
             using namespace MsgPack;
             int tmp = read_map_size(aStream);
-            if (0 == tmp)
-            {
+            if (0 == tmp) {
                 ok = true;
                 return;
             }
@@ -56,24 +62,6 @@ namespace tnt17
         }
     };
 
-    enum
-    {
-        CODE_SELECT = 1,
-        CODE_INSERT = 2,
-        CODE_DELETE = 5,
-        CODE_AUTH   = 7,
-        CODE_CALL   = 0xa
-    };
-
-    template<class S>
-    void formatHeader(S& aStream, int aCode, int aSync)
-    {
-        using namespace MsgPack;
-        write_map_size(aStream, 2);
-        write_uint(aStream, 0);    write_uint(aStream, aCode);
-        write_uint(aStream, 1);    write_uint(aStream, aSync);
-    }
-
     struct IndexSpec
     {
         unsigned id       = 0;
@@ -81,43 +69,139 @@ namespace tnt17
         unsigned offset   = 0;
         unsigned iterator = 0;
 
-        IndexSpec& set_id      (unsigned x) { id       = x; return *this; }
-        IndexSpec& set_limit   (unsigned x) { limit    = x; return *this; }
-        IndexSpec& set_offset  (unsigned x) { offset   = x; return *this; }
-        IndexSpec& set_iterator(unsigned x) { iterator = x; return *this; }
+        IndexSpec& set_id(unsigned x)
+        {
+            id = x;
+            return *this;
+        }
+        IndexSpec& set_limit(unsigned x)
+        {
+            limit = x;
+            return *this;
+        }
+        IndexSpec& set_offset(unsigned x)
+        {
+            offset = x;
+            return *this;
+        }
+        IndexSpec& set_iterator(unsigned x)
+        {
+            iterator = x;
+            return *this;
+        }
     };
 
-    template<class S>
-    void formatSelectBody(S& aStream, int aSpaceId, const IndexSpec& aIndex)
+    template <class T>
+    class Protocol
     {
-        using namespace MsgPack;
-        write_map_size(aStream, 6);
-        write_uint(aStream, 0x10);    write_uint(aStream, aSpaceId);
-        write_uint(aStream, 0x11);    write_uint(aStream, aIndex.id);
-        write_uint(aStream, 0x12);    write_uint(aStream, aIndex.limit);
-        write_uint(aStream, 0x13);    write_uint(aStream, aIndex.offset);
-        write_uint(aStream, 0x14);    write_uint(aStream, aIndex.iterator);
-        write_uint(aStream, 0x20);    write_array_size(aStream, 1);
-    }
+        std::atomic<uint64_t> m_Serial{1};
+        const unsigned        m_Space; // tnt space id
 
-    template<class S, class V>
-    void formatInsertBody(S& aStream, int aSpaceId, const V& aValue)
-    {
-        using namespace MsgPack;
-        write_map_size(aStream, 2);
-        write_uint(aStream, 0x10);    write_uint(aStream, aSpaceId);
-        write_uint(aStream, 0x21);    aValue.serialize(aStream);
-    }
+        enum
+        {
+            CODE_SELECT = 1,
+            CODE_INSERT = 2,
+            CODE_DELETE = 5,
+            CODE_AUTH   = 7,
+            CODE_CALL   = 0xa
+        };
 
-    template<class S>
-    void formatDeleteBody(S& aStream, int aSpaceId, const IndexSpec& aIndex)
-    {
-        using namespace MsgPack;
-        write_map_size(aStream, 3);
-        write_uint(aStream, 0x10);    write_uint(aStream, aSpaceId);
-        write_uint(aStream, 0x11);    write_uint(aStream, aIndex.id);
-        write_uint(aStream, 0x20);    write_array_size(aStream, 1);
-    }
+        template <class S>
+        void formatHeader(S& aStream, int aCode, int aSync)
+        {
+            using namespace MsgPack;
+            write_map_size(aStream, 2);
+            write_uint(aStream, 0);
+            write_uint(aStream, aCode);
+            write_uint(aStream, 1);
+            write_uint(aStream, aSync);
+        }
+
+        template <class S>
+        void formatSelectBody(S& aStream, int aSpaceId, const IndexSpec& aIndex)
+        {
+            using namespace MsgPack;
+            write_map_size(aStream, 6);
+            write_uint(aStream, 0x10);
+            write_uint(aStream, aSpaceId);
+            write_uint(aStream, 0x11);
+            write_uint(aStream, aIndex.id);
+            write_uint(aStream, 0x12);
+            write_uint(aStream, aIndex.limit);
+            write_uint(aStream, 0x13);
+            write_uint(aStream, aIndex.offset);
+            write_uint(aStream, 0x14);
+            write_uint(aStream, aIndex.iterator);
+            write_uint(aStream, 0x20);
+            write_array_size(aStream, 1);
+        }
+
+        template <class S, class V>
+        void formatInsertBody(S& aStream, int aSpaceId, const V& aValue)
+        {
+            using namespace MsgPack;
+            write_map_size(aStream, 2);
+            write_uint(aStream, 0x10);
+            write_uint(aStream, aSpaceId);
+            write_uint(aStream, 0x21);
+            aValue.serialize(aStream);
+        }
+
+        template <class S>
+        void formatDeleteBody(S& aStream, int aSpaceId, const IndexSpec& aIndex)
+        {
+            using namespace MsgPack;
+            write_map_size(aStream, 3);
+            write_uint(aStream, 0x10);
+            write_uint(aStream, aSpaceId);
+            write_uint(aStream, 0x11);
+            write_uint(aStream, aIndex.id);
+            write_uint(aStream, 0x20);
+            write_array_size(aStream, 1);
+        }
+
+    public:
+        Protocol(unsigned aSpace)
+        : m_Space(aSpace)
+        {}
+
+        struct Request
+        {
+            uint64_t    serial = 0;
+            std::string body;
+        };
+
+        template <class K>
+        Request formatSelect(const IndexSpec& aIndex, const K& aKey)
+        {
+            const uint64_t      sSerial = m_Serial++;
+            MsgPack::omemstream sStream;
+            formatHeader(sStream, CODE_SELECT, sSerial);
+            formatSelectBody(sStream, m_Space, aIndex);
+            T::formatKey(sStream, aKey);
+            return Request{sSerial, sStream.str()};
+        }
+
+        Request formatInsert(const T& aData)
+        {
+            const uint64_t      sSerial = m_Serial++;
+            MsgPack::omemstream sStream;
+            formatHeader(sStream, CODE_INSERT, sSerial);
+            formatInsertBody(sStream, m_Space, aData);
+            return Request{sSerial, sStream.str()};
+        }
+
+        template <class K>
+        Request formatDelete(const IndexSpec& aIndex, const K& aKey)
+        {
+            const uint64_t      sSerial = m_Serial++;
+            MsgPack::omemstream sStream;
+            formatHeader(sStream, CODE_DELETE, sSerial);
+            formatDeleteBody(sStream, m_Space, aIndex);
+            T::formatKey(sStream, aKey);
+            return Request{sSerial, sStream.str()};
+        }
+    };
 
 #if 0
     template<class P, class A>
@@ -138,4 +222,4 @@ namespace tnt17
         write(aStream, 0x21);    write_array_size(aStream, 2);    write(aStream, "chap-sha1");     write(aStream, aHash);
     }
 #endif
-}
+} // namespace tnt17
