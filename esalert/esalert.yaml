@@ -1,7 +1,7 @@
 config:
   server: cameron.vpn:9301
   index:  logstash*
-  size:   50
+  size:   500
   state:  /var/tmp/esalert.state
 email:
   from: esalert@dark

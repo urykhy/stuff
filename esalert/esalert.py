@@ -95,9 +95,9 @@ for x in C["rules"]:
     for x in r:
         if regexp is not None and re.match(regexp, x.message) is None:
             continue
-        k = "{}:{}".format(x.logsource, x.message.strip())
+        k = "{}:{}".format(x.hostname, x.message.strip())
         if not k in history:
-            s = "{}| {}: {}".format(x.timestamp, x.logsource, x.message.strip())
+            s = "{}| {}: {}".format(x.timestamp, x.hostname, x.message.strip())
             body += s
             body += "\n"
             logging.info("result: {}".format(s))
