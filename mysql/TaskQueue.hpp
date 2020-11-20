@@ -15,17 +15,15 @@ namespace MySQL::TaskQueue {
     {
         std::string table    = "task_queue";
         std::string instance = "test";
-        time_t      period   = 10;
+        time_t      sleep    = 10;
 
         enum Isolation
         {
-            STRICT, // process own tasks only
+            STRICT, // process own tasks only (table.worker == instance)
             RESUME, // resume own tasks only
             NONE    // resume tasks by other instance
         };
         Isolation isolation = NONE;
-
-        unsigned window = 0; // max lag between started tasks
     };
 
     struct HandlerFace
@@ -86,21 +84,6 @@ namespace MySQL::TaskQueue {
                 sTask->worker = aRow[2].as_string();
                 sTask->hint   = aRow[3].as_string();
             });
-            if (sTask and m_Config.window > 0) {
-                m_Connection->Query(fmt::format(
-                    "SELECT count(1) "
-                    "FROM {0} "
-                    "WHERE {1}id < {2} AND id >= (SELECT min(id) FROM {0} WHERE {1}status='started')",
-                    m_Config.table,
-                    isolation(),
-                    sTask->id));
-                unsigned sCount = 0;
-                m_Connection->Use([&sCount](const MySQL::Row& aRow) {
-                    sCount = aRow[0].as_int64();
-                });
-                if (sCount > m_Config.window)
-                    sTask = std::nullopt;
-            }
             return sTask;
         }
 
@@ -111,7 +94,7 @@ namespace MySQL::TaskQueue {
             std::optional<Task> sTask = get_task();
             if (!sTask) {
                 m_Connection->Query("ROLLBACK");
-                wait(m_Config.period);
+                wait(m_Config.sleep);
                 return;
             }
 
