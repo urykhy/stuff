@@ -1,4 +1,4 @@
-project('protobuf', 'cpp', version : '0.1', default_options : ['cpp_std=c++17'])
+project('ssl', 'cpp', version : '0.1', default_options : ['cpp_std=c++17'])
 
 includes = include_directories('..')
 boost    = dependency('boost', modules : ['unit_test_framework', 'system'])

@@ -17,7 +17,7 @@ namespace SSLxx
 
     namespace
     {
-        inline void updateDigest(EVP_MD_CTX* sCtx, const std::string_view& aInput)
+        inline void updateDigest(EVP_MD_CTX* sCtx, std::string_view aInput)
         {
             if (1 != EVP_DigestUpdate(sCtx, aInput.data(), aInput.size()))
                 throw Error("EVP_DigestUpdate");
