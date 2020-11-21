@@ -17,9 +17,9 @@ BOOST_AUTO_TEST_CASE(simple)
 {
     std::string line="asd,zxc,123,";
     {
-        std::vector<boost::string_ref> result;
+        std::vector<std::string_view> result;
         BOOST_CHECK(Parser::simple(line, result));
-        std::vector<boost::string_ref> expected = {"asd", "zxc", "123"};
+        std::vector<std::string_view> expected = {"asd", "zxc", "123"};
         BOOST_CHECK_EQUAL_COLLECTIONS(result.begin(), result.end(), expected.begin(), expected.end());
     }
 }
@@ -145,6 +145,47 @@ BOOST_AUTO_TEST_CASE(url)
 
     sParsed = Parser::url("http://localhost");
     BOOST_CHECK_EQUAL(sParsed.query, "/");
+}
+BOOST_AUTO_TEST_CASE(multipart)
+{
+    // boundary is "--" + Content-Type/boundary
+    const std::string_view sBoundary = "--" "------------------------30476e420cacf245";
+    const std::string_view sData =
+R"(--------------------------30476e420cacf245
+Content-Disposition: form-data; name="key1"
+
+value1
+--------------------------30476e420cacf245
+Content-Disposition: form-data; name="upload"; filename="data.bin"
+Content-Type: application/octet-stream
+
+some
+binary
+data
+
+or
+simple text
+
+--------------------------30476e420cacf245--)";
+
+    unsigned sCounter = 0;
+    Parser::multipart(sData, sBoundary, [&sCounter](auto aMeta, std::string_view aData){
+        sCounter++;
+        switch (sCounter)
+        {
+        case 1:
+            BOOST_CHECK_EQUAL(aMeta.name, "key1");
+            BOOST_CHECK_EQUAL(aData, "value1");
+            break;
+        case 2:
+            BOOST_CHECK_EQUAL(aMeta.name, "upload");
+            BOOST_CHECK_EQUAL(aMeta.filename, "data.bin");
+            BOOST_CHECK_EQUAL(aMeta.content_type, "application/octet-stream");
+            BOOST_CHECK_EQUAL(aData.size(), 33);
+            break;
+        };
+    });
+    BOOST_CHECK_EQUAL(sCounter, 2);
 }
 BOOST_AUTO_TEST_CASE(autoindex)
 {

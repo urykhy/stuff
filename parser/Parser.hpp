@@ -1,28 +1,27 @@
 #pragma once
 #include <boost/utility/string_ref.hpp>
 
-namespace Parser
-{
+namespace Parser {
     // simple parser.
     //
     // call t for every substring
-    template<class T>
-    bool simple(boost::string_ref str, T&& t, const char sep = ',')
+    template <class T>
+    bool simple(std::string_view str, T&& t, const char sep = ',')
     {
-        while (!str.empty())
-        {
+        while (!str.empty()) {
             auto pos = str.find(sep);
-            if (pos == boost::string_ref::npos)
+            if (pos == std::string_view::npos)
                 pos = str.size();
             t(str.substr(0, pos));
-            str.remove_prefix(pos+1);
+            str.remove_prefix(std::min(pos + 1, str.size()));
         }
         return true;
     }
 
-    inline bool simple(boost::string_ref str, std::vector<boost::string_ref>& result, const char sep = ',')
+    inline bool simple(std::string_view str, std::vector<std::string_view>& result, const char sep = ',')
     {
-        return simple(str, [&result](const boost::string_ref& s){ result.push_back(s); }, sep);
+        return simple(
+            str, [&result](const auto& s) { result.push_back(s); }, sep);
     }
 
     // complicated parser.
@@ -33,31 +32,33 @@ namespace Parser
     //   quotes + double quotes.
     //   escaping
     //
-    template<class F>
+    template <class F>
     bool quoted(boost::string_ref str, F f, const char sep = ',', const char quote = '"', const char esc = '\\')
     {
         bool        next_token = false;
         std::string current;
 
         bool first_character = true;
-        bool quoted_string = false;
-        bool skip_quote = false;
-        bool esc_quote = false;
+        bool quoted_string   = false;
+        bool skip_quote      = false;
+        bool esc_quote       = false;
 
         char c = 0;
-        for (size_t i = 0; i < str.size(); i++)
-        {
+        for (size_t i = 0; i < str.size(); i++) {
             c = str[i];
 
             if (next_token) {
-                f(current);    // starting new token
+                f(current); // starting new token
                 current.clear();
-                next_token = false; first_character = true; quoted_string = false; skip_quote = false; esc_quote = false;
+                next_token      = false;
+                first_character = true;
+                quoted_string   = false;
+                skip_quote      = false;
+                esc_quote       = false;
             }
             if (first_character) {
                 first_character = false;
-                if (c == quote)
-                {
+                if (c == quote) {
                     quoted_string = true;
                     continue;
                 }
@@ -67,22 +68,30 @@ namespace Parser
                 esc_quote = false;
                 continue;
             }
-            if (quoted_string)
-            {
+            if (quoted_string) {
                 if (skip_quote) {
                     skip_quote = false;
-                    if (c == sep)           next_token = true;         // ",
-                    else if (c == quote)    current.push_back(quote);  // ""
-                    else                    return false;              // "x
+                    if (c == sep)
+                        next_token = true; // ",
+                    else if (c == quote)
+                        current.push_back(quote); // ""
+                    else
+                        return false; // "x
                 } else {
-                    if (c == esc)           esc_quote = true;
-                    else if (c == quote)    skip_quote = true;
-                    else                    current.push_back(c);
+                    if (c == esc)
+                        esc_quote = true;
+                    else if (c == quote)
+                        skip_quote = true;
+                    else
+                        current.push_back(c);
                 }
             } else {
-                if (c == esc)        esc_quote = true;
-                else if (c == sep)   next_token = true;
-                else                 current.push_back(c);
+                if (c == esc)
+                    esc_quote = true;
+                else if (c == sep)
+                    next_token = true;
+                else
+                    current.push_back(c);
             }
         }
         if (esc_quote)
@@ -90,7 +99,7 @@ namespace Parser
         if (quoted_string and !skip_quote and !next_token)
             return false;
         f(current);
-        if (c == sep)   // if last char in string is separator - append empty token
+        if (c == sep) // if last char in string is separator - append empty token
         {
             current.clear();
             f(current);
@@ -98,5 +107,4 @@ namespace Parser
 
         return true;
     }
-}
-
+} // namespace Parser

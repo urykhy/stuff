@@ -15,7 +15,7 @@ namespace Parser
         const std::regex sRegex("<a href=\"(.*)\">\\1</a>");
         StringList sResult;
 
-        simple(aBody, [&](const boost::string_ref& aStr) mutable {
+        simple(aBody, [&](const std::string_view& aStr) mutable {
             std::smatch sMatch;
             const std::string sTmp(aStr.data(), aStr.size());
             if (std::regex_search(sTmp, sMatch, sRegex))
