@@ -28,7 +28,7 @@ namespace RPC
         Result on_write() override { return Result::OK; }
         void on_error() override { BOOST_CHECK(false); }
 
-        int get_fd() { return m_Socket.get_fd(); }
+        int get_fd() override { return m_Socket.get_fd(); }
     };
 
     class Client : public Util::EPoll::HandlerFace
@@ -80,6 +80,6 @@ namespace RPC
         Result on_write() override { return Result::OK; }
         void on_error() override { BOOST_CHECK(false); }
 
-        int get_fd() { return m_Socket.get_fd(); }
+        int get_fd() override { return m_Socket.get_fd(); }
     };
 }

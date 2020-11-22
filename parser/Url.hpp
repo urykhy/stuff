@@ -100,21 +100,21 @@ namespace Parser {
     }
 
     template <class T>
-    void http_query(boost::string_ref aQuery, T&& aHandler)
+    void http_query(std::string_view aQuery, T&& aHandler)
     {
         auto sBegin = aQuery.find('?');
-        if (sBegin == boost::string_ref::npos)
+        if (sBegin == std::string_view::npos)
             return;
 
         simple(
             aQuery.substr(sBegin + 1), [aHandler = std::move(aHandler)](auto&& aStr) {
                 auto sEnd = aStr.find('=');
-                if (sEnd != boost::string_ref::npos) {
+                if (sEnd != std::string_view::npos) {
                     auto sKey   = aStr.substr(0, sEnd);
                     auto sValue = aStr.substr(sEnd + 1);
                     aHandler(sKey, sValue);
                 } else
-                    aHandler(aStr, boost::string_ref());
+                    aHandler(aStr, std::string_view());
             },
             '&');
     }

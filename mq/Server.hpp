@@ -123,7 +123,7 @@ namespace MQ {
 
             std::string sClient;
             std::string sHash;
-            Parser::http_query(boost::string_ref(sQuery.data(), sQuery.size()), [&sClient, &sHash](auto aName, auto aValue) {
+            Parser::http_query(std::string_view(sQuery.data(), sQuery.size()), [&sClient, &sHash](auto aName, auto aValue) {
                 if (aName == "client")
                     sClient.assign(aValue.data(), aValue.size());
                 if (aName == "hash")
