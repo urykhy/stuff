@@ -11,6 +11,7 @@
 #include "ULeb128.hpp"
 #include "Autoindex.hpp"
 #include "Base64.hpp"
+#include "Multipart.hpp"
 
 BOOST_AUTO_TEST_SUITE(parser)
 BOOST_AUTO_TEST_CASE(simple)
