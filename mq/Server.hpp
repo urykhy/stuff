@@ -16,9 +16,10 @@ namespace MQ {
         {
             Etcd::Client::Params etcd;
             std::string          endpoint    = "/mq";
-            unsigned             queue_limit = 10; // max number of pending tasks in queue before http error 429
-            unsigned             etcd_limit  = 10; // max number of hashes per client in etcd
-            double               linger      = 5;  // max time to wait until all tasks processed
+            unsigned             queue_limit = 10;          // max number of pending tasks in queue before http error 429 (too many requests)
+            unsigned             etcd_limit  = 10;          // max number of hashes per client in etcd
+            double               linger      = 5;           // max time to wait until all tasks processed
+            unsigned             max_size    = 1024 * 1024; // max upload size. return http error 413 (payload too large)
         };
 
     private:
@@ -120,6 +121,11 @@ namespace MQ {
             }
 
             auto sQuery = aRequest.target();
+            if (sQuery.size() > m_Params.max_size)
+            {
+                aResponse.result(http::status::payload_too_large);
+                return;
+            }
 
             std::string sClient;
             std::string sHash;
