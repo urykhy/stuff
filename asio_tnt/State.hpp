@@ -2,7 +2,7 @@
 
 #include <atomic>
 
-namespace tnt17
+namespace asio_tnt
 {
     enum StateEnum
     {
@@ -36,4 +36,4 @@ namespace tnt17
         bool is_alive() const { return is_running() and is_connected(); }
     };
 
-} // namespace tnt17
+} // namespace asio_tnt

@@ -2,7 +2,7 @@
 #include <boost/asio.hpp>
 #include <boost/asio/coroutine.hpp>
 
-namespace tnt17 {
+namespace asio_tnt {
     namespace ba = boost::asio;
     using tcp    = ba::ip::tcp;
 
@@ -37,4 +37,4 @@ namespace tnt17 {
         Header       m_Header;
         std::string  m_Body;
     };
-} // namespace tnt17
+} // namespace asio_tnt

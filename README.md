@@ -2,45 +2,19 @@
 
 some information about stuff
 
-### large projects:
-- jaeger - tracing events from c++
-- sentry - sentry logs from c++, __cxa_throw hook.
-- tnt17 - tarantool client with asio
-
 ### libraries
-- curl - easy and multi handle c++ wrappers
-- httpd - simple httpd server/client with pipelining
-- mysql - mysql client
-- threads - thread group, work queue, pipeline.
-
-### experiments:
-- af_alg - use AF_ALG socket on linux to avoid openssl.
-- aio - linux native async io
-- archive - single api to gzip/bz2/xz/zstd/lz4
 - asio_http - asio http server and client
-- asio_mysqld - asio mysql server
-- avx - bit of simd
-- bloom - bloom filters
-- cache - some caching
-- cbor - cbor format implementation
-- container - containers, IoC.
-- etcd - etcd v3 (json) client
-- file - file operations
-- httpd - httpd with pipelining and no asio
-- iconv - c++ wrapper for iconv
-- logger - logger which can be enabled/disabled per function/log-level
-- ml - machine learning: FTRL, LR.
-- mpl - some template magic
-- msgpack - incomplete msgpack serialization
-- mq - message queue over http, etcd used to avoid duplicates.
-- networking - epoll based networking
-- protobuf - fast protobuf parser with polymorphic allocator support
-- prometheus - small client library
-- resource - embed binary data into elf, tar file for example.
-- rpc - simple rpc over udp
-- ssl - openssl
-- time - cctz wrapper, time helpers
-- utf8 - utf8 validator
+- asio_tnt - tarantool 1.7 client with asio
+- cbor - cbor format parser/encoder
+- curl - easy and multi handle c++ wrapper
+- jaeger - tracing events from c++
+- mq - poor man `message queue` over http, etcd used to avoid duplicates.
+- mysql - mysql client
+- prometheus - small metrics library
+- protobuf - simple protobuf parser with polymorphic allocator support
+- sentry - sentry logs from c++, supports __cxa_throw.
+- ssl - openssl wrappers
+- threads - thread group, work queue, pipeline.
 
 ### scripts
 - btsync  - transfer files over bittorrent

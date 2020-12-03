@@ -1,4 +1,4 @@
-project('tnt17', 'cpp', version : '0.1', default_options : ['cpp_std=c++17'])
+project('asio_tnt', 'cpp', version : '0.1', default_options : ['cpp_std=c++17'])
 
 includes = include_directories('..')
 boost     = dependency('boost', modules : ['unit_test_framework', 'system'])

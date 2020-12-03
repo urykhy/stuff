@@ -5,7 +5,7 @@
 #include "ReplyWaiter.hpp"
 #include "State.hpp"
 
-namespace tnt17 {
+namespace asio_tnt {
 
     inline tcp::endpoint endpoint(const std::string& aAddr, uint16_t aPort)
     {
@@ -280,4 +280,4 @@ namespace tnt17 {
 
         boost::asio::io_service& io_service() { return m_Strand.context(); }
     };
-} // namespace tnt17
+} // namespace asio_tnt

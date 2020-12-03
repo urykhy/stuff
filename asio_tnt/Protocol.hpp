@@ -4,7 +4,7 @@
 
 #include "Error.hpp"
 
-namespace tnt17 {
+namespace asio_tnt {
     using binary     = MsgPack::binary;
     using omemstream = MsgPack::omemstream;
     using imemstream = MsgPack::imemstream;
@@ -257,4 +257,4 @@ namespace tnt17 {
         write(aStream, 0x21);    write_array_size(aStream, 2);    write(aStream, "chap-sha1");     write(aStream, aHash);
     }
 #endif
-} // namespace tnt17
+} // namespace asio_tnt

@@ -10,7 +10,7 @@
 
 #include "Error.hpp"
 
-namespace tnt17 {
+namespace asio_tnt {
 
     using Promise = std::promise<std::string_view>;
     using Future  = std::future<std::string_view>;
@@ -95,4 +95,4 @@ namespace tnt17 {
 
         void reset() { m_Error = nullptr; }
     };
-} // namespace tnt17
+} // namespace asio_tnt

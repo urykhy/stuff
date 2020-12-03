@@ -2,7 +2,7 @@
 
 #include "Client.hpp"
 
-namespace tnt17::cache {
+namespace asio_tnt::cache {
     struct Entry
     {
         std::string key;
@@ -43,11 +43,11 @@ namespace tnt17::cache {
 
         auto makeCallback(Handler&& aHandler)
         {
-            return [sHandler = std::move(aHandler)](tnt17::Future&& aResult) {
+            return [sHandler = std::move(aHandler)](asio_tnt::Future&& aResult) {
                 Promise sPromise;
                 try {
                     Result sResult;
-                    if (tnt17::parse<Entry>(aResult, [&sResult](auto&& x) { sResult = std::move(x); }) > 1)
+                    if (asio_tnt::parse<Entry>(aResult, [&sResult](auto&& x) { sResult = std::move(x); }) > 1)
                         throw std::invalid_argument("got more than one response element");
                     sPromise.set_value(std::move(sResult));
                 } catch (const std::exception& e) {
@@ -105,7 +105,7 @@ namespace tnt17::cache {
             m_Client->call(sRequest, [aHandler = std::move(aHandler)](auto&& aResult) {
                 std::promise<uint32_t> sPromise;
                 try {
-                    tnt17::parse<ExpireResult>(aResult, [&sPromise](auto&& x) {
+                    asio_tnt::parse<ExpireResult>(aResult, [&sPromise](auto&& x) {
                         sPromise.set_value(x.affected);
                     });
                 } catch (const std::exception& e) {
@@ -115,4 +115,4 @@ namespace tnt17::cache {
             });
         }
     };
-} // namespace tnt17::cache
+} // namespace asio_tnt::cache

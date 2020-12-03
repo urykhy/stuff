@@ -1,6 +1,6 @@
 #pragma once
 
-namespace tnt17 {
+namespace asio_tnt {
 
     struct NetworkError : std::runtime_error
     {
@@ -17,4 +17,4 @@ namespace tnt17 {
         : std::invalid_argument("Tnt error: " + e)
         {}
     };
-} // namespace tnt17
+} // namespace asio_tnt
