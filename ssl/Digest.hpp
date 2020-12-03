@@ -1,77 +1,69 @@
 #pragma once
 
-#include <openssl/evp.h>
-
 #include <cassert>
 #include <string>
 #include <string_view>
-#include <iostream>
 
-#include <mpl/Mpl.hpp>
-#include <unsorted/Raii.hpp>
 #include <format/Hex.hpp>
 
-namespace SSLxx
-{
-    using Error = std::runtime_error;
+#include "Util.hpp"
 
-    namespace
-    {
+namespace SSLxx {
+    namespace {
         inline void updateDigest(EVP_MD_CTX* sCtx, std::string_view aInput)
         {
             if (1 != EVP_DigestUpdate(sCtx, aInput.data(), aInput.size()))
                 throw Error("EVP_DigestUpdate");
         }
 
-        template<class T> typename std::enable_if<std::is_integral_v<T>, void>::type updateDigest(EVP_MD_CTX* sCtx, const T& aInput)
+        template <class T>
+        typename std::enable_if<std::is_integral_v<T>, void>::type updateDigest(EVP_MD_CTX* sCtx, const T& aInput)
         {
             if (1 != EVP_DigestUpdate(sCtx, &aInput, sizeof(T)))
                 throw Error("EVP_DigestUpdate");
         }
-    }
-
+    } // namespace
 
     // aKind is a EVP_sha256() for example
-    template<class... T>
+    template <class... T>
     inline std::string Digest(const EVP_MD* aKind, T&&... aInput)
     {
         unsigned int sLen = EVP_MD_size(aKind);
-        std::string sResult(sLen, '\0');
+        std::string  sResult(sLen, '\0');
+        auto         sCtx = makeDigestCtx();
 
-        EVP_MD_CTX* sCtx = nullptr;
-        Util::Raii sCleanup([&sCtx](){
-            if (sCtx != nullptr)
-                EVP_MD_CTX_destroy(sCtx);
-        });
+        if (1 != EVP_DigestInit_ex(sCtx.get(), aKind, NULL))
+            throw Error("EVP_DigestInit_ex");
 
-        sCtx = EVP_MD_CTX_create();
-        if (sCtx == nullptr) throw Error("EVP_MD_CTX_create");
-        if (1 != EVP_DigestInit_ex(sCtx, aKind, NULL)) throw Error("EVP_DigestInit_ex");
-        Mpl::for_each_argument([&](const auto& aInput){
-            updateDigest(sCtx, aInput);
-        }, aInput...);
-        if (1 != EVP_DigestFinal_ex(sCtx, (uint8_t*)sResult.data(), &sLen)) throw Error("EVP_DigestFinal_ex");
+        Mpl::for_each_argument(
+            [&](const auto& aInput) {
+                updateDigest(sCtx.get(), aInput);
+            },
+            aInput...);
+
+        if (1 != EVP_DigestFinal_ex(sCtx.get(), (uint8_t*)sResult.data(), &sLen))
+            throw Error("EVP_DigestFinal_ex");
 
         assert(sLen == sResult.size());
 
         return sResult;
     }
 
-    template<class... T>
+    template <class... T>
     inline std::string DigestStr(const EVP_MD* aKind, T&&... aInput)
     {
         return Format::to_hex(Digest(aKind, std::forward<T&&>(aInput)...));
     }
 
-    template<class... T>
+    template <class... T>
     inline uint64_t DigestHash(const EVP_MD* aKind, T&&... aInput)
     {
-        const auto sData = Digest(aKind, std::forward<T&&>(aInput)...);
-        const char* sPtr = sData.data() + sData.size() - sizeof(uint64_t);
+        const auto  sData = Digest(aKind, std::forward<T&&>(aInput)...);
+        const char* sPtr  = sData.data() + sData.size() - sizeof(uint64_t);
         return *reinterpret_cast<const uint64_t*>(sPtr);
     }
 
-    template<class... T>
+    template <class... T>
     inline bool DigestNth(const EVP_MD* aKind, uint64_t aPart, T&&... aInput)
     {
         return DigestHash(aKind, std::forward<T&&>(aInput)...) % aPart == 0;
@@ -82,11 +74,11 @@ namespace SSLxx
         std::string sResult(aSize, ' ');
 
         if (1 != EVP_PBE_scrypt(aPass.data(), aPass.size(),
-                               (const uint8_t*)aSalt.data(), aSalt.size(),
-                               1024, 8, 1, 0,
-                               (uint8_t*)sResult.data(), sResult.size()))
+                                (const uint8_t*)aSalt.data(), aSalt.size(),
+                                16384 /* N */, 8 /* r */ , 1 /* p */, 0 /*  max_mem */,
+                                (uint8_t*)sResult.data(), sResult.size()))
             Error("EVP_PBE_scrypt");
 
         return sResult;
     }
-}
+} // namespace SSLxx

@@ -7,7 +7,6 @@
 #include "Digest.hpp"
 #include "GCM.hpp"
 #include "HMAC.hpp"
-#include "Key.hpp"
 
 BOOST_AUTO_TEST_SUITE(SSLxx)
 BOOST_AUTO_TEST_CASE(hash)
@@ -52,7 +51,7 @@ BOOST_AUTO_TEST_CASE(hmac)
     using namespace SSLxx::HMAC;
 
     const std::string sData = "qwerty";
-    const Key         sKey("secret");
+    const auto        sKey = hmacKey("secret");
 
     const std::string sTmp = Sign(EVP_sha256(), sKey, sData);
     BOOST_CHECK(Verify(EVP_sha256(), sKey, sTmp, sData));
