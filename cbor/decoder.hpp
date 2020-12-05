@@ -19,7 +19,7 @@ namespace cbor {
         s.read(&t, sizeof(t));
         t = be2h(t);
         return t;
-    };
+    }
 
     template <class T = uint64_t>
     T get_uint(istream& s, uint8_t minorType)
@@ -47,7 +47,7 @@ namespace cbor {
     inline TypeInfo get_type(
         istream& s, F& onTag = [](auto) {})
     {
-        TypeInfo info{0};
+        TypeInfo info{};
         while (1) {
             s.read(&info, sizeof(info));
             if (info.major == CBOR_TAG) {

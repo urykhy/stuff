@@ -82,17 +82,16 @@ namespace MySQL
                 return sResult;
             }
         };
-
-    };
+    }
 
     // get mysql enum from type
     template <class T> constexpr enum_field_types GetEnum();
-    template <> constexpr enum_field_types GetEnum<char>()          { return MYSQL_TYPE_TINY; };
-    template <> constexpr enum_field_types GetEnum<short>()         { return MYSQL_TYPE_SHORT; };
-    template <> constexpr enum_field_types GetEnum<int>()           { return MYSQL_TYPE_LONG; };
-    template <> constexpr enum_field_types GetEnum<long long int>() { return MYSQL_TYPE_LONGLONG; };
-    template <> constexpr enum_field_types GetEnum<float>()         { return MYSQL_TYPE_FLOAT; };
-    template <> constexpr enum_field_types GetEnum<double>()        { return MYSQL_TYPE_DOUBLE; };
+    template <> constexpr enum_field_types GetEnum<char>()          { return MYSQL_TYPE_TINY; }
+    template <> constexpr enum_field_types GetEnum<short>()         { return MYSQL_TYPE_SHORT; }
+    template <> constexpr enum_field_types GetEnum<int>()           { return MYSQL_TYPE_LONG; }
+    template <> constexpr enum_field_types GetEnum<long long int>() { return MYSQL_TYPE_LONGLONG; }
+    template <> constexpr enum_field_types GetEnum<float>()         { return MYSQL_TYPE_FLOAT; }
+    template <> constexpr enum_field_types GetEnum<double>()        { return MYSQL_TYPE_DOUBLE; }
 
     class Statment
     {
@@ -356,6 +355,5 @@ namespace MySQL
                 aHandler(Row(sRow, sFields));
             mysql_free_result(sResult);
         }
-
     };
-};
+}

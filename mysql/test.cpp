@@ -86,8 +86,7 @@ BOOST_AUTO_TEST_CASE(updateable)
     upd2.restore(&sRestore);
     r = upd2.find("d006");
     BOOST_CHECK_EQUAL(r.value(), "Quality Management");
-
-};
+}
 BOOST_AUTO_TEST_CASE(upload)
 {
 /*

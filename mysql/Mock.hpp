@@ -2,6 +2,7 @@
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wnon-virtual-dtor"
+#pragma GCC diagnostic ignored "-Wcast-function-type"
 #define FAKEIT_ASSERT_ON_UNEXPECTED_METHOD_INVOCATION
 #include <mock/fakeit.hpp>
 #pragma GCC diagnostic pop

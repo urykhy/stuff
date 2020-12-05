@@ -21,6 +21,7 @@ namespace MySQL
                 case '\r':
                 case '`':
                     sResult.push_back('\\');
+                    [[fallthrough]];
                 default:
                     sResult.push_back(a);
             }
