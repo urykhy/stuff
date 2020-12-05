@@ -129,8 +129,8 @@ BOOST_AUTO_TEST_CASE(prepare)
     MySQL::Statment s=c.Prepare("select * from departments where dept_no > ? and dept_no < ? order by dept_no");
     s.Execute("d004","d007");
     s.Use([i = 0](const auto& aRow) mutable {
-        const std::string sNumber = aRow[0];
-        const std::string sName   = aRow[1];
+        const std::string_view sNumber = aRow[0];
+        const std::string_view sName   = aRow[1];
         BOOST_TEST_MESSAGE(sNumber << " = " << sName);
         if (i == 0)
         {

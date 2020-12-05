@@ -60,30 +60,6 @@ namespace MySQL
         }
     };
 
-    namespace aux
-    {
-        class Buffer
-        {
-            std::array<unsigned char, 4096> m_Buffer;
-            unsigned char* m_Data;
-
-        public:
-            Buffer() : m_Data(m_Buffer.data()) { }
-
-            template<class T>
-            T* allocate(size_t count = 1)
-            {
-                unsigned sLen = sizeof(T) * count;
-                if (m_Data + sLen >= m_Buffer.end())
-                    throw std::bad_alloc();
-
-                T* sResult = reinterpret_cast<T*>(m_Data);
-                m_Data += sLen;
-                return sResult;
-            }
-        };
-    }
-
     // get mysql enum from type
     template <class T> constexpr enum_field_types GetEnum();
     template <> constexpr enum_field_types GetEnum<char>()          { return MYSQL_TYPE_TINY; }
@@ -137,15 +113,14 @@ namespace MySQL
             throw std::runtime_error(sMsg);
         }
 
-        // FIXME: use string_ref
-        using ResultRow = std::vector<std::string>;
+        using ResultRow = std::vector<std::string_view>;
         template<class T>
         ResultRow prepareRow(const T* aBind, size_t aCount)
         {
             ResultRow sRow;
             sRow.reserve(aCount);
             for (size_t i = 0; i < aCount; i++)
-                sRow.push_back(std::string((const char*)aBind[i].buffer, *aBind[i].length));
+                sRow.push_back(std::string_view((const char*)aBind[i].buffer, *aBind[i].length));
             return sRow;
         }
 
@@ -193,11 +168,10 @@ namespace MySQL
                 report("mysql_stmt_execute");
         }
 
+        // can crash on large fields, since use alloca to allocate buffers
         template<class T>
         void Use(T aHandler)
         {
-            aux::Buffer sBuffer;
-
             auto sMeta = mysql_stmt_result_metadata(m_Stmt);
             int sFields = mysql_num_fields(sMeta);
             //std::cout << "column count: " << sFields << std::endl;
@@ -209,10 +183,10 @@ namespace MySQL
             {
                 MYSQL_FIELD* sField = &sMeta->fields[i];
                 //std::cout << "field length " << sField->length << ", name = " << sField->name << std::endl;
-                sResult[i].buffer = sBuffer.allocate<char>(sField->length);
+                sResult[i].buffer = alloca(sField->length);
                 sResult[i].buffer_length = sField->length;
-                sResult[i].length = sBuffer.allocate<unsigned long>();
-                sResult[i].error  = sBuffer.allocate<my_bool>();
+                sResult[i].length = (long unsigned int*)alloca(sizeof(unsigned long));
+                sResult[i].error  = (my_bool*)alloca(sizeof(my_bool));
             }
             mysql_free_result(sMeta);
 
