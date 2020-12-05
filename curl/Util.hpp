@@ -24,6 +24,7 @@ namespace Curl
         });
         if (sCode != 200)
             throw Client::Error("fail to download: http code: " + std::to_string(sCode));
+        sTmp.flush();
 
         return sTmp;
     }
