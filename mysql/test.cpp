@@ -24,7 +24,7 @@ struct Entry
     std::string to_date;
 };
 
-MySQL::Config cfg{"sql1.mysql", 3306, "root", "", "employees"};
+MySQL::Config cfg{"sql1.mysql", 3306, "root", "", "employees", 10, "mysql-test-simple"};
 
 BOOST_AUTO_TEST_SUITE(MySQL)
 BOOST_AUTO_TEST_CASE(simple)
@@ -33,12 +33,20 @@ BOOST_AUTO_TEST_CASE(simple)
     BOOST_CHECK_EQUAL(c.ping(), true);  // connected
     std::list<Entry> sData;
     Time::XMeter m1;
-    c.Query("select emp_no, salary, from_date, to_date from salaries");
+    c.Query("SELECT emp_no, salary, from_date, to_date FROM salaries");
     c.Use([&sData](const MySQL::Row& aRow){
         sData.push_back(Entry{aRow[0].as_int64(), aRow[1].as_int64(), aRow[2].as_string(), aRow[3].as_string()});
     });
     BOOST_TEST_MESSAGE("elapsed " << m1.duration().count()/1000/1000.0 << " ms");
     BOOST_TEST_MESSAGE("got " << sData.size() << " rows");
+
+    // ensure program name set
+    bool sAttr = false;
+    c.Query("SELECT * from performance_schema.session_connect_attrs WHERE attr_name='program_name' AND attr_value='mysql-test-simple'");
+    c.Use([&sAttr](const MySQL::Row& aRow){
+        sAttr = 1;
+    });
+    BOOST_CHECK_EQUAL(sAttr, true);
 
     c.close();
     BOOST_CHECK_EQUAL(c.ping(), false);  // not connected

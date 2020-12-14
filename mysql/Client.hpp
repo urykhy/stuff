@@ -18,6 +18,7 @@ namespace MySQL
         std::string password;
         std::string database;
         time_t timeout = 10;
+        std::string program_name = "";
     };
 
     class Row
@@ -258,6 +259,8 @@ namespace MySQL
             mysql_options(&m_Handle, MYSQL_OPT_CONNECT_TIMEOUT, &sReconnectTimeout);
             mysql_options(&m_Handle, MYSQL_OPT_READ_TIMEOUT, &m_Cfg.timeout);
             mysql_options(&m_Handle, MYSQL_OPT_WRITE_TIMEOUT, &m_Cfg.timeout);
+            if (!m_Cfg.program_name.empty())
+                mysql_options4(&m_Handle, MYSQL_OPT_CONNECT_ATTR_ADD, "program_name", m_Cfg.program_name.c_str());
             if (!mysql_real_connect(&m_Handle, m_Cfg.host.data(), m_Cfg.username.data(), m_Cfg.password.data(), m_Cfg.database.data(), m_Cfg.port, NULL, 0))
             {
                 mysql_close(&m_Handle);
