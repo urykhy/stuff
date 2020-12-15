@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 from stat import *
 import os
@@ -68,7 +68,7 @@ class XTar:
             t.mode = 0o755
         else:
             t.mode = 0o644
-        self.tar.addfile(t, open(name))
+        self.tar.addfile(t, open(name, 'rb'))
 
     def __init__(self, tar, c):
         self.tar = tar
