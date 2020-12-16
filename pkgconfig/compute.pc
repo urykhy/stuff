@@ -1,0 +1,5 @@
+Name: Boost.Compute
+Description: GPU/parallel-computing library for C++ based on OpenCL
+Version: 1.75
+Libs: -lOpenCL
+Cflags: -I/u03/git/_c/boost-compute/include
