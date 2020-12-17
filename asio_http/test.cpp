@@ -90,7 +90,8 @@ BOOST_AUTO_TEST_CASE(alive)
 
     asio_http::ClientRequest sRequest{.method = http::verb::get, .url = "http://127.0.0.1:2081/hello", .headers = {{http::field::host, "127.0.0.1"}}};
 
-    auto sManager  = std::make_shared<asio_http::Alive::Manager>(sAsio.service());
+    asio_http::Alive::Params sParams;
+    auto sManager  = std::make_shared<asio_http::Alive::Manager>(sAsio.service(), sParams);
     sManager->start_cleaner();
     auto sResponse = sManager->async(std::move(sRequest)).get();
     BOOST_CHECK_EQUAL(sResponse.result(), http::status::ok);

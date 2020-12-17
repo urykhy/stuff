@@ -3,6 +3,7 @@
 #include <set>
 
 #include <container/Pool.hpp>
+#include <container/RequestQueue.hpp>
 
 #include "Client.hpp"
 
@@ -63,6 +64,12 @@ namespace asio_http::Alive {
     };
     using ConnectionPtr = std::shared_ptr<Connection>;
 
+    struct Params
+    {
+        unsigned max_connections  = 32;
+        unsigned queue_timeout_ms = 1000;
+    };
+
     class Manager : public std::enable_shared_from_this<Manager>
     {
         Container::KeyPool<Connection::Peer, ConnectionPtr> m_Alive;
@@ -70,20 +77,33 @@ namespace asio_http::Alive {
         asio::deadline_timer                                m_Timer;
         asio::io_service::strand                            m_Strand;
 
+        struct RQ
+        {
+            ClientRequest request;
+            Promise       promise;
+        };
+
+        const Params                m_Params;
+        uint64_t                    m_Current = 0; // number of current requests
+        container::RequestQueue<RQ> m_Waiting;     // pending requests + expiration
+
     public:
-        Manager(asio::io_service& aService)
+        Manager(asio::io_service& aService, const Params& aParams)
         : m_Service(aService)
         , m_Timer(aService)
         , m_Strand(aService)
+        , m_Params(aParams)
+        , m_Waiting([this](RQ& x) mutable { expired(x); })
         {
         }
 
         void start_cleaner()
         {
-            m_Timer.expires_from_now(boost::posix_time::seconds(1));
+            m_Timer.expires_from_now(boost::posix_time::milliseconds(m_Waiting.eta(1000)));
             m_Timer.async_wait(m_Strand.wrap([this, p = this->shared_from_this()](boost::system::error_code ec) {
                 if (!ec) {
                     m_Alive.cleanup();
+                    m_Waiting.on_timer();
                     start_cleaner();
                 }
             }));
@@ -101,25 +121,37 @@ namespace asio_http::Alive {
     private:
         void async_i(ClientRequest&& aRequest, Promise aPromise)
         {
+            if (m_Current < m_Params.max_connections and m_Waiting.empty()) {
+                start(std::move(aRequest), aPromise);
+            } else {
+                m_Waiting.insert({std::move(aRequest), aPromise}, m_Params.queue_timeout_ms);
+            }
+        }
+
+        void start(ClientRequest&& aRequest, Promise aPromise)
+        {
             auto             sParsed = Parser::url(aRequest.url);
             Connection::Peer sPeer{std::move(sParsed.host), std::move(sParsed.port)};
             auto             sAlive = m_Alive.get(sPeer);
+            m_Current++;
 
             if (sAlive) {
                 auto sPtr     = *sAlive;
                 sPtr->promise = aPromise;
-                boost::asio::spawn(m_Strand, [aRequest = std::move(aRequest), sPtr](boost::asio::yield_context yield) mutable {
+                boost::asio::spawn(m_Strand, [aRequest = std::move(aRequest), sPtr, p = shared_from_this()](boost::asio::yield_context yield) mutable {
                     auto    sParsed   = Parser::url(aRequest.url);
                     Request sInternal = prepareRequest(aRequest, sParsed);
                     perform(std::move(aRequest), sInternal, sPtr, yield);
+                    p->done();
                 });
             } else {
                 auto sPtr     = std::make_shared<Connection>(m_Service, std::move(sPeer));
                 sPtr->promise = aPromise;
                 sPtr->manager = shared_from_this();
 
-                boost::asio::spawn(m_Strand, [aRequest = std::move(aRequest), sPtr](boost::asio::yield_context yield) mutable {
+                boost::asio::spawn(m_Strand, [aRequest = std::move(aRequest), sPtr, p = shared_from_this()](boost::asio::yield_context yield) mutable {
                     start(sPtr->manager->m_Service, std::move(aRequest), sPtr, yield);
+                    p->done();
                 });
             }
         }
@@ -185,6 +217,29 @@ namespace asio_http::Alive {
             aPtr->promise->set_value(std::move(sResponse));
             aPtr->promise.reset();
             aPtr->manager->m_Alive.insert(aPtr->peer, aPtr);
+        }
+
+        void done()
+        {
+            m_Strand.post([p = shared_from_this()]() mutable {
+                p->done_i();
+            });
+        }
+
+        void done_i()
+        {
+            // called once request done
+            if (m_Current > 0)
+                m_Current--;
+
+            auto sNew = m_Waiting.get();
+            if (sNew)
+                start(std::move(sNew->request), sNew->promise);
+        }
+
+        void expired(RQ& x)
+        {
+            x.promise->set_exception(std::make_exception_ptr(std::runtime_error("timeout in queue")));
         }
     };
 
