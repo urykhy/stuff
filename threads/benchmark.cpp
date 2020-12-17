@@ -15,7 +15,7 @@ static void BM_Test(benchmark::State& state)
         benchmark::DoNotOptimize(sCounter++);
         sMutex.unlock();
     }
-};
+}
 
 BENCHMARK_TEMPLATE(BM_Test, std::mutex)->Threads(1)->Threads(4)->Threads(12);
 BENCHMARK_TEMPLATE(BM_Test, Threads::Spinlock)->Threads(1)->Threads(4)->Threads(12);

@@ -42,17 +42,15 @@ BOOST_AUTO_TEST_CASE(impl)
     std::vector<int> data = {1,2,3,4,5,6,7,8,9};
     Threads::Pipeline<int> p;
 
-    p.stage([](int a){
+    p | [](int a){
         BOOST_TEST_MESSAGE("stage1 " << a);
         Threads::sleep(drand48());
-    });
-    p.stage([](int a){
+    } | [](int a){
         BOOST_TEST_MESSAGE("stage2 " << a);
         Threads::sleep(drand48());
-    });
-    p.stage([](int a){
+    } | [](int a){
         BOOST_TEST_MESSAGE("stage3 " << a);
-    });
+    };
 
     for (auto a : data)
         p.insert(a);
