@@ -23,8 +23,8 @@ namespace asio_http {
 
         http::verb  method = http::verb::get;
         std::string url;
-        std::string body;
-        Headers     headers;
+        std::string body = {};
+        Headers     headers = {};
         time_t      connect = 100; // timeout in ms
         time_t      total   = 3000;
     };
