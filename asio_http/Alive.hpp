@@ -130,7 +130,8 @@ namespace asio_http::Alive {
 
         void start(ClientRequest&& aRequest, Promise aPromise)
         {
-            auto             sParsed = Parser::url(aRequest.url);
+            auto             sParsed   = Parser::url(aRequest.url);
+            Request          sInternal = prepareRequest(aRequest, sParsed);
             Connection::Peer sPeer{std::move(sParsed.host), std::move(sParsed.port)};
             auto             sAlive = m_Alive.get(sPeer);
             m_Current++;
@@ -138,21 +139,26 @@ namespace asio_http::Alive {
             if (sAlive) {
                 auto sPtr     = *sAlive;
                 sPtr->promise = aPromise;
-                boost::asio::spawn(m_Strand, [aRequest = std::move(aRequest), sPtr, p = shared_from_this()](boost::asio::yield_context yield) mutable {
-                    auto    sParsed   = Parser::url(aRequest.url);
-                    Request sInternal = prepareRequest(aRequest, sParsed);
-                    perform(std::move(aRequest), sInternal, sPtr, yield);
-                    p->done();
-                });
+                boost::asio::spawn(m_Strand,
+                                   [aRequest  = std::move(aRequest),
+                                    sInternal = std::move(sInternal),
+                                    sPtr,
+                                    p = shared_from_this()](boost::asio::yield_context yield) mutable {
+                                       perform(std::move(aRequest), sInternal, sPtr, yield);
+                                       p->done();
+                                   });
             } else {
                 auto sPtr     = std::make_shared<Connection>(m_Service, std::move(sPeer));
                 sPtr->promise = aPromise;
                 sPtr->manager = shared_from_this();
-
-                boost::asio::spawn(m_Strand, [aRequest = std::move(aRequest), sPtr, p = shared_from_this()](boost::asio::yield_context yield) mutable {
-                    start(sPtr->manager->m_Service, std::move(aRequest), sPtr, yield);
-                    p->done();
-                });
+                boost::asio::spawn(m_Strand,
+                                   [aRequest  = std::move(aRequest),
+                                    sInternal = std::move(sInternal),
+                                    sPtr,
+                                    p = shared_from_this()](boost::asio::yield_context yield) mutable {
+                                       create(std::move(aRequest), sInternal, sPtr, yield);
+                                       p->done();
+                                   });
             }
         }
 
@@ -171,16 +177,13 @@ namespace asio_http::Alive {
             return sInternal;
         }
 
-        static void start(asio::io_service& aService, ClientRequest&& aRequest, ConnectionPtr aPtr, net::yield_context yield)
+        static void create(ClientRequest&& aRequest, Request& aInternal, ConnectionPtr aPtr, net::yield_context yield)
         {
-            auto    sParsed   = Parser::url(aRequest.url);
-            Request sInternal = prepareRequest(aRequest, sParsed);
-
             beast::error_code ec;
-            tcp::resolver     sResolver{aService};
+            tcp::resolver     sResolver{aPtr->manager->m_Service};
 
             aPtr->stream.expires_after(std::chrono::milliseconds(aRequest.connect));
-            auto const sAddr = sResolver.async_resolve(sParsed.host, sParsed.port, yield[ec]);
+            auto const sAddr = sResolver.async_resolve(aPtr->peer.host, aPtr->peer.port, yield[ec]);
             if (ec) {
                 aPtr->report("resolve: ", ec);
                 return;
@@ -192,7 +195,7 @@ namespace asio_http::Alive {
                 return;
             }
 
-            perform(std::move(aRequest), sInternal, aPtr, yield);
+            perform(std::move(aRequest), aInternal, aPtr, yield);
         }
 
         static void perform(ClientRequest&& aRequest, Request& aInternal, ConnectionPtr aPtr, net::yield_context yield)
