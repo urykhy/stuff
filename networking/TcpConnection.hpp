@@ -169,6 +169,7 @@ namespace Tcp {
             switch (sResult) {
             case UserResult::CLOSE:
                 m_Closing = true;
+                [[fallthrough]];
             case UserResult::DONE:
                 m_EPoll->post([p = this->shared_from_this()](Util::EPoll* ptr) { p->m_Done++; p->process_request(); });
                 break;
