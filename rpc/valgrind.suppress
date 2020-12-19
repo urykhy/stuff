@@ -1,6 +1,0 @@
-{
-   <protobuf>
-   Memcheck:Leak
-   ...
-   obj:/usr/lib/x86_64-linux-gnu/libprotobuf.so.17.0.0
-}
