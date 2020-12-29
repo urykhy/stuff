@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # vim:ts=4:sts=4:sw=4:et
 
 # ./schema.py tutorial.json tutorial.hpp
@@ -9,41 +9,41 @@ import json
 import os
 
 def write_hpp(j, f):
-    print >>f, "#pragma once"
-    print >>f, "namespace "+j["namespace"]+" {"
-    print >>f, "struct "+j["name"]+" {"
+    print ("#pragma once", file=f)
+    print ("namespace "+j["namespace"]+" {", file=f)
+    print ("struct "+j["name"]+" {", file=f)
 
     for x in j["fields"]:
-        print >>f, "std::optional<"+x["type"]+"> "+x["name"]+"; // id = "+x["id"]
+        print ("std::optional<"+x["type"]+"> "+x["name"]+"; // id = "+x["id"], file=f)
 
-    print >>f, "void clear() {"
+    print ("void clear() {", file=f)
     for x in j["fields"]:
-        print >>f, x["name"]+" = std::nullopt;"
-    print >>f, "}"
+        print (x["name"]+" = std::nullopt;", file=f)
+    print ("}", file=f)
 
-    print >>f, "void cbor_write(cbor::ostream& out) const {"
-    print >>f, "size_t sCount = 0;"
+    print ("void cbor_write(cbor::ostream& out) const {", file=f)
+    print ("size_t sCount = 0;", file=f)
     for x in j["fields"]:
-        print >>f, "if ("+x["name"]+") {sCount++;}"
-    print >>f, "cbor::write_type_value(out, cbor::CBOR_MAP, sCount);"
+        print ("if ("+x["name"]+") {sCount++;}", file=f)
+    print ("cbor::write_type_value(out, cbor::CBOR_MAP, sCount);", file=f)
 
     for x in j["fields"]:
-        print >>f, "if ("+x["name"]+") {"
-        print >>f, "cbor::write(out, (uint32_t)"+x["id"]+");"
-        print >>f, "cbor::write(out,"+x["name"]+".value());"
-        print >>f, "}"
-    print >>f, "}"
+        print ("if ("+x["name"]+") {", file=f)
+        print ("cbor::write(out, (uint32_t)"+x["id"]+");", file=f)
+        print ("cbor::write(out,"+x["name"]+".value());", file=f)
+        print ("}", file=f)
+    print ("}", file=f)
 
-    print >>f, "void cbor_read(cbor::istream& in) {"
-    print >>f, "size_t sCount = cbor::get_uint(in, cbor::ensure_type(in, cbor::CBOR_MAP));"
-    print >>f, "for (size_t i = 0; i < sCount; i++) {"
-    print >>f, "uint32_t sId = 0; cbor::read(in, sId);"
-    print >>f, "switch (sId) {"
+    print ("void cbor_read(cbor::istream& in) {", file=f)
+    print ("size_t sCount = cbor::get_uint(in, cbor::ensure_type(in, cbor::CBOR_MAP));", file=f)
+    print ("for (size_t i = 0; i < sCount; i++) {", file=f)
+    print ("uint32_t sId = 0; cbor::read(in, sId);", file=f)
+    print ("switch (sId) {", file=f)
     for x in j["fields"]:
-        print >>f, "case "+x["id"]+": {"+x["type"]+" sTmp; cbor::read(in, sTmp); "+x["name"]+"= std::move(sTmp); break; }"
-    print >>f, "}}}"
-    print >>f, "};"
-    print >>f, "} // namespace"
+        print ("case "+x["id"]+": {"+x["type"]+" sTmp; cbor::read(in, sTmp); "+x["name"]+"= std::move(sTmp); break; }", file=f)
+    print ("}}}", file=f)
+    print ("};", file=f)
+    print ("} // namespace", file=f)
 
 if __name__ == '__main__':
     sname = sys.argv[1]
