@@ -118,4 +118,39 @@ namespace Parser {
             },
             '&');
     }
+
+    template <class T>
+    void http_path_params(std::string_view aTarget, std::string_view aPattern, T&& aHandler)
+    {
+        size_t sPos = aPattern.find('{');
+        if (sPos == std::string_view::npos) {
+            return;
+        }
+        aTarget.remove_prefix(sPos);
+        aPattern.remove_prefix(sPos);
+
+        sPos = aTarget.find('?');
+        if (sPos != std::string_view::npos)
+            aTarget = aTarget.substr(0, sPos);
+
+        std::vector<std::string_view> sNames;
+        Parser::simple(aPattern, sNames, '/');
+
+        std::vector<std::string_view> sValues;
+        Parser::simple(aTarget, sValues, '/');
+
+        if (sNames.size() != sValues.size())
+            throw std::invalid_argument("expect " + std::to_string(sNames.size()) + " parameters, but got " + std::to_string(sValues.size()));
+
+        for (size_t i = 0; i < sNames.size(); i++)
+        {
+            auto sName = sNames[i];
+            if (!sName.empty() and sName.front() == '{' and sName.back() == '}')
+            {
+                sName.remove_prefix(1);
+                sName.remove_suffix(1);
+                aHandler(sName, sValues[i]);
+            }
+        }
+    }
 } // namespace Parser

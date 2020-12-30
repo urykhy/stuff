@@ -188,6 +188,19 @@ simple text
     });
     BOOST_CHECK_EQUAL(sCounter, 2);
 }
+BOOST_AUTO_TEST_CASE(path_params)
+{
+    const std::string_view sPath = "/api/v1/kv/123?timestamp=456";
+    const std::string_view sPattern = "/api/v1/kv/{id}";
+
+    size_t sCount = 0;
+    Parser::http_path_params(sPath, sPattern, [&sCount](auto aName, auto aValue){
+        BOOST_CHECK_EQUAL(aName, "id");
+        BOOST_CHECK_EQUAL(aValue, "123");
+        sCount++;
+    });
+    BOOST_CHECK_EQUAL(sCount, 1);
+}
 BOOST_AUTO_TEST_CASE(autoindex)
 {
     const std::string sBody=R"(
