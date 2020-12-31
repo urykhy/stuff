@@ -1,0 +1,77 @@
+openapi: 3.0.0
+info:
+  title: keyValue
+  version: '1.0'
+  contact:
+    name: urykhy
+    email: urykhy@gmail.com
+servers:
+  - url: 'http://localhost:3000/api/v1'
+paths:
+  '/kv/{key}':
+    get:
+      summary: Get value
+      tags:
+        - KeyValue
+      responses:
+        '200':
+          description: OK
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Not Found
+      operationId: get-kv-key
+    parameters:
+      - schema:
+          type: string
+        name: key
+        in: path
+        required: true
+    put:
+      summary: Put value
+      operationId: put-kv-key
+      responses:
+        '200':
+          description: OK
+        '201':
+          description: Created
+      parameters:
+        - schema:
+            type: integer
+          in: query
+          name: timestamp
+      tags:
+        - KeyValue
+      requestBody:
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+    delete:
+      summary: Delete value
+      operationId: delete-kv-key
+      responses:
+        '200':
+          description: OK
+        '404':
+          description: Not Found
+      tags:
+        - KeyValue
+    head:
+      summary: Check if value exists
+      operationId: head-kv-key
+      responses:
+        '200':
+          description: OK
+        '404':
+          description: Not Found
+      tags:
+        - KeyValue
+components:
+  schemas: {}
+tags:
+  - name: KeyValue

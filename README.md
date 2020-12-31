@@ -12,6 +12,7 @@ some information about stuff
 - mysql - mysql client
 - prometheus - small metrics library
 - protobuf - simple protobuf parser with polymorphic allocator support
+- rpc - games with swagger
 - sentry - sentry logs from c++, supports __cxa_throw.
 - ssl - openssl wrappers
 - threads - thread group, work queue, pipeline.

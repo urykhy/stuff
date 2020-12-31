@@ -1,0 +1,51 @@
+openapi: 3.0.0
+info:
+  title: mq
+  version: '1.0'
+  contact:
+    name: urykhy
+    email: urykhy@gmail.com
+servers:
+  - url: 'http://localhost:3000/api/v1'
+paths:
+  /mq:
+    put:
+      parameters:
+        - schema:
+            type: string
+          in: query
+          name: client
+          required: true
+        - schema:
+            type: string
+          in: query
+          name: hash
+          required: true
+      responses:
+        '400':
+          description: Bad Request
+        '413':
+          description: Request Entity Too Large
+        '429':
+          description: Too Many Requests
+        '502':
+          description: Bad Gateway
+        '503':
+          description: Service Unavailable
+      summary: Put message to queue
+      tags:
+        - MessageQueue
+      operationId: put-mq
+      requestBody:
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+            examples:
+              example-1:
+                value: string
+components:
+  schemas: {}
+tags:
+  - name: MessageQueue

@@ -1,0 +1,79 @@
+openapi: 3.0.0
+info:
+  title: tutorial
+  version: '1.0'
+  contact:
+    name: urykhy
+    email: urykhy@gmail.com
+servers:
+  - url: 'http://localhost:3000/api/v1'
+paths:
+  /test:
+    get:
+      summary: Test method
+      tags:
+        - Tutorial
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+            application/cbor:
+              schema:
+                type: array
+                items:
+                  type: string
+      operationId: get-test
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                task_id:
+                  type: string
+                cookies:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      key:
+                        type: string
+                      value:
+                        type: string
+                operation:
+                  type: string
+            examples:
+              example-1:
+                value:
+                  s:
+                    - string
+                  cookies:
+                    - key: string
+                      value: string
+          application/cbor:
+            schema:
+              type: object
+              properties:
+                task_id:
+                  type: string
+                cookies:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      key:
+                        type: string
+                      value:
+                        type: string
+                operation:
+                  type: string
+    parameters: []
+components:
+  schemas: {}
+tags:
+  - name: Tutorial

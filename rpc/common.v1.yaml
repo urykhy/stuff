@@ -1,0 +1,50 @@
+openapi: 3.0.0
+info:
+  title: common
+  version: '1.0'
+  contact:
+    name: urykhy
+    email: urykhy@gmail.com
+servers:
+  - url: 'http://localhost:3000/api/v1'
+paths:
+  /enum:
+    get:
+      summary: Enumerate server methods
+      tags:
+        - Common
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+      operationId: get-enum
+  /status:
+    get:
+      summary: Get server status
+      tags:
+        - Common
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  load:
+                    type: number
+              examples:
+                example-1:
+                  value: {}
+      operationId: get-status
+components:
+  schemas: {}
+tags:
+  - name: Common
