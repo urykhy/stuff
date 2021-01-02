@@ -6,7 +6,7 @@ namespace cbor {
     inline void write_type_value(ostream& out, uint8_t major_type, uint64_t value)
     {
         major_type <<= 5;
-        if (value < 24ULL) {
+        if (value < CBOR_8) {
             uint8_t sByte = major_type | value;
             out.write(&sByte, 1);
         } else if (value <= __UINT8_MAX__) {

@@ -22,6 +22,7 @@ namespace File {
     // read not less than requested
     struct IExactReader : public IReader
     {
+        virtual void unget() = 0;
         virtual ~IExactReader() noexcept(false) {}
     };
 

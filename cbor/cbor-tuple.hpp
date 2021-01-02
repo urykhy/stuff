@@ -43,7 +43,8 @@ namespace cbor {
     }
 
     template <class... T>
-    void write(ostream& out, const T&&... t)
+    typename std::enable_if<(sizeof...(T) > 1), void>::type
+    write(ostream& out, const T&&... t)
     {
         write_type_value(out, CBOR_LIST, sizeof...(t));
         Mpl::for_each_argument(
@@ -54,7 +55,8 @@ namespace cbor {
     }
 
     template <class... T>
-    void read(istream& in, T&... t)
+    typename std::enable_if<(sizeof...(T) > 1), void>::type
+    read(istream& in, T&... t)
     {
         const auto sCount = get_uint(in, ensure_type(in, CBOR_LIST));
         if (sCount != sizeof...(t)) {

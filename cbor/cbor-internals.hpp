@@ -32,6 +32,7 @@ namespace cbor {
 
         CBOR_FALSE  = 20,
         CBOR_TRUE   = 21,
+        CBOR_NULL   = 22,
         CBOR_8      = 24,
         CBOR_16     = 25,
         CBOR_32     = 26,

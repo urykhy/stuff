@@ -7,9 +7,11 @@
 #include "cbor-custom.hpp"
 #include "cbor-proxy.hpp"
 #include "cbor-tuple.hpp"
+#include "cbor-optional.hpp"
 #include "decoder.hpp"
 #include "encoder.hpp"
 #include "tutorial.hpp"
+
 
 BOOST_AUTO_TEST_SUITE(Cbor)
 BOOST_AUTO_TEST_CASE(list)
@@ -54,7 +56,8 @@ BOOST_AUTO_TEST_CASE(tag)
         cbor::imemstream in(out.str());
         uint64_t         actual = 0;
         uint64_t         tag    = 0;
-        cbor::read(in, actual, [&tag](auto x) { tag = x; }); // collect tag
+        cbor::read_tag(in, tag); // collect tag
+        cbor::read(in, actual);
         BOOST_CHECK_EQUAL(actual, expected);
         BOOST_CHECK_EQUAL(tag, 1);
     }
@@ -136,5 +139,19 @@ BOOST_AUTO_TEST_CASE(substring)
     std::string_view      s;
     cbor::read(in, s);
     BOOST_CHECK_EQUAL(s, "test string");
+}
+BOOST_AUTO_TEST_CASE(optional)
+{
+    std::optional<std::string> sVal;
+    cbor::omemstream out;
+    cbor::write(out, std::string("test"));
+    cbor::write(out, sVal);
+
+    Container::imemstream in(out.str());
+    cbor::read(in, sVal);
+    BOOST_CHECK_EQUAL(true, sVal.has_value());
+    BOOST_CHECK_EQUAL("test", sVal.value());
+    cbor::read(in, sVal);
+    BOOST_CHECK_EQUAL(false, sVal.has_value());
 }
 BOOST_AUTO_TEST_SUITE_END()

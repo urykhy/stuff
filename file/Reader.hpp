@@ -178,15 +178,40 @@ namespace File {
     class ExactReader : public IExactReader
     {
         IReader* m_Parent;
+        bool     m_Unget = false;
+        uint8_t  m_Last  = 0;
+
     public:
         ExactReader(IReader* aParent)
-        : m_Parent(aParent) {}
+        : m_Parent(aParent)
+        {}
+
+        // return last character into read queue
+        void unget() override
+        {
+            if (m_Unget)
+                throw std::runtime_error("unget already called");
+            m_Unget = true;
+        }
 
         size_t read(void* aPtr, size_t aSize) override
         {
+            if (m_Unget) {
+                *reinterpret_cast<uint8_t*>(aPtr) = m_Last;
+                m_Unget = false;
+                aSize--;
+                if (aSize == 0)
+                    return 1;
+                aPtr = (reinterpret_cast<uint8_t*>(aPtr)) + 1;
+                m_Last  = 0;
+            }
+
             size_t sSize = m_Parent->read(aPtr, aSize);
             if (sSize < aSize)
                 throw std::invalid_argument("ExactReader: eof");
+
+            m_Last = (reinterpret_cast<uint8_t*>(aPtr))[sSize - 1];
+
             return sSize;
         }
         bool eof() override { return m_Parent->eof(); }
