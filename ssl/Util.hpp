@@ -8,6 +8,7 @@
 #include <stdexcept>
 #include <string_view>
 
+#include <mpl/Mpl.hpp>
 #include <unsorted/Raii.hpp>
 
 namespace SSLxx {

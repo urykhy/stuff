@@ -20,12 +20,12 @@ def decodeType2(x):
     if x == "integer":
         t = "uint64_t"
     if t is None:
-        raise Exception("unexpected type: " + x)
+        raise Exception("unexpected type: " + str(x))
     return t
 
 
 def decodeType(p):
-    t = decodeType2(p)
+    t = decodeType2(p['schema']['type'])
     if p.get('required', 'False') == 'True':
         return f"std::optional<{t}>";
     return t
@@ -75,7 +75,7 @@ def parameters(p, p1, p2):
     print(f"this->__bad_request = true;")
     print(f"}});")
     print(
-        f"Parser::http_path_params(sQueryView, \"{urlparse(doc['servers'][0]['url'] + path).path}\" ,[this](auto sName, auto sValue){{ ")
+        f"Parser::http_path_params(sQueryView, \"{urlparse(doc['servers'][0]['url'] + path).path}\" ,[this](auto aName, auto aValue){{ ")
     for param in p1:  # path parameters
         xn = param['name']
         print(f"if (aName == \"{xn}\") {{ this->{xn} = aValue; return; }}")
@@ -87,12 +87,23 @@ def parameters(p, p1, p2):
 
 
 def body(p):
+    bodyBinary = False
     print(f"struct {fname(p)}_body {{")
-    print(f"{fname(p)}_body(const asio_http::Request& aRequest) {{}} ")
+    for ct in p.get('requestBody', {}).get('content', {}):
+        if ct == 'application/octet-stream':
+            bodyBinary = True
+    if bodyBinary:
+        print(f"std::string body;")
+    print(f"{fname(p)}_body(const asio_http::Request& aRequest) {{")
+    if bodyBinary:
+        print(f"body = aRequest.body();")
+    print(f"}}")
     print(f"}};")
 
 
 def response_vars(ct):
+    if ct['type'] == 'string':
+        print(f"std::string response;");
     if ct['type'] == 'array':
         print(f"std::vector<{decodeType2(ct['items']['type'])}> response;");
     if ct['type'] == 'object':
@@ -111,6 +122,8 @@ def response_json(ct):
 
 
 def response(p):
+    responseIsJson = False
+    responseIsBinary = False
     print(f"struct {fname(p)}_response {{")
     vt = []
     for code in p['responses']:
@@ -118,18 +131,26 @@ def response(p):
             continue
         content = p['responses'][code]['content']
         for ct in content:
-            if ct != "application/json":
-                continue
-            vt.append(content[ct]['schema'])
+            if ct == "application/octet-stream":
+                responseIsBinary = True
+                vt.append(content[ct]['schema'])
+                break
+            if ct == "application/json":
+                responseIsJson = True
+                vt.append(content[ct]['schema'])
     for n in vt:
         response_vars(n)
     print(f"void result(asio_http::Response& aResponse) {{")
     print(f"namespace http = boost::beast::http;")
-    print(f"::Json::Value sValue;")
-    for n in vt:
-        response_json(n)
-    print(f"aResponse.set(http::field::content_type, \"application/json\");")
-    print(f"aResponse.body().append(Format::Json::to_string(sValue));")
+    if responseIsBinary:
+        print(f"aResponse.set(http::field::content_type, \"application/octet-stream\");")
+        print(f"aResponse.body().append(response);")
+    if responseIsJson:
+        print(f"::Json::Value sValue;")
+        for n in vt:
+            response_json(n)
+        print(f"aResponse.set(http::field::content_type, \"application/json\");")
+        print(f"aResponse.body().append(Format::Json::to_string(sValue));")
     print(f"}} ")
     print(f"}};")
 
@@ -180,6 +201,8 @@ for path in doc['paths']:
         if method not in methods:
             continue
         p = doc['paths'][path][method]
+        if method == "delete":
+            method += "_"
         print(f"case http::verb::{method}: ")
         print(f"{fname(p)}(aService, aRequest, aResponse, yield); break;")
     print(f"default: aResponse.result(http::status::method_not_allowed);");

@@ -8,8 +8,8 @@ namespace Parser
         virtual const char* what() const throw() { return "not a number"; }
     };
 
-    template<class T>
-    T Atoi(const boost::string_ref aString)
+    template<class T, class S>
+    T Atoi(S&& aString)
     {
         T sResult = 0;
         bool sNegative = false;
@@ -29,8 +29,8 @@ namespace Parser
         return sNegative ? -sResult : sResult;
     }
 
-    template<class T>
-    T Atoi8(const boost::string_ref aString)
+    template<class T, class S>
+    T Atoi8(S&& aString)
     {
         T sResult = 0;
 
@@ -46,8 +46,8 @@ namespace Parser
         return sResult;
     }
 
-    template<class T>
-    T Atof(boost::string_ref aString)
+    template<class T, class S>
+    T Atof(S&& aString)
     {
         T sResult = 0;
         int64_t sOrder = 1;

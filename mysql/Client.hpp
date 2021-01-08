@@ -39,7 +39,7 @@ namespace MySQL
             {
                 if (is_null())
                     throw std::logic_error(std::string("MySQL::Null"));
-                return Parser::Atoi<int64_t>(m_Ptr);
+                return Parser::Atoi<int64_t>(std::string_view(m_Ptr));
             }
             std::string as_string() const
             {

@@ -1,7 +1,5 @@
 #pragma once
 
-#include <mpl/Mpl.hpp>
-
 #include "Util.hpp"
 
 namespace SSLxx::Asymm {
