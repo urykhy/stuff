@@ -1,4 +1,5 @@
 #pragma once
+#include <string_view>
 #include <boost/utility/string_ref.hpp>
 
 namespace Parser {

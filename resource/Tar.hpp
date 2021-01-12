@@ -31,7 +31,7 @@ namespace resource
                 auto sEnd = (const char*)memchr(name, '\0', sizeof(name));
                 return sEnd != nullptr ? sEnd - name : sizeof(name);
             }
-            uint64_t decodeSize() const { return Parser::Atoi8<uint64_t>(boost::string_ref(size, sizeof(size))); }
+            uint64_t decodeSize() const { return Parser::Atoi8<uint64_t>(std::string_view(size, sizeof(size))); }
 
             bool validate() const
             {
@@ -43,7 +43,7 @@ namespace resource
                     unsigned x = (i >= 148 and i < 156) ? ' ' : sPtr[i];
                     sSum += x;
                 }
-                auto sChecksum = Parser::Atoi8<uint32_t>(boost::string_ref(checksum, sizeof(checksum)));
+                auto sChecksum = Parser::Atoi8<uint32_t>(std::string_view(checksum, sizeof(checksum)));
                 return sSum == sChecksum;
             }
         };

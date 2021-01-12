@@ -1,5 +1,5 @@
 #pragma once
-#include <boost/utility/string_ref.hpp>
+#include <string_view>
 
 namespace Parser
 {
@@ -8,8 +8,8 @@ namespace Parser
         virtual const char* what() const throw() { return "not a number"; }
     };
 
-    template<class T, class S>
-    T Atoi(S&& aString)
+    template<class T>
+    T Atoi(std::string_view aString)
     {
         T sResult = 0;
         bool sNegative = false;
@@ -29,8 +29,8 @@ namespace Parser
         return sNegative ? -sResult : sResult;
     }
 
-    template<class T, class S>
-    T Atoi8(S&& aString)
+    template<class T>
+    T Atoi8(std::string_view aString)
     {
         T sResult = 0;
 
@@ -46,8 +46,8 @@ namespace Parser
         return sResult;
     }
 
-    template<class T, class S>
-    T Atof(S&& aString)
+    template<class T>
+    T Atof(std::string_view aString)
     {
         T sResult = 0;
         int64_t sOrder = 1;

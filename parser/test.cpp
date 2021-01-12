@@ -107,12 +107,11 @@ BOOST_AUTO_TEST_CASE(hex)
 }
 BOOST_AUTO_TEST_CASE(atoi)
 {
-    using V = std::string_view;
     BOOST_CHECK_EQUAL(Parser::Atoi<int>("123"), 123);
     BOOST_CHECK_THROW(Parser::Atoi<int>("123rt"), Parser::NotNumber);
     BOOST_CHECK_THROW(Parser::Atoi<int>("12.456"), Parser::NotNumber);
-    BOOST_CHECK_CLOSE(Parser::Atof<float>(V("12.456")), 12.456, 0.0001);
-    BOOST_CHECK_CLOSE(Parser::Atof<float>(V("-45")), -45, 0.0001);
+    BOOST_CHECK_CLOSE(Parser::Atof<float>("12.456"), 12.456, 0.0001);
+    BOOST_CHECK_CLOSE(Parser::Atof<float>("-45"), -45, 0.0001);
 }
 BOOST_AUTO_TEST_CASE(uleb128)
 {
