@@ -1,0 +1,152 @@
+#include <asio_http/Router.hpp>
+#include <format/Json.hpp>
+#include <parser/Atoi.hpp>
+
+namespace api {
+    {% set name = (doc['info']['title'], doc['info']['version']) | join('_') | replace('.', '_') %}
+    struct {{ name }}
+    {
+        {% for path in doc['paths'] %}
+        {%- for method in doc['paths'][path]: %}
+            {%- if method in ["get", "put", "post", "head", "delete"] %}
+            {%- set name = doc['paths'][path][method]['operationId'] | replace('-', '_') %}
+
+        struct {{ name }}_parameters {
+            {%- for param in doc['paths'][path].get('parameters', []) %}
+                std::optional<{{ param['schema']['type'] | swagger_type }}> {{ param['name'] }};
+            {%- endfor %}
+            {%- for param in doc['paths'][path][method].get('parameters', []) %}
+                std::optional<{{ param['schema']['type'] | swagger_type }}> {{ param['name'] }};
+            {%- endfor %}
+
+            void __parse(const asio_http::Request& aRequest) {
+                auto sQuery = aRequest.target();
+                std::string_view sQueryView(sQuery.data(), sQuery.size());
+
+                Parser::http_path_params(sQueryView, "{{ (doc['servers'][0]['url'], path) | join('') | swagger_path }}", [this](auto aName, auto aValue) {
+                    {%- for param in doc['paths'][path].get('parameters', []) %}
+                    if (aName == "{{ param['name'] }}") { this->{{ param['name'] }} = {{ param | swagger_assign('aValue') }}; return; }
+                    {%- endfor %}
+                    throw std::invalid_argument("unexpected param");
+                });
+
+                Parser::http_query(sQueryView, [this](auto aName, auto aValue) {
+                    {%- for param in doc['paths'][path][method].get('parameters', []) %}
+                    if (aName == "{{ param['name'] }}") { this->{{ param['name'] }} = {{ param | swagger_assign('aValue') }}; return; }
+                    {%- endfor %}
+                    throw std::invalid_argument("unexpected param");
+                });
+            }
+        };
+        struct {{ name }}_body {
+            {%- set binary = doc['paths'][path][method].get('requestBody',{}).get('content',{}).get('application/octet-stream',{}) | length %}
+            {%- if binary > 0 %}
+            std::string body;
+            {% endif %}
+            void __parse(const asio_http::Request& aRequest) {
+                {%- if binary > 0 %}
+                body = aRequest.body();
+                {%- endif %}
+            }
+        };
+        struct {{ name }}_response {
+            {%- set json = doc['paths'][path][method].get('responses',{}).get('200',{}).get('content',{}).get('application/json',{}) | length %}
+            {%- if json > 0 %}
+                {% set schema = doc['paths'][path][method].get('responses',{}).get('200',{}).get('content',{}).get('application/json').get('schema') %}
+                {%- if schema['type'] == 'array' %}
+                    std::vector<{{ schema['items']['type'] | swagger_type }}> data;
+                {%- elif schema['type'] == 'object' %}
+                    {%- for x in schema['properties'] %}
+                        std::optional<{{ schema['properties'][x]['type'] | swagger_type }}> {{ x }};
+                    {%- endfor %}
+                {%- endif %}
+            {%- endif %}
+
+            {%- set binary = doc['paths'][path][method].get('responses',{}).get('200',{}).get('content',{}).get('application/octet-stream',{}) | length %}
+            {%- if binary > 0 %}
+            std::string data;
+            {% endif %}
+
+            void __result(asio_http::Response& aResponse) {
+            {%- if json > 0 %}
+                ::Json::Value sValue;
+                {%- if schema['type'] == 'array' %}
+                    sValue = Format::Json::to_value(data);
+                {%- elif schema['type'] == 'object' %}
+                    {%- for x in schema['properties'] %}
+                        sValue["{{ x }}"] = Format::Json::to_value({{ x }});
+                    {%- endfor %}
+                {%- endif %}
+                aResponse.set(boost::beast::http::field::content_type, "application/json");
+                aResponse.body().append(Format::Json::to_string(sValue));
+            {% endif %}
+            {%- if binary > 0 %}
+                aResponse.set(boost::beast::http::field::content_type, "application/octet-stream");
+                aResponse.body().append(data);
+            {% endif %}
+            }
+        };
+
+        void {{name}}(asio_http::asio::io_service& aService, const asio_http::Request& aRequest, asio_http::Response& aResponse, asio_http::asio::yield_context yield)
+        {
+            namespace http = boost::beast::http;
+
+            {{name}}_parameters sParameters;
+            {{name}}_body sBody;
+
+            try {
+                sParameters.__parse(aRequest);
+                sBody.__parse(aRequest);
+            } catch (const std::exception& e) {
+                aResponse.result(http::status::bad_request);
+                return;
+            }
+
+            try {
+                auto [sStatus, sResponse] = {{name}}_i(aService, sParameters, sBody, yield);
+                aResponse.result(sStatus);
+                sResponse.__result(aResponse);
+            } catch (const std::exception& e) {
+                aResponse.result(http::status::internal_server_error);
+                return;
+            }
+        }
+            {%- endif %}
+        {%- endfor %}
+        {%- endfor %}
+
+        void configure(asio_http::RouterPtr aRouter) {
+            namespace http = boost::beast::http;
+            {% for path in doc['paths'] %}
+            aRouter->insert("{{ (doc['servers'][0]['url'], path) | join('') | swagger_prefix }}",
+                            [this](asio_http::asio::io_service& aService, const asio_http::Request& aRequest, asio_http::Response& aResponse, asio_http::asio::yield_context yield)
+                            {
+                                switch (aRequest.method())
+                                {
+                                {%- for method in doc['paths'][path]: %}
+                                {%- if method in ["get", "put", "post", "head", "delete"] %}
+                                {%- set name = doc['paths'][path][method]['operationId'] | replace('-', '_') %}
+                                case http::verb::{{ method | swagger_method }}:
+                                    {{ name }}(aService, aRequest, aResponse, yield);
+                                    break;
+                                {%- endif %}
+                                {%- endfor -%}
+                                default: aResponse.result(http::status::method_not_allowed);
+                                }
+                            });
+            {% endfor %}
+        }
+
+        {% for path in doc['paths'] %}
+        {%- for method in doc['paths'][path]: %}
+            {%- if method in ["get", "put", "post", "head", "delete"] %}
+            {%- set name = doc['paths'][path][method]['operationId'] | replace('-', '_') %}
+            virtual std::pair<boost::beast::http::status, {{name}}_response> {{ name }}_i
+            (asio_http::asio::io_service& aService, const {{name}}_parameters& aRequest, const {{name}}_body& aBody, asio_http::asio::yield_context yield) = 0;
+            {%- endif %}
+        {%- endfor %}
+        {%- endfor %}
+
+        virtual ~{{ name }}() {}
+    };
+} // namespace api

@@ -19,8 +19,8 @@ struct Common : api::common_1_0
         override
     {
         get_enum_response sResult;
-        sResult.response.push_back("one");
-        sResult.response.push_back("two");
+        sResult.data.push_back("one");
+        sResult.data.push_back("two");
         return {boost::beast::http::status::ok, sResult};
     }
 
@@ -52,7 +52,7 @@ struct KeyValue : api::keyValue_1_0
         asio_http::asio::yield_context yield)
         override
     {
-        auto sIt = m_Store.find(aRequest.key);
+        auto sIt = m_Store.find(aRequest.key.value());
         if (sIt == m_Store.end())
             return {boost::beast::http::status::not_found, {}};
         return {boost::beast::http::status::ok, {sIt->second}};
@@ -66,7 +66,7 @@ struct KeyValue : api::keyValue_1_0
         asio_http::asio::yield_context yield)
         override
     {
-        auto [_, sInsert] = m_Store.insert_or_assign(aRequest.key, aBody.body);
+        auto [_, sInsert] = m_Store.insert_or_assign(aRequest.key.value(), aBody.body);
         return {sInsert ? boost::beast::http::status::created : boost::beast::http::status::ok, {}};
     }
 
@@ -78,7 +78,7 @@ struct KeyValue : api::keyValue_1_0
         asio_http::asio::yield_context  yield)
         override
     {
-        auto sIt = m_Store.find(aRequest.key);
+        auto sIt = m_Store.find(aRequest.key.value());
         if (sIt == m_Store.end())
             return {boost::beast::http::status::not_found, {}};
         m_Store.erase(sIt);
@@ -93,7 +93,7 @@ struct KeyValue : api::keyValue_1_0
         asio_http::asio::yield_context yield)
         override
     {
-        auto sIt = m_Store.find(aRequest.key);
+        auto sIt = m_Store.find(aRequest.key.value());
         if (sIt == m_Store.end())
             return {boost::beast::http::status::not_found, {}};
         return {boost::beast::http::status::ok, {}};
