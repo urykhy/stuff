@@ -49,7 +49,7 @@ namespace Parser
     template<class T>
     T Atof(std::string_view aString)
     {
-        T sResult = 0;
+        __int128_t sResult = 0;
         int64_t sOrder = 1;
         bool sPoint = false;
 
@@ -72,6 +72,6 @@ namespace Parser
                 sOrder *= 10;
         }
 
-        return sResult / T(sOrder);
+        return T(sResult) / sOrder;
     }
 }

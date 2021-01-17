@@ -110,8 +110,10 @@ BOOST_AUTO_TEST_CASE(atoi)
     BOOST_CHECK_EQUAL(Parser::Atoi<int>("123"), 123);
     BOOST_CHECK_THROW(Parser::Atoi<int>("123rt"), Parser::NotNumber);
     BOOST_CHECK_THROW(Parser::Atoi<int>("12.456"), Parser::NotNumber);
-    BOOST_CHECK_CLOSE(Parser::Atof<float>("12.456"), 12.456, 0.0001);
+    BOOST_CHECK_CLOSE(Parser::Atof<float>("12.456"), 12.456, 0.00001);
+    BOOST_CHECK_CLOSE(Parser::Atof<double>("12.123456789123456789"), 12.123456789123456789, 0.000000001);
     BOOST_CHECK_CLOSE(Parser::Atof<float>("-45"), -45, 0.0001);
+    BOOST_CHECK(Parser::Atoi<__int128>("170141183460469231731687303715884105727") == ((__int128(0x7FFFFFFFFFFFFFFF) << 64) + __int128(0xFFFFFFFFFFFFFFFF)));
 }
 BOOST_AUTO_TEST_CASE(uleb128)
 {
