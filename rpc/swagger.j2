@@ -39,6 +39,11 @@ namespace api {
             }
         };
         struct {{ name }}_body {
+
+            // test begin
+            // {{ doc['paths'][path][method].get('requestBody',{}).get('content',{}).get('application/json',{}).get('schema', {}) | swagger_decode() }}
+            // test end
+
             {%- set binary = doc['paths'][path][method].get('requestBody',{}).get('content',{}).get('application/octet-stream',{}) | length %}
             {%- if binary > 0 %}
             std::string body;

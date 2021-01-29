@@ -13,20 +13,6 @@ paths:
       summary: Test method
       tags:
         - Tutorial
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  type: string
-            application/cbor:
-              schema:
-                type: array
-                items:
-                  type: string
       operationId: get-test
       requestBody:
         content:
@@ -44,34 +30,15 @@ paths:
                       key:
                         type: string
                       value:
-                        type: string
+                        type: array
+                        items:
+                          type: string
                 operation:
                   type: string
-            examples:
-              example-1:
-                value:
-                  s:
-                    - string
-                  cookies:
-                    - key: string
-                      value: string
-          application/cbor:
-            schema:
-              type: object
-              properties:
-                task_id:
-                  type: string
-                cookies:
-                  type: array
-                  items:
-                    type: object
-                    properties:
-                      key:
-                        type: string
-                      value:
-                        type: string
-                operation:
-                  type: string
+            examples: {}
+      responses:
+        '200':
+          description: OK
     parameters: []
 components:
   schemas: {}

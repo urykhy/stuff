@@ -56,6 +56,70 @@ def swagger_assign(x, name):
 environment.filters['swagger_assign'] = swagger_assign
 
 
+resultList = []
+decodeStack = []
+def collapse():
+    global decodeStack
+    array = False
+    arrayItem = None
+    objectItem = []
+    xname = None
+    while True:
+        x = decodeStack.pop()
+        print(f"X: {x}", file=sys.stderr)
+        if not isinstance(x, str):
+            if array:
+                arrayItem = x['type']
+            else:
+                objectItem.append(x)
+            continue
+        if x.startswith('end'):
+            _,t = x.split(' ')
+            if t == 'array':
+                array = True
+        if x.startswith('begin'):
+            _,_,xname = x.split(' ')
+            break
+    if array:
+        info = {'type': f"array<{arrayItem}>", 'name': xname}
+        if len(decodeStack) == 0:
+            resultList.append(info)
+        else:
+            decodeStack.append(info)
+    else:
+        info = {'type': f"{xname}_t", 'name': xname, 'fields': objectItem}
+        resultList.append(info)
+        decodeStack.append(info)
+
+def swagger_decode_step(x, name=''):
+    global decodeStack
+
+    if x.get('type') == 'object':
+        decodeStack.append(f'begin object {name}')
+        pl = x.get('properties', [])
+        for v in pl:
+            swagger_decode_step(pl[v], v)
+        decodeStack.append('end object')
+        collapse()
+    elif x.get('type') == 'array':
+        decodeStack.append(f'begin array {name}')
+        swagger_decode_step(x['items'], name)
+        decodeStack.append('end array')
+        collapse()
+    else:
+        decodeStack.append({'type': x['type'], 'name': name})
+
+def swagger_decode(x):
+    global resultList
+    global decodeStack
+    swagger_decode_step(x, 'base')
+    res = resultList
+    resultList = []
+    decodeStack = []
+    return res
+environment.filters['swagger_decode'] = swagger_decode
+
+
 template = environment.from_string(open(script_path + '/swagger.j2').read())
 doc = yaml.safe_load(open(sys.argv[1], 'r'))
 print(template.render(doc=doc))
