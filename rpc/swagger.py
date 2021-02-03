@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import os
+import re
 import pathlib
 import sys
 import yaml
@@ -40,7 +41,11 @@ def swagger_type(x):
         return "double"
     if x == "integer":
         return "uint64_t"
-    raise Exception("unexpected type: " + str(x))
+    if x.startswith('array<'):
+        xt = re.compile('array<(.*)>').search(x).group(1)
+        return f"std::vector<{swagger_type(xt)}>"
+    return x
+    #raise Exception("unexpected type: " + str(x))
 environment.filters['swagger_type'] = swagger_type
 
 
@@ -66,7 +71,7 @@ def collapse():
     xname = None
     while True:
         x = decodeStack.pop()
-        print(f"X: {x}", file=sys.stderr)
+        #print(f"X: {x}", file=sys.stderr)
         if not isinstance(x, str):
             if array:
                 arrayItem = x['type']
@@ -112,6 +117,8 @@ def swagger_decode_step(x, name=''):
 def swagger_decode(x):
     global resultList
     global decodeStack
+    if x == {}:
+        return []
     swagger_decode_step(x, 'base')
     res = resultList
     resultList = []

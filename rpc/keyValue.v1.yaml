@@ -71,6 +71,72 @@ paths:
           description: Not Found
       tags:
         - KeyValue
+  /kx/multi:
+    get:
+      summary: Multi Get
+      operationId: get-kx-multi
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    key:
+                      type: string
+                    value:
+                      type: string
+                    timestamp:
+                      type: integer
+      tags:
+        - KeyValue
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: string
+    put:
+      summary: ''
+      operationId: put-kx-multi
+      responses:
+        '200':
+          description: OK
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: object
+                properties:
+                  key:
+                    type: string
+                  value:
+                    type: string
+                  timestamp:
+                    type: integer
+      tags:
+        - KeyValue
+    delete:
+      summary: ''
+      operationId: delete-kx-multi
+      responses:
+        '200':
+          description: OK
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: string
+      tags:
+        - KeyValue
 components:
   schemas: {}
 tags:

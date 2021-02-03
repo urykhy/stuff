@@ -19,8 +19,8 @@ struct Common : api::common_1_0
         override
     {
         get_enum_response sResult;
-        sResult.data.push_back("one");
-        sResult.data.push_back("two");
+        sResult.base.push_back("one");
+        sResult.base.push_back("two");
         return {boost::beast::http::status::ok, sResult};
     }
 
@@ -96,6 +96,36 @@ struct KeyValue : api::keyValue_1_0
         auto sIt = m_Store.find(aRequest.key.value());
         if (sIt == m_Store.end())
             return {boost::beast::http::status::not_found, {}};
+        return {boost::beast::http::status::ok, {}};
+    }
+
+    std::pair<boost::beast::http::status, get_kx_multi_response>
+    get_kx_multi_i(asio_http::asio::io_service& aService,
+        const get_kx_multi_parameters& aRequest,
+        const get_kx_multi_body& aBody,
+        asio_http::asio::yield_context yield)
+        override
+    {
+        return {boost::beast::http::status::ok, {}};
+    }
+
+    std::pair<boost::beast::http::status, put_kx_multi_response>
+    put_kx_multi_i(boost::asio::io_service&,
+        const put_kx_multi_parameters&,
+        const put_kx_multi_body&,
+        boost::asio::yield_context)
+    override
+    {
+        return {boost::beast::http::status::ok, {}};
+    }
+
+    std::pair<boost::beast::http::status, delete_kx_multi_response>
+    delete_kx_multi_i(boost::asio::io_service&,
+        const delete_kx_multi_parameters&,
+        const delete_kx_multi_body&,
+        boost::asio::yield_context)
+    override
+    {
         return {boost::beast::http::status::ok, {}};
     }
 
