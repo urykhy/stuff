@@ -12,6 +12,22 @@ namespace Format::Json {
         return ::Json::writeString(sBuilder, aJson);
     }
 
+    // helpers to call t.to_json for structs
+    template <typename T, typename = void>
+    struct has_to_json : std::false_type
+    {};
+
+    template <typename T>
+    struct has_to_json<T, std::void_t<decltype(&T::to_json)>> : std::true_type
+    {};
+
+    template <class T>
+    constexpr bool has_to_json_v = has_to_json<T>::value;
+
+    template <class T>
+    typename std::enable_if<has_to_json_v<T>, Value>::type to_value(const T& t) { return t.to_json(); }
+    // end helpers
+
     template <class T>
     typename std::enable_if<std::is_signed<T>::value, Value>::type
     to_value(const T aValue)
@@ -52,21 +68,6 @@ namespace Format::Json {
             sValue.append(to_value(x));
         return sValue;
     }
-
-    // helpers to call t.to_json for structs
-    template <typename T, typename = void>
-    struct has_to_json : std::false_type
-    {};
-
-    template <typename T>
-    struct has_to_json<T, std::void_t<decltype(&T::to_json)>> : std::true_type
-    {};
-
-    template <class T>
-    constexpr bool has_to_json_v = has_to_json<T>::value;
-
-    template <class T>
-    typename std::enable_if<has_to_json_v<T>, Value>::type to_value(const T& t) { return t.to_json(); }
 
     // universal 'write' method
     template <class T>

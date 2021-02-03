@@ -12,6 +12,7 @@
 #include "Autoindex.hpp"
 #include "Base64.hpp"
 #include "Multipart.hpp"
+#include "Json.hpp"
 
 BOOST_AUTO_TEST_SUITE(parser)
 BOOST_AUTO_TEST_CASE(simple)
@@ -113,7 +114,11 @@ BOOST_AUTO_TEST_CASE(atoi)
     BOOST_CHECK_CLOSE(Parser::Atof<float>("12.456"), 12.456, 0.00001);
     BOOST_CHECK_CLOSE(Parser::Atof<double>("12.123456789123456789"), 12.123456789123456789, 0.000000001);
     BOOST_CHECK_CLOSE(Parser::Atof<float>("-45"), -45, 0.0001);
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
     BOOST_CHECK(Parser::Atoi<__int128>("170141183460469231731687303715884105727") == ((__int128(0x7FFFFFFFFFFFFFFF) << 64) + __int128(0xFFFFFFFFFFFFFFFF)));
+#pragma GCC diagnostic pop
 }
 BOOST_AUTO_TEST_CASE(uleb128)
 {
@@ -229,5 +234,28 @@ BOOST_AUTO_TEST_CASE(base64)
     const std::string sBase64 = Format::Base64(sStr);
     BOOST_CHECK_EQUAL("Mf8=", sBase64);
     BOOST_CHECK_EQUAL(Format::to_hex(sStr), Format::to_hex(Parser::Base64(sBase64)));
+}
+BOOST_AUTO_TEST_CASE(json)
+{
+    struct Tmp {
+        std::string base = {};
+        unsigned index = {};
+
+        void from_json(const ::Json::Value& aJson) {
+            Parser::Json::from_value(aJson, "base", base);
+            Parser::Json::from_value(aJson, "index", index);
+        }
+
+        auto as_tuple() const { return std::tie(base, index); }
+        bool operator==(const Tmp& aOther) const { return as_tuple() == aOther.as_tuple(); }
+    };
+    std::vector<Tmp> sTmp;
+
+    const std::string sStr = R"([{"base": "string1", "index": 123},{"base": "string2"}])";
+    auto sJson = Parser::Json::parse(sStr);
+    Parser::Json::from_value(sJson, sTmp);
+
+    const std::vector<Tmp> sExpected = {{"string1",123}, {"string2", 0}};
+    BOOST_CHECK(sTmp == sExpected);
 }
 BOOST_AUTO_TEST_SUITE_END()

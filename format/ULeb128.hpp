@@ -17,4 +17,4 @@ namespace Format
             aStream.write((const char*)&sByte, 1);
         }
     }
-};
+}

@@ -20,4 +20,4 @@ namespace Parser
         }
         return sValue;
     }
-};
+}
