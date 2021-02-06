@@ -63,12 +63,13 @@ namespace MySQL::TaskQueue {
 
         std::optional<Task> get_task()
         {
+            // SKIP LOCKED works on mysql 8
             std::optional<Task> sTask;
             m_Connection->Query(fmt::format(
                 "SELECT id, task, worker, cookie "
                 "FROM {0} "
                 "WHERE {1} "
-                "ORDER BY id ASC LIMIT 1 FOR UPDATE SKIP LOCKED",
+                "ORDER BY id ASC LIMIT 1 FOR UPDATE",
                 m_Config.table,
                 resume()));
             m_Connection->Use([&sTask](const MySQL::Row& aRow) {

@@ -24,7 +24,7 @@ struct Entry
     std::string to_date;
 };
 
-MySQL::Config cfg{"sql1.mysql", 3306, "root", "", "employees", 10, "mysql-test-simple"};
+MySQL::Config cfg{"mysql-master", 3306, "root", "root", "employees", 10, "mysql-test-simple"};
 
 BOOST_AUTO_TEST_SUITE(MySQL)
 BOOST_AUTO_TEST_CASE(simple)
@@ -102,7 +102,7 @@ BOOST_AUTO_TEST_CASE(upload)
         `ID` INT NOT NULL AUTO_INCREMENT,
         `Name` CHAR(35) NOT NULL DEFAULT '',
         PRIMARY KEY  (`ID`)
-    ) ENGINE=NDBCLUSTER DEFAULT CHARSET=utf8;
+    ) ENGINE=INNODB DEFAULT CHARSET=utf8;
 */
     MySQL::Connection c(cfg);
     c.Query("use test");
@@ -219,7 +219,7 @@ BOOST_AUTO_TEST_CASE(simple)
     TestHandler sHandler(sCount);
 
     MySQL::TaskQueue::Config sQueueCfg;
-    MySQL::Config sCfg = MySQL::Config{"sql1.mysql", 3306, "root", "", "test"};
+    MySQL::Config sCfg = MySQL::Config{"mysql-master", 3306, "root", "root", "test"};
     MySQL::Connection sConnection(sCfg);
 
     MySQL::TaskQueue::Manager sQueue(sQueueCfg, &sConnection, &sHandler);
@@ -254,7 +254,7 @@ BOOST_AUTO_TEST_CASE(mock)
 
     MySQL::Mock::SqlSet sExpectedSQL{
         {"BEGIN", {}}
-      , {"SELECT id, task, worker, cookie FROM task_queue WHERE status = 'new' OR (status = 'started' AND updated < DATE_SUB(NOW(), INTERVAL 1 HOUR)) ORDER BY id ASC LIMIT 1 FOR UPDATE SKIP LOCKED"
+      , {"SELECT id, task, worker, cookie FROM task_queue WHERE status = 'new' OR (status = 'started' AND updated < DATE_SUB(NOW(), INTERVAL 1 HOUR)) ORDER BY id ASC LIMIT 1 FOR UPDATE"
             , {{"12", "mock task", "", "existing cookie"}}
         }
       , {"UPDATE task_queue SET status = 'started', worker = 'test' WHERE id = 12", {}}
@@ -262,7 +262,7 @@ BOOST_AUTO_TEST_CASE(mock)
       , {"UPDATE task_queue SET cookie = 'updated cookie' WHERE id = 12", {}}
       , {"UPDATE task_queue SET status = 'done' WHERE id = 12", {}}
       , {"BEGIN", {}}
-      , {"SELECT id, task, worker, cookie FROM task_queue WHERE status = 'new' OR (status = 'started' AND updated < DATE_SUB(NOW(), INTERVAL 1 HOUR)) ORDER BY id ASC LIMIT 1 FOR UPDATE SKIP LOCKED"
+      , {"SELECT id, task, worker, cookie FROM task_queue WHERE status = 'new' OR (status = 'started' AND updated < DATE_SUB(NOW(), INTERVAL 1 HOUR)) ORDER BY id ASC LIMIT 1 FOR UPDATE"
             , {}}
       , {"ROLLBACK", {}}
     };
