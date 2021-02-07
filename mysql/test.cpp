@@ -7,6 +7,7 @@
 #include "Quote.hpp"
 #include "Format.hpp"
 #include "TaskQueue.hpp"
+#include "MessageQueue.hpp"
 #include "Mock.hpp"
 
 #include <container/Pool.hpp>
@@ -276,4 +277,30 @@ BOOST_AUTO_TEST_CASE(mock)
     std::this_thread::sleep_for(100ms);
     BOOST_CHECK_EQUAL(sCount, 1);
     }
+BOOST_AUTO_TEST_SUITE_END()
+
+BOOST_AUTO_TEST_SUITE(MessageQueue)
+BOOST_AUTO_TEST_CASE(simple)
+{
+    MySQL::MessageQueue::Producer::Config sProducerCfg;
+    MySQL::Config sCfg = MySQL::Config{"mysql-master", 3306, "root", "root", "test"};
+    MySQL::Connection sConnection(sCfg);
+
+    sConnection.Query("TRUNCATE TABLE message_state");
+    sConnection.Query("TRUNCATE TABLE message_queue");
+
+    MySQL::MessageQueue::Producer sProducer(sProducerCfg, &sConnection);
+    BOOST_CHECK_EQUAL(sProducer.insert("task 1", "a"), MySQL::MessageQueue::Producer::OK);
+    BOOST_CHECK_EQUAL(sProducer.insert("task 1", "a"), MySQL::MessageQueue::Producer::OK);
+    BOOST_CHECK_EQUAL(sProducer.insert("task 2", "b"), MySQL::MessageQueue::Producer::OK);
+
+    MySQL::MessageQueue::Consumer::Config sConsumerCfg;
+    MySQL::MessageQueue::Consumer sConsumer(sConsumerCfg, &sConnection);
+    auto sTasks = sConsumer.select();
+    const MySQL::MessageQueue::Consumer::List sExpected={{1, "task 1", "a"}, {2, "task 2", "b"}};
+    BOOST_CHECK_EQUAL(sTasks == sExpected, true);
+    sConsumer.update();
+    sTasks = sConsumer.select();
+    BOOST_CHECK(sTasks.empty());
+}
 BOOST_AUTO_TEST_SUITE_END()

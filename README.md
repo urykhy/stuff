@@ -9,7 +9,7 @@ some information about stuff
 - curl - easy and multi handle c++ wrapper
 - jaeger - tracing events from c++
 - mq - poor man `message queue` over http, etcd used to avoid duplicates.
-- mysql - mysql client
+- mysql - mysql client, task queue, message queue.
 - prometheus - small metrics library
 - protobuf - simple protobuf parser with polymorphic allocator support
 - rpc - games with swagger

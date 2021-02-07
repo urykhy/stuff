@@ -1,6 +1,7 @@
 #pragma once
 
 #include <mysql.h>
+#include <mysqld_error.h>
 #include <string>
 #include <list>
 #include <stdexcept>
@@ -40,6 +41,12 @@ namespace MySQL
                 if (is_null())
                     throw std::logic_error(std::string("MySQL::Null"));
                 return Parser::Atoi<int64_t>(std::string_view(m_Ptr));
+            }
+            int64_t as_uint64() const
+            {
+                if (is_null())
+                    throw std::logic_error(std::string("MySQL::Null"));
+                return Parser::Atoi<uint64_t>(std::string_view(m_Ptr));
             }
             std::string as_string() const
             {
@@ -237,11 +244,19 @@ namespace MySQL
 
         void report(const char* aMsg)
         {
-            throw Error(std::string(aMsg) + ": " + mysql_error(&m_Handle));
+            throw Error(std::string(aMsg) + ": " + mysql_error(&m_Handle), mysql_errno(&m_Handle));
         }
     public:
 
-        using Error = std::runtime_error;
+        struct Error : public std::runtime_error
+        {
+            const unsigned m_Errno = 0;
+
+            Error(const std::string& aMsg, unsigned aErrno = 0)
+            : std::runtime_error(aMsg)
+            , m_Errno(aErrno)
+            {}
+        };
 
         Connection(const Config& aCfg)
         : m_Cfg(aCfg)
