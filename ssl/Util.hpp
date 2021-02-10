@@ -29,7 +29,7 @@ namespace SSLxx {
         if (key == nullptr)
             throw std::invalid_argument("readKey");
         return KeyPtr(key, EVP_PKEY_free);
-    };
+    }
 
     KeyPtr publicKey(std::string_view aStr) { return readKey<PEM_read_bio_PUBKEY>(aStr); }
     KeyPtr privateKey(std::string_view aStr) { return readKey<PEM_read_bio_PrivateKey>(aStr); }

@@ -24,6 +24,7 @@ namespace Time
         DATETIME,
         RFC1123,
         ISO,
+        ISO8601,
         FORMAT_MAX
     };
 
@@ -35,6 +36,7 @@ namespace Time
             "%E4Y-%m-%d %H:%M:%S",
             "%a, %d %b %E4Y %H:%M:%S %Z",
             "%E4Y%m%d%H%M%S",
+            "%E4Y%m%dT%H%M%SZ"
         };
         if (aFormat >= FORMAT_MAX)
             throw "formatString";
