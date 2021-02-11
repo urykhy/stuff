@@ -5,6 +5,7 @@
 #include <string>
 
 #include <curl/Curl.hpp>
+#include <rapidxml/rapidxml.hpp>
 #include <ssl/Digest.hpp>
 #include <ssl/HMAC.hpp>
 #include <time/Time.hpp>
@@ -88,24 +89,68 @@ namespace S3 {
             return fmt::format("http://{}/{}/{}", m_Params.host, m_Params.bucket, aName);
         }
 
+        void reportError(Curl::Client::Result& aResult) const
+        {
+            std::string sMsg;
+
+            auto sIt = aResult.headers.find("Content-Type");
+            if (sIt != aResult.headers.end() and sIt->second == "application/xml") {
+                try {
+                    rapidxml::xml_document<> sDoc;
+                    sDoc.parse<rapidxml::parse_non_destructive>(aResult.body.data());
+                    auto sNode = sDoc.first_node("Error");
+                    if (sNode) {
+                        sNode = sNode->first_node("Message");
+                        if (sNode)
+                            sMsg.assign(sNode->value(), sNode->value_size());
+                    }
+                } catch (...) {
+                }
+            }
+            if (sMsg.empty())
+                sMsg = std::move(aResult.body);
+            throw Error(sMsg);
+        }
+
     public:
         API(const Params& aParams)
         : m_Params(aParams)
         , m_Zone(Time::load("UTC"))
         {}
 
-        auto PUT(std::string_view aName, std::string_view aContent) const
+        struct Error : std::runtime_error
+        {
+            Error(const std::string& aMsg)
+            : std::runtime_error(aMsg)
+            {}
+        };
+
+        void PUT(std::string_view aName, std::string_view aContent) const
         {
             const std::string sContentHash = SSLxx::DigestStr(EVP_sha256(), aContent);
             Curl::Client      sClient(prepare("PUT", aName, sContentHash));
-            return sClient.PUT(location(aName), aContent);
+            auto              sResult = sClient.PUT(location(aName), aContent);
+            if (sResult.status != 200)
+                reportError(sResult);
         }
 
-        auto GET(std::string_view aName) const
+        std::string GET(std::string_view aName) const
         {
             const std::string sContentHash = SSLxx::DigestStr(EVP_sha256(), std::string_view{});
             Curl::Client      sClient(prepare("GET", aName, sContentHash));
-            return sClient.GET(location(aName));
+            auto              sResult = sClient.GET(location(aName));
+            if (sResult.status != 200)
+                reportError(sResult);
+            return sResult.body;
+        }
+
+        void DELETE(std::string_view aName) const
+        {
+            const std::string sContentHash = SSLxx::DigestStr(EVP_sha256(), std::string_view{});
+            Curl::Client      sClient(prepare("DELETE", aName, sContentHash));
+            auto              sResult = sClient.DELETE(location(aName));
+            if (sResult.status != 204)
+                reportError(sResult);
         }
     };
 
