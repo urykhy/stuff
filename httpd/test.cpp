@@ -158,13 +158,13 @@ BOOST_AUTO_TEST_CASE(curl)
     Curl::Client         sClient(sParams);
 
     auto sResult = sClient.GET("http://127.0.0.1:2081/hello");
-    BOOST_CHECK_EQUAL(sResult.first, 200);
-    BOOST_CHECK_EQUAL(sResult.second, "0123456789");
+    BOOST_CHECK_EQUAL(sResult.status, 200);
+    BOOST_CHECK_EQUAL(sResult.body, "0123456789");
     sResult = sClient.GET("http://127.0.0.1:2081/async");
-    BOOST_CHECK_EQUAL(sResult.first, 200);
-    BOOST_CHECK_EQUAL(sResult.second, "9876543210");
+    BOOST_CHECK_EQUAL(sResult.status, 200);
+    BOOST_CHECK_EQUAL(sResult.body, "9876543210");
     sResult = sClient.GET("http://127.0.0.1:2081/not_exists");
-    BOOST_CHECK_EQUAL(sResult.first, 404);
+    BOOST_CHECK_EQUAL(sResult.status, 404);
 }
 
 BOOST_AUTO_TEST_CASE(raw)

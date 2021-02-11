@@ -29,14 +29,12 @@ namespace Sentry
         : m_Sentry(aSentry)
         , m_Client(m_Params)
         {
-            using Header = Curl::Client::Params::Header;
-            m_Params.headers.emplace_back(Header{"Content-Type","application/json"});
-            m_Params.headers.emplace_back(Header{"X-Sentry-Auth",std::string("Sentry ")
+            m_Params.headers["Content-Type"] = "application/json";
+            m_Params.headers["X-Sentry-Auth"] = std::string("Sentry ")
                 + "sentry_key="    + m_Sentry.key + ", "
                 + "sentry_secret=" + m_Sentry.secret + ", "
                 + "sentry_client=" + m_Sentry.client + ", "
-                + "sentry_version=7"
-            });
+                + "sentry_version=7";
         }
         Curl::Client::Result send(const Message& aMsg) { return send(aMsg.to_string()); }
         Curl::Client::Result send(const std::string& aMsg) { return m_Client.POST(m_Sentry.url, aMsg); }

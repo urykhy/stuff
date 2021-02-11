@@ -5,48 +5,55 @@
 
 #include <cassert>
 #include <functional>
-#include <list>
+#include <map>
 #include <string>
+
+#include <string/String.hpp>
+
 #include <../unsorted/Raii.hpp>
 
-namespace Curl
-{
+namespace Curl {
     struct Multi;
     struct Client
     {
         friend struct Multi;
         using Error = std::runtime_error;
 
-        // http code, response
-        using Result = std::pair<int, std::string>;
+        using Headers = std::map<std::string, std::string>;
 
         struct Params
         {
-            time_t timeout_ms = 3000;
-            time_t connect_ms = 250;
+            time_t      timeout_ms = 3000;
+            time_t      connect_ms = 250;
             std::string user_agent = "Curl/Client";
             std::string username;
             std::string password;
             std::string cookie;
-            bool verbose=false;
-
-            struct Header
-            {
-                std::string name;
-                std::string value;
-            };
-            std::list<Header> headers;
+            bool        verbose = false;
+            Headers     headers;
         };
 
-        using RecvHandler = std::function<size_t (void*, size_t)>;
+        struct Result
+        {
+            int         status = 0;
+            Headers     headers;
+            std::string body;
 
-        Client(const Params& aParams) : m_Params(aParams) {
+            void clear() { *this = {}; }
+        };
+
+        using RecvHandler = std::function<size_t(void*, size_t)>;
+
+        Client(const Params& aParams)
+        : m_Params(aParams)
+        {
             m_Curl = curl_easy_init();
             if (m_Curl == nullptr) {
                 throw Error("Curl: fail to create easy handle");
             }
         }
-        ~Client() {
+        ~Client()
+        {
             if (m_Multi)
                 curl_multi_remove_handle(m_Multi, m_Curl);
             curl_easy_cleanup(m_Curl);
@@ -64,16 +71,16 @@ namespace Curl
         {
             clear();
             setopt(CURLOPT_NOBODY, 1);
-            return query(aUrl).first;
+            return query(aUrl).status;
         }
 
-        Result DELETE(const std::string& aUrl)
+        Result& DELETE(const std::string& aUrl)
         {
             clear();
             setopt(CURLOPT_CUSTOMREQUEST, "DELETE");
             return query(aUrl);
         }
-        Result PUT(const std::string& aUrl, const std::string& aData)
+        Result& PUT(const std::string& aUrl, std::string_view aData)
         {
             clear();
             setopt(CURLOPT_UPLOAD, 1);
@@ -81,19 +88,19 @@ namespace Curl
             setopt(CURLOPT_READDATA, this);
             setopt(CURLOPT_READFUNCTION, &put_handler);
             setopt(CURLOPT_EXPECT_100_TIMEOUT_MS, 0);
-            m_UploadData = &aData;
+            m_UploadData = aData;
             return query(aUrl);
         }
-        Result POST(const std::string& aUrl, const std::string& aData)
+        Result& POST(const std::string& aUrl, std::string_view aData)
         {
             clear();
             setopt(CURLOPT_POST, 1);
-            setopt(CURLOPT_POSTFIELDS, aData.c_str());
+            setopt(CURLOPT_POSTFIELDS, aData.data());
             setopt(CURLOPT_POSTFIELDSIZE, aData.size());
             setopt(CURLOPT_EXPECT_100_TIMEOUT_MS, 0);
             return query(aUrl);
         }
-        Result GET(const std::string& aUrl, time_t aIMS = 0)
+        Result& GET(const std::string& aUrl, time_t aIMS = 0)
         {
             clear();
             set_ims(aIMS);
@@ -106,7 +113,7 @@ namespace Curl
             void* sUser = reinterpret_cast<void*>(&aHandler);
             setopt(CURLOPT_WRITEFUNCTION, stream_handler);
             setopt(CURLOPT_WRITEDATA, sUser);
-            return query(aUrl, true).first;
+            return query(aUrl, true).status;
         }
 
         time_t get_mtime()
@@ -116,18 +123,23 @@ namespace Curl
             return sTime > 0 ? sTime : 0;
         }
 
+        void reconfigure(const Params& aParams)
+        {
+            m_Params = aParams;
+        }
+
     protected:
-        const Params& m_Params;
-        CURL *m_Curl;
+        Params m_Params;
+        CURL*  m_Curl;
         CURLM* m_Multi = nullptr;
-        std::string m_Buffer;
+        Result m_Result;
 
-        const std::string* m_UploadData = nullptr;
-        size_t m_UploadOffset =  0;
+        std::string_view m_UploadData   = {};
+        size_t           m_UploadOffset = 0;
 
-        void set_ims(time_t aIMS) {
-            if (aIMS > 0)
-            {
+        void set_ims(time_t aIMS)
+        {
+            if (aIMS > 0) {
                 setopt(CURLOPT_TIMECONDITION, CURL_TIMECOND_IFMODSINCE);
                 setopt(CURLOPT_TIMEVALUE, aIMS);
             }
@@ -136,32 +148,49 @@ namespace Curl
         static size_t stream_handler(void* aPtr, size_t aSize, size_t aBlock, void* aUser)
         {
             RecvHandler* sHandler = reinterpret_cast<RecvHandler*>(aUser);
-            return (*sHandler)(aPtr, aSize*aBlock);
+            return (*sHandler)(aPtr, aSize * aBlock);
         }
 
         static size_t buf_handler(void* aPtr, size_t aSize, size_t aBlock, void* aUser)
         {
             std::string* sBuffer = reinterpret_cast<std::string*>(aUser);
-            sBuffer->append((const char*)aPtr, aSize*aBlock);
-            return aSize*aBlock;
+            sBuffer->append((const char*)aPtr, aSize * aBlock);
+            return aSize * aBlock;
+        }
+
+        static size_t header_handler(void* aPtr, size_t aSize, size_t aBlock, void* aUser)
+        {
+            Headers*         sHeaders = reinterpret_cast<Headers*>(aUser);
+            std::string_view sBuf((const char*)aPtr, aSize * aBlock);
+            String::trim(sBuf);
+
+            auto sPos = sBuf.find(':');
+            if (sPos > 0 and sPos != std::string_view::npos and sPos + 2 < sBuf.size()) {
+                std::string sName(sBuf.substr(0, sPos));
+                std::string sValue(sBuf.substr(sPos + 2));
+
+                sHeaders->operator[](sName) = sValue;
+            }
+
+            return aSize * aBlock;
         }
 
         // Returning 0 will signal end-of-file to the library and cause it to stop the current transfer.
         // Your function must return the actual number of bytes that it stored in the data area pointed at by the pointer buffer.
-        static size_t put_handler(char *buffer, size_t size, size_t nitems, void *aUser)
+        static size_t put_handler(char* buffer, size_t size, size_t nitems, void* aUser)
         {
-            Client* self= reinterpret_cast<Client*>(aUser);
-            if (self->m_UploadOffset == self->m_UploadData->size())
+            Client* self = reinterpret_cast<Client*>(aUser);
+            if (self->m_UploadOffset == self->m_UploadData.size())
                 return 0;
-            if (self->m_UploadOffset > self->m_UploadData->size())
+            if (self->m_UploadOffset > self->m_UploadData.size())
                 return CURL_READFUNC_ABORT;
-            size_t sAvail = std::min(size * nitems, self->m_UploadData->size() - self->m_UploadOffset);
-            memcpy(buffer, self->m_UploadData->c_str() + self->m_UploadOffset, sAvail);
+            size_t sAvail = std::min(size * nitems, self->m_UploadData.size() - self->m_UploadOffset);
+            memcpy(buffer, self->m_UploadData.data() + self->m_UploadOffset, sAvail);
             self->m_UploadOffset += sAvail;
             return sAvail;
         }
 
-        int get_http_code()
+        int get_http_status()
         {
             long sRes = 0;
             curl_easy_getinfo(m_Curl, CURLINFO_RESPONSE_CODE, &sRes);
@@ -172,18 +201,19 @@ namespace Curl
         {
             curl_easy_reset(m_Curl);
             m_UploadOffset = 0;
-            m_UploadData = nullptr;
+            m_UploadData   = {};
+            m_Result.clear();
         }
 
-        Result query(const std::string& aUrl, bool aOwnBuffer = false)
+        Result& query(const std::string& aUrl, bool aOwnBuffer = false)
         {
-            m_Buffer.clear();
             setopt(CURLOPT_URL, aUrl.c_str());
-            if (!aOwnBuffer)
-            {
+            if (!aOwnBuffer) {
                 setopt(CURLOPT_WRITEFUNCTION, &buf_handler);
-                setopt(CURLOPT_WRITEDATA, reinterpret_cast<void*>(&m_Buffer));
+                setopt(CURLOPT_WRITEDATA, reinterpret_cast<void*>(&m_Result.body));
             }
+            setopt(CURLOPT_HEADERFUNCTION, &header_handler);
+            setopt(CURLOPT_HEADERDATA, reinterpret_cast<void*>(&m_Result.headers));
             setopt(CURLOPT_FILETIME, 1);
             setopt(CURLOPT_NOSIGNAL, 1);
             setopt(CURLOPT_FOLLOWLOCATION, 1);
@@ -196,20 +226,18 @@ namespace Curl
                 setopt(CURLOPT_USERAGENT, m_Params.user_agent.c_str());
 
             // set headers
-            struct curl_slist *sList = NULL;
-            Util::Raii sCleanup([&sList](){
+            struct curl_slist* sList = NULL;
+            Util::Raii         sCleanup([&sList]() {
                 curl_slist_free_all(sList);
             });
-            for (auto& x : m_Params.headers)
-            {
-                std::string sLine = x.name + ": " + x.value;
-                sList = curl_slist_append(sList, sLine.c_str());    // copies the string
+            for (auto& x : m_Params.headers) {
+                std::string sLine = x.first + ": " + x.second;
+                sList             = curl_slist_append(sList, sLine.c_str()); // make a copy
             }
             setopt(CURLOPT_HTTPHEADER, sList);
 
             // auth
-            if (!m_Params.username.empty())
-            {
+            if (!m_Params.username.empty()) {
                 setopt(CURLOPT_USERNAME, m_Params.username.c_str());
                 setopt(CURLOPT_PASSWORD, m_Params.password.c_str());
             }
@@ -221,12 +249,12 @@ namespace Curl
             if (m_Params.verbose)
                 setopt(CURLOPT_VERBOSE, 1);
 
-            if (m_Multi)
-            {
+            if (m_Multi) {
                 int res = curl_multi_add_handle(m_Multi, m_Curl);
                 if (res != CURLE_OK)
                     throw Error("Curl: fail to start multi call");
-                return Result(100, "");
+                m_Result.status = 100;
+                return m_Result;
             }
 
             auto rc = curl_easy_perform(m_Curl);
@@ -234,12 +262,14 @@ namespace Curl
             if (rc != CURLE_OK)
                 throw Error(curl_easy_strerror(rc));
 
-            return Result(get_http_code(), std::move(m_Buffer));
+            m_Result.status = get_http_status();
+            return m_Result;
         }
 
         ssize_t get_content_length()
         {
             curl_off_t sFilesize = 0;
+
             int res = curl_easy_getinfo(m_Curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD_T, &sFilesize);
             if (CURLE_OK == res && sFilesize > 0)
                 return sFilesize;
@@ -247,8 +277,8 @@ namespace Curl
         }
 
         // set options
-        template <typename ... Ts>
-        void setopt(CURLoption aOption, Ts ... aVal)
+        template <typename... Ts>
+        void setopt(CURLoption aOption, Ts... aVal)
         {
             curl_easy_setopt(m_Curl, aOption, aVal...);
         }
@@ -259,4 +289,4 @@ namespace Curl
             m_Multi = aMulti;
         }
     };
-}
+} // namespace Curl

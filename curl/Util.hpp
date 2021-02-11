@@ -18,12 +18,12 @@ namespace Curl
         File::Tmp sTmp(File::getFilename(aUrl));   // FIXME: cut query
         Client sClient(aParams);
 
-        int sCode = sClient.GET(aUrl, [&sTmp](void* aPtr, size_t aSize) -> size_t {
+        int sStatus = sClient.GET(aUrl, [&sTmp](void* aPtr, size_t aSize) -> size_t {
             sTmp.write(aPtr, aSize);
             return aSize;
         });
-        if (sCode != 200)
-            throw Client::Error("fail to download: http code: " + std::to_string(sCode));
+        if (sStatus != 200)
+            throw Client::Error("fail to download: http .status: " + std::to_string(sStatus));
         sTmp.flush();
 
         return sTmp;
@@ -64,16 +64,16 @@ namespace Curl
     {
         using L = Parser::StringList;
         Client sClient(aParams);
-        auto [sCode, sStr] = sClient.GET(aUrl, aIMS);
+        auto sResponse = sClient.GET(aUrl, aIMS);
 
-        if (sCode == 304)
+        if (sResponse.status == 304)
             return std::make_pair(false, L{});
-        if (sCode != 200)
-            throw Client::Error("fail to index: http code: " + std::to_string(sCode));
-        if (sStr.empty())
+        if (sResponse.status != 200)
+            throw Client::Error("fail to index: http status: " + std::to_string(sResponse.status));
+        if (sResponse.body.empty())
             return std::make_pair(true, L{});
 
-        return std::make_pair(true, Parser::Autoindex(sStr));
+        return std::make_pair(true, Parser::Autoindex(sResponse.body));
     }
 
 } // namespace Curl

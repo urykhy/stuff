@@ -43,9 +43,9 @@ namespace Etcd {
         Json::Value request(const std::string& aAPI, const std::string& aBody)
         {
             //BOOST_TEST_MESSAGE("etcd <- " << aAPI << ' ' << aBody);
-            auto&& [sCode, sResult] = m_Client.POST(m_Params.url + "/v3/" + aAPI, aBody);
+            auto sResult = m_Client.POST(m_Params.url + "/v3/" + aAPI, aBody);
             //BOOST_TEST_MESSAGE("etcd -> " << sResult);
-            return Protocol::parseResponse(sCode, sResult);
+            return Protocol::parseResponse(sResult.status, sResult.body);
         }
 
     public:

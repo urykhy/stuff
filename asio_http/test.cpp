@@ -46,14 +46,14 @@ BOOST_AUTO_TEST_CASE(simple)
     Curl::Client::Params sParams;
     Curl::Client         sClient(sParams);
     auto                 sResult = sClient.GET("http://127.0.0.1:2081/hello");
-    BOOST_CHECK_EQUAL(sResult.first, 200);
-    BOOST_CHECK_EQUAL(sResult.second, "hello world");
+    BOOST_CHECK_EQUAL(sResult.status, 200);
+    BOOST_CHECK_EQUAL(sResult.body, "hello world");
 
     sResult = sClient.POST("http://127.0.0.1:2081/hello", "data");
-    BOOST_CHECK_EQUAL(sResult.first, 405);
+    BOOST_CHECK_EQUAL(sResult.status, 405);
 
     sResult = sClient.GET("http://127.0.0.1:2081/other");
-    BOOST_CHECK_EQUAL(sResult.first, 404);
+    BOOST_CHECK_EQUAL(sResult.status, 404);
 
     // beast client
     asio_http::ClientRequest sRequest{.method = http::verb::get, .url = "http://127.0.0.1:2081/hello", .headers = {{http::field::host, "127.0.0.1"}, {http::field::user_agent, "Beast/cxx"}}};

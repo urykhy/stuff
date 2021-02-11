@@ -77,8 +77,7 @@ namespace MQ {
 #endif
         unsigned put(const std::string& aHash, const std::string& aBody)
         {
-            auto&& [sCode, sResult] = m_Client.PUT(m_Params.url + '?' + "client=" + m_Params.client_id + "&hash=" + aHash, aBody);
-            return sCode;
+            return m_Client.PUT(m_Params.url + '?' + "client=" + m_Params.client_id + "&hash=" + aHash, aBody).status;
         }
     };
 } // namespace MQ

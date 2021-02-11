@@ -36,24 +36,26 @@ BOOST_FIXTURE_TEST_SUITE(Curl, WithServer)
 BOOST_AUTO_TEST_CASE(Basic)
 {
     Curl::Client::Params sParams;
-    sParams.headers.push_back({"XFF","value"});
+    sParams.headers["XFF"] = "value";
     sParams.cookie   = "name1=content1;";
     sParams.username = "name";
     sParams.password = "secret";
 
     Curl::Client sClient(sParams);
     auto sResult = sClient.GET("http://127.0.0.1:8080/hello");
-    BOOST_CHECK_EQUAL(sResult.first, 200);
-    BOOST_CHECK_EQUAL(sResult.second, "Hello World!");
+    BOOST_CHECK_EQUAL(sResult.status, 200);
+    BOOST_CHECK_EQUAL(sResult.body, "Hello World!");
+    BOOST_CHECK_EQUAL(String::starts_with(sResult.headers["Server"], "CherryPy/"), true);
 
-    BOOST_CHECK_EQUAL(sClient.GET("http://127.0.0.1:8080/useragent").second, "Curl/Client");
-    BOOST_CHECK_EQUAL(sClient.GET("http://127.0.0.1:8080/header").second, "value");
-    BOOST_CHECK_EQUAL(sClient.GET("http://127.0.0.1:8080/cookie").second, "content1");
-    BOOST_CHECK_EQUAL(sClient.GET("http://127.0.0.1:8080/auth").first, 200);
+    BOOST_CHECK_EQUAL(sClient.GET("http://127.0.0.1:8080/useragent").body, "Curl/Client");
+    BOOST_CHECK_EQUAL(sClient.GET("http://127.0.0.1:8080/header").body, "value");
+    BOOST_CHECK_EQUAL(sClient.GET("http://127.0.0.1:8080/cookie").body, "content1");
+    BOOST_CHECK_EQUAL(sClient.GET("http://127.0.0.1:8080/auth").status, 200);
 
     sParams.username = "othername";
-    BOOST_CHECK_EQUAL(sClient.GET("http://127.0.0.1:8080/auth").first, 401);
-    BOOST_CHECK_EQUAL(sClient.GET("http://127.0.0.1:8080/nx_location").first, 404);
+    sClient.reconfigure(sParams);
+    BOOST_CHECK_EQUAL(sClient.GET("http://127.0.0.1:8080/auth").status, 401);
+    BOOST_CHECK_EQUAL(sClient.GET("http://127.0.0.1:8080/nx_location").status, 404);
     BOOST_CHECK_EQUAL(sClient.HEAD("http://127.0.0.1:8080/nx_location"), 404);
 
     BOOST_CHECK_THROW(sClient.GET("http://127.0.0.1:8080/slow"), Curl::Client::Error);
@@ -64,16 +66,16 @@ BOOST_AUTO_TEST_CASE(Methods)
     Curl::Client sClient(sParams);
 
     auto sResult = sClient.POST("http://127.0.0.1:8080/post_handler", "W=123");
-    BOOST_CHECK_EQUAL(sResult.first, 200);
-    BOOST_CHECK_EQUAL(sResult.second, "post: 123");
+    BOOST_CHECK_EQUAL(sResult.status, 200);
+    BOOST_CHECK_EQUAL(sResult.body, "post: 123");
 
     sResult = sClient.PUT("http://127.0.0.1:8080/method_handler", "some data");
-    BOOST_CHECK_EQUAL(sResult.first, 200);
-    BOOST_CHECK_EQUAL(sResult.second, "PUT: some data");
+    BOOST_CHECK_EQUAL(sResult.status, 200);
+    BOOST_CHECK_EQUAL(sResult.body, "PUT: some data");
 
     sResult = sClient.DELETE("http://127.0.0.1:8080/method_handler");
-    BOOST_CHECK_EQUAL(sResult.first, 200);
-    BOOST_CHECK_EQUAL(sResult.second, "OK");
+    BOOST_CHECK_EQUAL(sResult.status, 200);
+    BOOST_CHECK_EQUAL(sResult.body , "OK");
 
 }
 BOOST_AUTO_TEST_CASE(Stream)
@@ -81,11 +83,11 @@ BOOST_AUTO_TEST_CASE(Stream)
     Curl::Client::Params sParams;
     Curl::Client sClient(sParams);
     std::string sResult;
-    int sCode = sClient.GET("http://127.0.0.1:8080/hello", [&sResult](void* aPtr, size_t aSize) -> size_t {
+    int sStatus = sClient.GET("http://127.0.0.1:8080/hello", [&sResult](void* aPtr, size_t aSize) -> size_t {
         sResult.append((char*)aPtr, aSize);
         return aSize;
     });
-    BOOST_CHECK_EQUAL(sCode, 200);
+    BOOST_CHECK_EQUAL(sStatus, 200);
     BOOST_CHECK_EQUAL(sResult, "Hello World!");
 }
 BOOST_AUTO_TEST_CASE(Async)
@@ -99,8 +101,8 @@ BOOST_AUTO_TEST_CASE(Async)
     sClient.GET("http://127.0.0.1:8080/hello", [&ok](Curl::Multi::Result&& aResult){
         try {
             const auto sResult = aResult.get();
-            BOOST_CHECK_EQUAL(sResult.first, 200);
-            BOOST_CHECK_EQUAL(sResult.second, "Hello World!");
+            BOOST_CHECK_EQUAL(sResult.status, 200);
+            BOOST_CHECK_EQUAL(sResult.body, "Hello World!");
             ok = true;
         } catch (const std::exception& e) {
             BOOST_TEST_MESSAGE("got exception: " << e.what());
@@ -206,8 +208,8 @@ BOOST_AUTO_TEST_CASE(Mass)
         sClient.GET("http://127.0.0.1:2080/local.html", [&sDone](Curl::Multi::Result&& aResult){
             try {
                 const auto sResult = aResult.get();
-                BOOST_CHECK_EQUAL(sResult.first, 200);
-                BOOST_CHECK_EQUAL(sResult.second.size(), 1420);
+                BOOST_CHECK_EQUAL(sResult.status, 200);
+                BOOST_CHECK_EQUAL(sResult.body.size(), 1420);
             } catch (const std::exception& e) {
                 BOOST_TEST_MESSAGE("fail to make query: " << e.what());
             }

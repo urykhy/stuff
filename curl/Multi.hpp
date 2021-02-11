@@ -56,12 +56,14 @@ namespace Curl
 
             void set_value()
             {
-                promise->set_value(Client::Result{easy->get_http_code(), std::move(easy->m_Buffer)});
+                auto&& sResult = easy->m_Result;
+                sResult.status = easy->get_http_status();
+                promise->set_value(std::move(sResult));
             }
         };
 
         std::atomic_bool m_Stopping{false};
-        const Params& m_Params;
+        const Params m_Params;
         CURLM* m_Handle = nullptr;
 
         using Lock = std::unique_lock<std::mutex>;

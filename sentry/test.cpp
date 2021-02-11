@@ -60,7 +60,7 @@ BOOST_AUTO_TEST_CASE(client)
     sMsg.set_environment("test");
 
     auto rc = sClient.send(sMsg);
-    BOOST_CHECK_EQUAL(rc.first, 200);
-    BOOST_TEST_MESSAGE(rc.second);
+    BOOST_CHECK_EQUAL(rc.status, 200);
+    BOOST_TEST_MESSAGE(rc.body);
 }
 BOOST_AUTO_TEST_SUITE_END()
