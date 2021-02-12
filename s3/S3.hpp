@@ -5,6 +5,7 @@
 #include <string>
 
 #include <curl/Curl.hpp>
+#include <exception/Error.hpp>
 #include <rapidxml/rapidxml.hpp>
 #include <ssl/Digest.hpp>
 #include <ssl/HMAC.hpp>
@@ -109,7 +110,7 @@ namespace S3 {
             }
             if (sMsg.empty())
                 sMsg = std::move(aResult.body);
-            throw Error(sMsg);
+            throw Error(sMsg, aResult.status);
         }
 
     public:
@@ -118,12 +119,7 @@ namespace S3 {
         , m_Zone(Time::load("UTC"))
         {}
 
-        struct Error : std::runtime_error
-        {
-            Error(const std::string& aMsg)
-            : std::runtime_error(aMsg)
-            {}
-        };
+        using Error = Exception::HttpError;
 
         void PUT(std::string_view aName, std::string_view aContent) const
         {
