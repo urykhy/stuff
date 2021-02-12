@@ -32,7 +32,24 @@ namespace MySQL::MessageQueue {
         , m_Connection(aConnection)
         {}
 
-        Status insert(const std::string& aTask, const std::string& aHash)
+        bool is_exists(std::string_view aTask)
+        {
+            bool sExists = false;
+
+            const std::string sQuery = fmt::format(
+                "SELECT 1"
+                "  FROM message_queue"
+                " WHERE producer='{}' AND task='{}'",
+                m_Config.producer,
+                aTask);
+            m_Connection->Query(sQuery);
+            m_Connection->Use([&sExists](const MySQL::Row& aRow) { sExists = true; });
+
+            return sExists;
+        }
+
+        // creates own transaction
+        Status insert(std::string_view aTask, std::string_view aHash={})
         {
             m_Connection->ensure();
             try {
@@ -49,17 +66,7 @@ namespace MySQL::MessageQueue {
                 m_Connection->Query(sQuery);
                 m_Connection->Use([&sPosition](const MySQL::Row& aRow) { sPosition = aRow[0].as_uint64(); });
 
-                bool sExists = false;
-
-                sQuery = fmt::format(
-                    "SELECT 1"
-                    "  FROM message_queue"
-                    " WHERE producer='{}' AND task='{}'",
-                    m_Config.producer,
-                    aTask);
-                m_Connection->Query(sQuery);
-                m_Connection->Use([&sExists](const MySQL::Row& aRow) { sExists = true; });
-                if (sExists) {
+                if (is_exists(aTask)) {
                     m_Connection->Query("ROLLBACK");
                     return OK;
                 }
