@@ -28,7 +28,7 @@ namespace Exception {
 
     struct ErrnoError : std::runtime_error
     {
-        static std::string with_errno(const std::string& aMsg, int aErrno)
+        static std::string format(const std::string& aMsg, int aErrno)
         {
             std::stringstream sBuffer;
             sBuffer << aMsg << ": " << strerror(aErrno) << " (" << aErrno << ")";
@@ -37,14 +37,14 @@ namespace Exception {
         const int m_Errno;
 
         ErrnoError(const std::string& aMsg, int aErrno = errno)
-        : std::runtime_error(with_errno(aMsg, aErrno))
+        : std::runtime_error(format(aMsg, aErrno))
         , m_Errno(aErrno)
         {}
     };
 
     struct HttpError : std::runtime_error
     {
-        static std::string with_http(const std::string& aMsg, int aStatus)
+        static std::string format(const std::string& aMsg, int aStatus)
         {
             std::stringstream sBuffer;
             sBuffer << "Http response: " << aStatus << " (" << aMsg << ")";
@@ -53,7 +53,7 @@ namespace Exception {
         const unsigned m_Status;
 
         HttpError(const std::string& aMsg, unsigned aStatus)
-        : std::runtime_error(with_http(aMsg, aStatus))
+        : std::runtime_error(format(aMsg, aStatus))
         , m_Status(aStatus)
         {}
     };
