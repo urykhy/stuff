@@ -23,19 +23,19 @@ namespace Sentry
         gInitDone = true;
     }
 
-    static std::unique_ptr<Queue> gClient;
+    static std::unique_ptr<Queue> gQueue;
     static Prepare gPrepare;
     void InitCXA(const Client::Params& aParams, const Prepare& aPrepare)
     {
         gPrepare = aPrepare;
-        auto sClient = std::make_unique<Queue>(aParams);
-        sClient->start();
-        gClient = std::move(sClient);
+        auto sQueue = std::make_unique<Queue>(aParams);
+        sQueue->start();
+        gQueue = std::move(sQueue);
     }
 
     void hook(void* aObject, void* aInfo)
     {
-        if (!gClient)
+        if (!gQueue or gQueue->is_disabled())
             return;
 
         std::string sWhat = "unknown message";
@@ -51,7 +51,7 @@ namespace Sentry
         sMsg.set_exception(Util::Demangle(sInfo->name()), sWhat);
         sMsg.set_trace(GetTrace(), 4);
         gPrepare(sMsg);
-        gClient->send(sMsg);
+        gQueue->send(sMsg);
     }
 }
 

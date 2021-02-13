@@ -49,9 +49,11 @@ namespace Sentry {
         Client                                m_Client;
         Threads::SafeQueueThread<std::string> m_Queue;
         Threads::Group                        m_Group;
+        static thread_local bool              m_Disabled;
 
         void process(const std::string& aMsg)
         {
+            m_Disabled = true;
             log4cxx::NDC ndc("sentry");
             try {
                 auto sResult = m_Client.send(aMsg);
@@ -78,6 +80,9 @@ namespace Sentry {
         }
         void start() { m_Queue.start(m_Group); }
         void send(const Message& aMsg) { m_Queue.insert(aMsg.to_string()); }
+        bool is_disabled() const { return m_Disabled; }
     };
+
+    inline thread_local bool Queue::m_Disabled{false};
 
 } // namespace Sentry
