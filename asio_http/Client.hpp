@@ -18,8 +18,7 @@ namespace asio_http {
 
     struct ClientRequest
     {
-        using Header  = std::pair<http::field, std::string>;
-        using Headers = std::list<Header>;
+        using Headers = std::map<http::field, std::string>;
 
         http::verb  method = http::verb::get;
         std::string url;
