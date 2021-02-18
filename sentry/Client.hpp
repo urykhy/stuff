@@ -23,25 +23,31 @@ namespace Sentry {
         };
 
     private:
-        const Params         m_Sentry;
-        Curl::Client::Params m_Params;
-        Curl::Client         m_Client;
+        const Params          m_Sentry;
+        Curl::Client::Headers m_Headers;
+        Curl::Client          m_Client;
 
     public:
         Client(const Params& aSentry)
         : m_Sentry(aSentry)
-        , m_Client(m_Params)
         {
-            m_Params.headers["Content-Type"]  = "application/json";
-            m_Params.headers["X-Sentry-Auth"] = std::string("Sentry ") +
-                                                "sentry_key=" + m_Sentry.key + ", " +
-                                                "sentry_secret=" + m_Sentry.secret + ", " +
-                                                "sentry_client=" + m_Sentry.client + ", " +
-                                                "sentry_version=7";
-            m_Client.reconfigure(m_Params);
+            m_Headers["Content-Type"]  = "application/json";
+            m_Headers["X-Sentry-Auth"] = std::string("Sentry ") +
+                                         "sentry_key=" + m_Sentry.key + ", " +
+                                         "sentry_secret=" + m_Sentry.secret + ", " +
+                                         "sentry_client=" + m_Sentry.client + ", " +
+                                         "sentry_version=7";
         }
         Curl::Client::Result send(const Message& aMsg) { return send(aMsg.to_string()); }
-        Curl::Client::Result send(const std::string& aMsg) { return m_Client.POST(m_Sentry.url, aMsg); }
+        Curl::Client::Result send(std::string_view aMsg)
+        {
+            Curl::Client::Request sRequest{
+                .method  = Curl::Client::Method::POST,
+                .url     = m_Sentry.url,
+                .body    = aMsg,
+                .headers = m_Headers};
+            return m_Client(sRequest);
+        }
     };
 
     class Queue

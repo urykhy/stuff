@@ -3,6 +3,8 @@
 
 #include "S3.hpp"
 
+// minioc mb s3/test
+
 BOOST_AUTO_TEST_SUITE(S3)
 BOOST_AUTO_TEST_CASE(simple)
 {

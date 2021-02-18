@@ -20,7 +20,7 @@ namespace S3 {
         std::string secret_key = "minio123";
         std::string region     = "us-east-1";
 
-        Curl::Client::Params curl;
+        Curl::Client::Request curl;
     };
 
     class API
@@ -73,21 +73,30 @@ namespace S3 {
             return sHeader;
         }
 
-        Curl::Client::Params prepare(std::string_view aMethod, std::string_view& aName, std::string_view aContentHash) const
+        Curl::Client::Request make(Curl::Client::Method aMethod, std::string_view& aName, std::string_view aContent = {}) const
         {
-            const time_t      sNow      = ::time(nullptr);
-            const std::string sDateTime = m_Zone.format(sNow, Time::ISO8601);
+            const time_t      sNow         = ::time(nullptr);
+            const std::string sDateTime    = m_Zone.format(sNow, Time::ISO8601);
+            const std::string sContentHash = SSLxx::DigestStr(EVP_sha256(), aContent);
+            std::string_view  sMethod;
 
-            Curl::Client::Params sParams            = m_Params.curl;
-            sParams.headers["Authorization"]        = authorization(aMethod, aName, aContentHash, sDateTime);
-            sParams.headers["x-amz-content-sha256"] = aContentHash;
-            sParams.headers["x-amz-date"]           = sDateTime;
-            return sParams;
-        }
+            Curl::Client::Request sRequest = m_Params.curl; // inherit default params
 
-        std::string location(std::string_view aName) const
-        {
-            return fmt::format("http://{}/{}/{}", m_Params.host, m_Params.bucket, aName);
+            switch (aMethod) {
+            case Curl::Client::Method::GET: sMethod = "GET"; break;
+            case Curl::Client::Method::PUT: sMethod = "PUT"; break;
+            case Curl::Client::Method::DELETE: sMethod = "DELETE"; break;
+            default: throw std::invalid_argument("unknown method");
+            }
+
+            sRequest.method                          = aMethod;
+            sRequest.url                             = fmt::format("http://{}/{}/{}", m_Params.host, m_Params.bucket, aName);
+            sRequest.body                            = aContent;
+            sRequest.headers["Authorization"]        = authorization(sMethod, aName, sContentHash, sDateTime);
+            sRequest.headers["x-amz-content-sha256"] = sContentHash;
+            sRequest.headers["x-amz-date"]           = sDateTime;
+
+            return sRequest;
         }
 
         void reportError(Curl::Client::Result& aResult) const
@@ -113,6 +122,8 @@ namespace S3 {
             throw Error(sMsg, aResult.status);
         }
 
+        Curl::Client m_Client;
+
     public:
         API(const Params& aParams)
         : m_Params(aParams)
@@ -121,30 +132,24 @@ namespace S3 {
 
         using Error = Exception::HttpError;
 
-        void PUT(std::string_view aName, std::string_view aContent) const
+        void PUT(std::string_view aName, std::string_view aContent)
         {
-            const std::string sContentHash = SSLxx::DigestStr(EVP_sha256(), aContent);
-            Curl::Client      sClient(prepare("PUT", aName, sContentHash));
-            auto              sResult = sClient.PUT(location(aName), aContent);
+            auto sResult = m_Client(make(Curl::Client::Method::PUT, aName, aContent));
             if (sResult.status != 200)
                 reportError(sResult);
         }
 
-        std::string GET(std::string_view aName) const
+        std::string GET(std::string_view aName)
         {
-            const std::string sContentHash = SSLxx::DigestStr(EVP_sha256(), std::string_view{});
-            Curl::Client      sClient(prepare("GET", aName, sContentHash));
-            auto              sResult = sClient.GET(location(aName));
+            auto sResult = m_Client(make(Curl::Client::Method::GET, aName));
             if (sResult.status != 200)
                 reportError(sResult);
             return sResult.body;
         }
 
-        void DELETE(std::string_view aName) const
+        void DELETE(std::string_view aName)
         {
-            const std::string sContentHash = SSLxx::DigestStr(EVP_sha256(), std::string_view{});
-            Curl::Client      sClient(prepare("DELETE", aName, sContentHash));
-            auto              sResult = sClient.DELETE(location(aName));
+            auto sResult = m_Client(make(Curl::Client::Method::DELETE, aName));
             if (sResult.status != 204)
                 reportError(sResult);
         }

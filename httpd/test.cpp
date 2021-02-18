@@ -154,8 +154,7 @@ uint64_t WithServer::m_RequestCount = 0;
 BOOST_FIXTURE_TEST_SUITE(httpd, WithServer)
 BOOST_AUTO_TEST_CASE(curl)
 {
-    Curl::Client::Params sParams;
-    Curl::Client         sClient(sParams);
+    Curl::Client         sClient;
 
     auto sResult = sClient.GET("http://127.0.0.1:2081/hello");
     BOOST_CHECK_EQUAL(sResult.status, 200);

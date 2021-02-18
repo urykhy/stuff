@@ -43,8 +43,7 @@ BOOST_AUTO_TEST_CASE(simple)
 
     std::this_thread::sleep_for(100ms);
 
-    Curl::Client::Params sParams;
-    Curl::Client         sClient(sParams);
+    Curl::Client         sClient;
     auto                 sResult = sClient.GET("http://127.0.0.1:2081/hello");
     BOOST_CHECK_EQUAL(sResult.status, 200);
     BOOST_CHECK_EQUAL(sResult.body, "hello world");

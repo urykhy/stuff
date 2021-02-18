@@ -1,30 +1,31 @@
 #define BOOST_TEST_MODULE Suites
 #include <boost/test/unit_test.hpp>
 
-#include "Curl.hpp"
-#include "Multi.hpp"
-#include "Util.hpp"
+#include <chrono>
 
 #include <threads/Periodic.hpp> // for sleep
 #include <time/Meter.hpp>
 #include <unsorted/Process.hpp>
-#include <chrono>
+
+#include "Curl.hpp"
+#include "Multi.hpp"
+#include "Util.hpp"
 using namespace std::chrono_literals;
 
 namespace bp = boost::process;
 class WithServer
 {
     bp::ipstream m_Stream;
-    bp::child m_Server;
+    bp::child    m_Server;
+
 public:
     WithServer()
-    : m_Server(Util::Spawn(bp::search_path("httpd.py", {".",".."}), bp::std_in.close(), bp::std_out > bp::null, bp::std_err > m_Stream))
+    : m_Server(Util::Spawn(bp::search_path("httpd.py", {".", ".."}), bp::std_in.close(), bp::std_out > bp::null, bp::std_err > m_Stream))
     {
         BOOST_TEST_MESSAGE("server running as " << m_Server.id());
-        bool sReady = false;
+        bool        sReady = false;
         std::string sLine;
-        while (!sReady and m_Server.running() and std::getline(m_Stream, sLine) and !sLine.empty())
-        {
+        while (!sReady and m_Server.running() and std::getline(m_Stream, sLine) and !sLine.empty()) {
             BOOST_TEST_MESSAGE(sLine);
             if (std::string::npos != sLine.find("Bus STARTED"))
                 sReady = true;
@@ -35,35 +36,49 @@ public:
 BOOST_FIXTURE_TEST_SUITE(Curl, WithServer)
 BOOST_AUTO_TEST_CASE(Basic)
 {
-    Curl::Client::Params sParams;
-    sParams.headers["XFF"] = "value";
-    sParams.cookie   = "name1=content1;";
-    sParams.username = "name";
-    sParams.password = "secret";
+    using R = Curl::Client::Request;
 
-    Curl::Client sClient(sParams);
-    auto sResult = sClient.GET("http://127.0.0.1:8080/hello");
+    Curl::Client sClient;
+    auto         sResult = sClient.GET("http://127.0.0.1:8080/hello");
     BOOST_CHECK_EQUAL(sResult.status, 200);
     BOOST_CHECK_EQUAL(sResult.body, "Hello World!");
     BOOST_CHECK_EQUAL(String::starts_with(sResult.headers["Server"], "CherryPy/"), true);
 
-    BOOST_CHECK_EQUAL(sClient.GET("http://127.0.0.1:8080/useragent").body, "Curl/Client");
-    BOOST_CHECK_EQUAL(sClient.GET("http://127.0.0.1:8080/header").body, "value");
-    BOOST_CHECK_EQUAL(sClient.GET("http://127.0.0.1:8080/cookie").body, "content1");
-    BOOST_CHECK_EQUAL(sClient.GET("http://127.0.0.1:8080/auth").status, 200);
+    BOOST_CHECK_EQUAL(sClient.GET("http://127.0.0.1:8080/useragent").body, "CurlClient");
 
-    sParams.username = "othername";
-    sClient.reconfigure(sParams);
-    BOOST_CHECK_EQUAL(sClient.GET("http://127.0.0.1:8080/auth").status, 401);
+    BOOST_CHECK_EQUAL(
+        sClient(R{.url     = "http://127.0.0.1:8080/header",
+                  .headers = {{"XFF", "value"}}})
+            .body,
+        "value");
+
+    BOOST_CHECK_EQUAL(
+        sClient(R{.url    = "http://127.0.0.1:8080/cookie",
+                  .cookie = "name1=content1;"})
+            .body,
+        "content1");
+
+    BOOST_CHECK_EQUAL(
+        sClient(R{.url      = "http://127.0.0.1:8080/auth",
+                  .username = "name",
+                  .password = "secret"})
+            .status,
+        200);
+
+    BOOST_CHECK_EQUAL(
+        sClient(R{.url      = "http://127.0.0.1:8080/auth",
+                  .username = "othername",
+                  .password = "secret"})
+            .status,
+        401);
+
     BOOST_CHECK_EQUAL(sClient.GET("http://127.0.0.1:8080/nx_location").status, 404);
     BOOST_CHECK_EQUAL(sClient.HEAD("http://127.0.0.1:8080/nx_location"), 404);
-
     BOOST_CHECK_THROW(sClient.GET("http://127.0.0.1:8080/slow"), Curl::Client::Error);
 }
 BOOST_AUTO_TEST_CASE(Methods)
 {
-    Curl::Client::Params sParams;
-    Curl::Client sClient(sParams);
+    Curl::Client sClient;
 
     auto sResult = sClient.POST("http://127.0.0.1:8080/post_handler", "W=123");
     BOOST_CHECK_EQUAL(sResult.status, 200);
@@ -75,15 +90,13 @@ BOOST_AUTO_TEST_CASE(Methods)
 
     sResult = sClient.DELETE("http://127.0.0.1:8080/method_handler");
     BOOST_CHECK_EQUAL(sResult.status, 200);
-    BOOST_CHECK_EQUAL(sResult.body , "OK");
-
+    BOOST_CHECK_EQUAL(sResult.body, "OK");
 }
 BOOST_AUTO_TEST_CASE(Stream)
 {
-    Curl::Client::Params sParams;
-    Curl::Client sClient(sParams);
-    std::string sResult;
-    int sStatus = sClient.GET("http://127.0.0.1:8080/hello", [&sResult](void* aPtr, size_t aSize) -> size_t {
+    Curl::Client sClient;
+    std::string  sResult;
+    int          sStatus = sClient.GET("http://127.0.0.1:8080/hello", [&sResult](void* aPtr, size_t aSize) -> size_t {
         sResult.append((char*)aPtr, aSize);
         return aSize;
     });
@@ -92,13 +105,13 @@ BOOST_AUTO_TEST_CASE(Stream)
 }
 BOOST_AUTO_TEST_CASE(Async)
 {
-    std::atomic_bool ok{false};
+    std::atomic_bool    ok{false};
     Curl::Multi::Params sParams;
-    Curl::Multi sClient(sParams);
-    Threads::Group tg;
+    Curl::Multi         sClient(sParams);
+    Threads::Group      tg;
     sClient.start(tg);
 
-    sClient.GET("http://127.0.0.1:8080/hello", [&ok](Curl::Multi::Result&& aResult){
+    sClient.GET("http://127.0.0.1:8080/hello", [&ok](Curl::Multi::Result&& aResult) {
         try {
             const auto sResult = aResult.get();
             BOOST_CHECK_EQUAL(sResult.status, 200);
@@ -120,13 +133,13 @@ BOOST_AUTO_TEST_CASE(InQueueTimeout)
     std::atomic_bool ok2{false};
 
     Curl::Multi::Params sParams;
-    sParams.max_connections = 1;
+    sParams.max_connections  = 1;
     sParams.queue_timeout_ms = 1000;
-    Curl::Multi sClient(sParams);
+    Curl::Multi    sClient(sParams);
     Threads::Group tg;
     sClient.start(tg);
 
-    sClient.GET("http://127.0.0.1:8080/slow", [&ok1](Curl::Multi::Result&& aResult){
+    sClient.GET("http://127.0.0.1:8080/slow", [&ok1](Curl::Multi::Result&& aResult) {
         try {
             aResult.get();
         } catch (const Curl::Client::Error& e) {
@@ -135,7 +148,7 @@ BOOST_AUTO_TEST_CASE(InQueueTimeout)
         }
     });
 
-    sClient.GET("http://127.0.0.1:8080/hello", [&ok2](Curl::Multi::Result&& aResult){
+    sClient.GET("http://127.0.0.1:8080/hello", [&ok2](Curl::Multi::Result&& aResult) {
         try {
             aResult.get();
         } catch (const Curl::Client::Error& e) {
@@ -152,17 +165,16 @@ BOOST_AUTO_TEST_CASE(InQueueTimeout)
 }
 BOOST_AUTO_TEST_CASE(Tmp)
 {
-    Curl::Client::Params sParams;
-    auto sTmp = Curl::download("http://127.0.0.1:8080/hello", sParams);
+    using R   = Curl::Client::Request;
+    auto sTmp = Curl::download(R{.url = "http://127.0.0.1:8080/hello"});
     BOOST_TEST_MESSAGE("downloaded to " << sTmp.name());
     BOOST_CHECK_EQUAL(sTmp.size(), 12);
 
     // step 2. massive loader
-    std::mutex sMutex;
-    uint64_t sCounter = 0;
+    std::mutex         sMutex;
+    uint64_t           sCounter = 0;
     Parser::StringList sUrls{"http://127.0.0.1:8080/hello", "http://127.0.0.1:8080/hello", "http://127.0.0.1:8080/hello"};
-    Curl::download(sUrls, sParams, 2, [&sMutex, &sCounter](const std::string& aUrl, File::Tmp& sTmp) mutable
-    {
+    Curl::download(sUrls, R{}, 2, [&sMutex, &sCounter](const std::string& aUrl, File::Tmp& sTmp) mutable {
         std::unique_lock<std::mutex> lk(sMutex);
         sCounter++;
         BOOST_TEST_MESSAGE("mass download " << aUrl << " to " << sTmp.name());
@@ -172,20 +184,19 @@ BOOST_AUTO_TEST_CASE(Tmp)
 
     // step3. get download error
     Parser::StringList sUrls2{"http://127.0.0.1:8080/hello", "http://127.0.0.1:8080/nx_location"};
-    BOOST_CHECK_THROW(Curl::download(sUrls2, sParams, 2, [](const std::string& aUrl, File::Tmp& sTmp) mutable {}), Curl::Client::Error);
-
+    BOOST_CHECK_THROW(Curl::download(sUrls2, R{}, 2, [](const std::string& aUrl, File::Tmp& sTmp) mutable {}), Curl::Client::Error);
 }
 BOOST_AUTO_TEST_CASE(Index)
 {
-    Curl::Client::Params sParams;
+    using R = Curl::Client::Request;
     {
-        auto [sValid, sFiles] = Curl::index("http://127.0.0.1:8080/auto_index", sParams);
-        Parser::StringList sExpected = {{"../"},{"20200331"},{"20200401"}};
+        auto [sValid, sFiles]        = Curl::index(R{.url = "http://127.0.0.1:8080/auto_index"});
+        Parser::StringList sExpected = {{"../"}, {"20200331"}, {"20200401"}};
         BOOST_CHECK_EQUAL(sValid, true);
         BOOST_CHECK_EQUAL_COLLECTIONS(sExpected.begin(), sExpected.end(), sFiles.begin(), sFiles.end());
     }
-    {   // check IMS
-        auto [sValid, sFiles] = Curl::index("http://127.0.0.1:8080/auto_index", sParams, ::time(nullptr));
+    { // check IMS
+        auto [sValid, sFiles] = Curl::index(R{.url = "http://127.0.0.1:8080/auto_index", .ims = ::time(nullptr)});
         BOOST_CHECK_EQUAL(sValid, false);
         BOOST_CHECK_EQUAL(sFiles.empty(), true);
     }
@@ -194,18 +205,21 @@ BOOST_AUTO_TEST_CASE(Mass)
 {
     Curl::Client::GlobalInit();
 
-    enum {REQUEST_COUNT = 5000};
+    enum
+    {
+        REQUEST_COUNT = 5000
+    };
     std::atomic_int sDone{0};
 
-    Curl::Multi::Params sParams;    // default 3 sec per request, 32 connections
-    Curl::Multi sClient(sParams);
-    Threads::Group tg;
+    Curl::Multi::Params sParams; // default 3 sec per request, 32 connections
+    Curl::Multi         sClient(sParams);
+    Threads::Group      tg;
     sClient.start(tg);
 
     // run against nginx/apache. cherry py is slow
     Time::Meter sMeter;
-    auto spawn = [&sDone, &sClient](){
-        sClient.GET("http://127.0.0.1:2080/local.html", [&sDone](Curl::Multi::Result&& aResult){
+    auto        spawn = [&sDone, &sClient]() {
+        sClient.GET("http://127.0.0.1:2080/local.html", [&sDone](Curl::Multi::Result&& aResult) {
             try {
                 const auto sResult = aResult.get();
                 BOOST_CHECK_EQUAL(sResult.status, 200);
@@ -225,7 +239,7 @@ BOOST_AUTO_TEST_CASE(Mass)
         Threads::sleep(0.01);
     }
     auto sUsed = sMeter.get().to_double();
-    std::cerr << "make " << REQUEST_COUNT << " requests in " << sUsed << " seconds, rps: " << REQUEST_COUNT/sUsed << std::endl;
+    std::cerr << "make " << REQUEST_COUNT << " requests in " << sUsed << " seconds, rps: " << REQUEST_COUNT / sUsed << std::endl;
     BOOST_CHECK(sDone == REQUEST_COUNT);
 }
 BOOST_AUTO_TEST_SUITE_END()

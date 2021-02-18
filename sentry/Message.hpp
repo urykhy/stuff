@@ -19,7 +19,7 @@ namespace Sentry
         Json::Value m_Root;
     public:
 
-        Message(const std::string& aLogger = "unspecified")
+        explicit Message(const std::string& aLogger = "unspecified")
         {
             m_Root["event_id"] = Util::Uuid();
             m_Root["timestamp"] = Json::Value::Int64(time(nullptr));

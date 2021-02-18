@@ -10,10 +10,10 @@ namespace MQ {
     {
         struct Params
         {
-            Curl::Client::Params curl;
-            std::string          url;
-            std::string          client_id = "default";
-            double               linger    = 5;
+            Curl::Client::Request curl;
+            std::string           url;
+            std::string           client_id = "default";
+            double                linger    = 5;
         };
 
     private:
@@ -31,22 +31,22 @@ namespace MQ {
     public:
         Client(const Params& aParams)
         : m_Params(aParams)
-        , m_Client(m_Params.curl)
-        , m_Queue([this](Pair& aPair) {
-            unsigned sCode = put(aPair.hash, aPair.body);
-            if (sCode != 200)
-                throw std::runtime_error("MQ::Client: remote error " + std::to_string(sCode));
-        },
-                  Queue::Params{.retry = true})
+        , m_Queue(
+              [this](Pair& aPair) {
+                  unsigned sCode = put(aPair.hash, aPair.body);
+                  if (sCode != 200)
+                      throw std::runtime_error("MQ::Client: remote error " + std::to_string(sCode));
+              },
+              Queue::Params{.retry = true})
         {
             if (m_Params.url.empty())
-                throw std::invalid_argument("MQ::Client: bad url");
+                throw std::invalid_argument("MQ::Client: empty url");
         }
 
         void start(Threads::Group& aGroup)
         {
             aGroup.at_stop([this]() {
-                log4cxx::NDC ndc("mq.client");
+                log4cxx::NDC   ndc("mq.client");
                 Time::Deadline sDeadline(m_Params.linger);
 
                 auto sPending = m_Queue.size();
@@ -60,7 +60,6 @@ namespace MQ {
                 sPending = m_Queue.size();
                 if (sPending > 0)
                     WARN("lost " << sPending << " requests");
-
             });
             m_Queue.start(aGroup);
         }
@@ -75,9 +74,13 @@ namespace MQ {
 #else
     private:
 #endif
-        unsigned put(const std::string& aHash, const std::string& aBody)
+        unsigned put(const std::string& aHash, std::string_view aBody)
         {
-            return m_Client.PUT(m_Params.url + '?' + "client=" + m_Params.client_id + "&hash=" + aHash, aBody).status;
+            Curl::Client::Request sRequest = m_Params.curl; // inherit default params
+            sRequest.method                = Curl::Client::Method::PUT;
+            sRequest.url                   = m_Params.url + '?' + "client=" + m_Params.client_id + "&hash=" + aHash;
+            sRequest.body                  = aBody;
+            return m_Client(sRequest).status;
         }
     };
 } // namespace MQ

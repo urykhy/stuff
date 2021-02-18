@@ -30,7 +30,6 @@ namespace Etcd {
 
     private:
         const Params         m_Params;
-        Curl::Client::Params m_CurlParams;
         Curl::Client         m_Client;
 
         Pair decodePair(const Json::Value& aNode)
@@ -51,7 +50,6 @@ namespace Etcd {
     public:
         Client(const Params& aParams)
         : m_Params(aParams)
-        , m_Client(m_CurlParams)
         {}
 
         std::string get(const std::string& aKey)

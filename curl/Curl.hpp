@@ -19,18 +19,35 @@ namespace Curl {
         friend struct Multi;
         using Error = std::runtime_error;
 
-        using Headers = std::map<std::string, std::string>;
+        using Headers     = std::map<std::string, std::string>;
+        using RecvHandler = std::function<size_t(void*, size_t)>;
 
-        struct Params
+        enum class Method
         {
-            time_t      timeout_ms = 3000;
-            time_t      connect_ms = 250;
-            std::string user_agent = "Curl/Client";
-            std::string username;
-            std::string password;
-            std::string cookie;
-            bool        verbose = false;
-            Headers     headers;
+            GET,
+            HEAD,
+            POST,
+            PUT,
+            DELETE
+        };
+
+        struct Request
+        {
+            Method           method     = Method::GET;
+            std::string      url        = {};
+            std::string_view body       = {};
+            std::string      username   = {};
+            std::string      password   = {};
+            std::string      cookie     = {};
+            std::string      user_agent = "CurlClient";
+            Headers          headers    = {};
+
+            time_t ims        = 0;
+            time_t timeout_ms = 3000;
+            time_t connect_ms = 100;
+            bool   verbose    = false;
+
+            RecvHandler callback = {};
         };
 
         struct Result
@@ -38,14 +55,12 @@ namespace Curl {
             int         status = 0;
             Headers     headers;
             std::string body;
+            time_t      mtime = 0;
 
             void clear() { *this = {}; }
         };
 
-        using RecvHandler = std::function<size_t(void*, size_t)>;
-
-        Client(const Params& aParams)
-        : m_Params(aParams)
+        Client()
         {
             m_Curl = curl_easy_init();
             if (m_Curl == nullptr) {
@@ -56,6 +71,7 @@ namespace Curl {
         {
             if (m_Multi)
                 curl_multi_remove_handle(m_Multi, m_Curl);
+            clear();
             curl_easy_cleanup(m_Curl);
         }
 
@@ -67,83 +83,69 @@ namespace Curl {
             }
         }
 
-        int HEAD(const std::string& aUrl)
-        {
-            clear();
-            setopt(CURLOPT_NOBODY, 1);
-            return query(aUrl).status;
-        }
-
-        Result& DELETE(const std::string& aUrl)
-        {
-            clear();
-            setopt(CURLOPT_CUSTOMREQUEST, "DELETE");
-            return query(aUrl);
-        }
-        Result& PUT(const std::string& aUrl, std::string_view aData)
-        {
-            clear();
-            setopt(CURLOPT_UPLOAD, 1);
-            setopt(CURLOPT_INFILESIZE_LARGE, aData.size());
-            setopt(CURLOPT_READDATA, this);
-            setopt(CURLOPT_READFUNCTION, &put_handler);
-            setopt(CURLOPT_EXPECT_100_TIMEOUT_MS, 0);
-            m_UploadData = aData;
-            return query(aUrl);
-        }
-        Result& POST(const std::string& aUrl, std::string_view aData)
-        {
-            clear();
-            setopt(CURLOPT_POST, 1);
-            setopt(CURLOPT_POSTFIELDS, aData.data());
-            setopt(CURLOPT_POSTFIELDSIZE, aData.size());
-            setopt(CURLOPT_EXPECT_100_TIMEOUT_MS, 0);
-            return query(aUrl);
-        }
         Result& GET(const std::string& aUrl, time_t aIMS = 0)
         {
-            clear();
-            set_ims(aIMS);
-            return query(aUrl);
+            return operator()(Request{.method = Method::GET, .url = aUrl, .ims = aIMS});
         }
         int GET(const std::string& aUrl, RecvHandler aHandler, time_t aIMS = 0)
         {
+            return operator()(Request{.method = Method::GET, .url = aUrl, .ims = aIMS, .callback = aHandler}).status;
+        }
+        Result& POST(const std::string& aUrl, std::string_view aData)
+        {
+            return operator()(Request{.method = Method::POST, .url = aUrl, .body = aData});
+        }
+        Result& PUT(const std::string& aUrl, std::string_view aData)
+        {
+            return operator()(Request{.method = Method::PUT, .url = aUrl, .body = aData});
+        }
+        Result& DELETE(const std::string& aUrl)
+        {
+            return operator()(Request{.method = Method::DELETE, .url = aUrl});
+        }
+        int HEAD(const std::string& aUrl)
+        {
+            return operator()(Request{.method = Method::HEAD, .url = aUrl}).status;
+        }
+
+        Result& operator()(const Request& aRequest)
+        {
             clear();
-            set_ims(aIMS);
-            void* sUser = reinterpret_cast<void*>(&aHandler);
-            setopt(CURLOPT_WRITEFUNCTION, stream_handler);
-            setopt(CURLOPT_WRITEDATA, sUser);
-            return query(aUrl, true).status;
-        }
-
-        time_t get_mtime()
-        {
-            long sTime = 0;
-            curl_easy_getinfo(m_Curl, CURLINFO_FILETIME, &sTime);
-            return sTime > 0 ? sTime : 0;
-        }
-
-        void reconfigure(const Params& aParams)
-        {
-            m_Params = aParams;
+            switch (aRequest.method) {
+            case Method::GET:
+                if (aRequest.ims > 0) {
+                    setopt(CURLOPT_TIMECONDITION, CURL_TIMECOND_IFMODSINCE);
+                    setopt(CURLOPT_TIMEVALUE, aRequest.ims);
+                }
+                break;
+            case Method::POST:
+                setopt(CURLOPT_POST, 1);
+                setopt(CURLOPT_POSTFIELDS, aRequest.body.data());
+                setopt(CURLOPT_POSTFIELDSIZE, aRequest.body.size());
+                setopt(CURLOPT_EXPECT_100_TIMEOUT_MS, 0);
+                break;
+            case Method::PUT:
+                setopt(CURLOPT_UPLOAD, 1);
+                setopt(CURLOPT_INFILESIZE_LARGE, aRequest.body.size());
+                setopt(CURLOPT_READDATA, this);
+                setopt(CURLOPT_READFUNCTION, put_handler);
+                setopt(CURLOPT_EXPECT_100_TIMEOUT_MS, 0);
+                m_UploadData = aRequest.body;
+                break;
+            case Method::DELETE: setopt(CURLOPT_CUSTOMREQUEST, "DELETE"); break;
+            case Method::HEAD: setopt(CURLOPT_NOBODY, 1); break;
+            }
+            return query(aRequest);
         }
 
     protected:
-        Params m_Params;
-        CURL*  m_Curl;
-        CURLM* m_Multi = nullptr;
-        Result m_Result;
+        CURL*       m_Curl;
+        curl_slist* m_HeaderList = nullptr;
+        CURLM*      m_Multi      = nullptr;
+        Result      m_Result;
 
         std::string_view m_UploadData   = {};
         size_t           m_UploadOffset = 0;
-
-        void set_ims(time_t aIMS)
-        {
-            if (aIMS > 0) {
-                setopt(CURLOPT_TIMECONDITION, CURL_TIMECOND_IFMODSINCE);
-                setopt(CURLOPT_TIMEVALUE, aIMS);
-            }
-        }
 
         static size_t stream_handler(void* aPtr, size_t aSize, size_t aBlock, void* aUser)
         {
@@ -197,56 +199,67 @@ namespace Curl {
             return sRes;
         }
 
+        time_t get_mtime()
+        {
+            long sTime = 0;
+            curl_easy_getinfo(m_Curl, CURLINFO_FILETIME_T, &sTime);
+            return sTime > 0 ? sTime : 0;
+        }
+
         void clear()
         {
             curl_easy_reset(m_Curl);
+            curl_slist_free_all(m_HeaderList);
+            m_HeaderList   = nullptr;
             m_UploadOffset = 0;
             m_UploadData   = {};
             m_Result.clear();
         }
 
-        Result& query(const std::string& aUrl, bool aOwnBuffer = false)
+        //Result& query(const std::string& aUrl, bool aOwnBuffer = false)
+        Result& query(const Request& aRequest)
         {
-            setopt(CURLOPT_URL, aUrl.c_str());
-            if (!aOwnBuffer) {
-                setopt(CURLOPT_WRITEFUNCTION, &buf_handler);
+            setopt(CURLOPT_URL, aRequest.url.c_str());
+
+            if (aRequest.callback) {
+                setopt(CURLOPT_WRITEFUNCTION, stream_handler);
+                setopt(CURLOPT_WRITEDATA, reinterpret_cast<const void*>(&aRequest.callback));
+            } else {
+                setopt(CURLOPT_WRITEFUNCTION, buf_handler);
                 setopt(CURLOPT_WRITEDATA, reinterpret_cast<void*>(&m_Result.body));
             }
-            setopt(CURLOPT_HEADERFUNCTION, &header_handler);
+
+            setopt(CURLOPT_HEADERFUNCTION, header_handler);
             setopt(CURLOPT_HEADERDATA, reinterpret_cast<void*>(&m_Result.headers));
             setopt(CURLOPT_FILETIME, 1);
             setopt(CURLOPT_NOSIGNAL, 1);
             setopt(CURLOPT_FOLLOWLOCATION, 1);
-            setopt(CURLOPT_TIMEOUT_MS, m_Params.timeout_ms);
-            setopt(CURLOPT_CONNECTTIMEOUT_MS, m_Params.connect_ms);
+            setopt(CURLOPT_TIMEOUT_MS, aRequest.timeout_ms);
+            setopt(CURLOPT_CONNECTTIMEOUT_MS, aRequest.connect_ms);
             //setopt(CURLOPT_BUFFERSIZE, 1024*1024);
 
             // user agent
-            if (!m_Params.user_agent.empty())
-                setopt(CURLOPT_USERAGENT, m_Params.user_agent.c_str());
+            if (!aRequest.user_agent.empty())
+                setopt(CURLOPT_USERAGENT, aRequest.user_agent.c_str());
 
             // set headers
-            struct curl_slist* sList = NULL;
-            Util::Raii         sCleanup([&sList]() {
-                curl_slist_free_all(sList);
-            });
-            for (auto& x : m_Params.headers) {
+            for (auto& x : aRequest.headers) {
                 std::string sLine = x.first + ": " + x.second;
-                sList             = curl_slist_append(sList, sLine.c_str()); // make a copy
+                m_HeaderList      = curl_slist_append(m_HeaderList, sLine.c_str()); // make a copy
             }
-            setopt(CURLOPT_HTTPHEADER, sList);
+            setopt(CURLOPT_HTTPHEADER, m_HeaderList);
 
             // auth
-            if (!m_Params.username.empty()) {
-                setopt(CURLOPT_USERNAME, m_Params.username.c_str());
-                setopt(CURLOPT_PASSWORD, m_Params.password.c_str());
+            if (!aRequest.username.empty()) {
+                setopt(CURLOPT_USERNAME, aRequest.username.c_str());
+                setopt(CURLOPT_PASSWORD, aRequest.password.c_str());
             }
 
             // cookies // "name1=content1; name2=content2;"
-            if (!m_Params.cookie.empty())
-                setopt(CURLOPT_COOKIE, m_Params.cookie.c_str());
+            if (!aRequest.cookie.empty())
+                setopt(CURLOPT_COOKIE, aRequest.cookie.c_str());
 
-            if (m_Params.verbose)
+            if (aRequest.verbose)
                 setopt(CURLOPT_VERBOSE, 1);
 
             if (m_Multi) {
@@ -263,17 +276,8 @@ namespace Curl {
                 throw Error(curl_easy_strerror(rc));
 
             m_Result.status = get_http_status();
+            m_Result.mtime  = get_mtime();
             return m_Result;
-        }
-
-        ssize_t get_content_length()
-        {
-            curl_off_t sFilesize = 0;
-
-            int res = curl_easy_getinfo(m_Curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD_T, &sFilesize);
-            if (CURLE_OK == res && sFilesize > 0)
-                return sFilesize;
-            return -1;
         }
 
         // set options
