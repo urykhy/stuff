@@ -23,30 +23,32 @@ namespace Sentry {
         };
 
     private:
-        const Params          m_Sentry;
-        Curl::Client::Headers m_Headers;
-        Curl::Client          m_Client;
+        const Params                  m_Sentry;
+        std::unique_ptr<Curl::Client> m_Client;
 
     public:
         Client(const Params& aSentry)
         : m_Sentry(aSentry)
         {
-            m_Headers["Content-Type"]  = "application/json";
-            m_Headers["X-Sentry-Auth"] = std::string("Sentry ") +
-                                         "sentry_key=" + m_Sentry.key + ", " +
-                                         "sentry_secret=" + m_Sentry.secret + ", " +
-                                         "sentry_client=" + m_Sentry.client + ", " +
-                                         "sentry_version=7";
+            Curl::Client::Params sParams;
+
+            auto& sHeaders            = sParams.headers;
+            sHeaders["Content-Type"]  = "application/json";
+            sHeaders["X-Sentry-Auth"] = std::string("Sentry ") +
+                                        "sentry_key=" + m_Sentry.key + ", " +
+                                        "sentry_secret=" + m_Sentry.secret + ", " +
+                                        "sentry_client=" + m_Sentry.client + ", " +
+                                        "sentry_version=7";
+            m_Client = std::make_unique<Curl::Client>(sParams);
         }
         Curl::Client::Result send(const Message& aMsg) { return send(aMsg.to_string()); }
         Curl::Client::Result send(std::string_view aMsg)
         {
-            Curl::Client::Request sRequest{
-                .method  = Curl::Client::Method::POST,
-                .url     = m_Sentry.url,
-                .body    = aMsg,
-                .headers = m_Headers};
-            return m_Client(sRequest);
+            const Curl::Client::Request sRequest{
+                .method = Curl::Client::Method::POST,
+                .url    = m_Sentry.url,
+                .body   = aMsg};
+            return m_Client->operator()(sRequest);
         }
     };
 
@@ -75,16 +77,15 @@ namespace Sentry {
         : m_Client(aSentry)
         , m_Queue([this](const std::string& aMsg) { process(aMsg); })
         {}
-        ~Queue() throw()
+        void start()
         {
-            enum
-            {
-                MAX_WAIT = 20
-            }; // wait a bit if not all events sent
-            for (int i = 0; i < MAX_WAIT and !m_Queue.idle(); i++)
-                std::this_thread::sleep_for(100ms);
+            m_Queue.start(m_Group);
+            m_Group.at_stop([this]() {
+                constexpr time_t MAX_WAIT = 20; // wait a bit if not all events sent
+                for (time_t i = 0; i < MAX_WAIT and !m_Queue.idle(); i++)
+                    std::this_thread::sleep_for(100ms);
+            });
         }
-        void start() { m_Queue.start(m_Group); }
         void send(const Message& aMsg) { m_Queue.insert(aMsg.to_string()); }
         bool is_disabled() const { return m_Disabled; }
     };

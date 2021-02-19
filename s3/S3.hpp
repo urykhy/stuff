@@ -20,13 +20,14 @@ namespace S3 {
         std::string secret_key = "minio123";
         std::string region     = "us-east-1";
 
-        Curl::Client::Request curl;
+        Curl::Client::Params curl;
     };
 
     class API
     {
         const Params m_Params;
         Time::Zone   m_Zone;
+        Curl::Client m_Client;
 
         std::string authorization(
             std::string_view aMethod,
@@ -80,7 +81,7 @@ namespace S3 {
             const std::string sContentHash = SSLxx::DigestStr(EVP_sha256(), aContent);
             std::string_view  sMethod;
 
-            Curl::Client::Request sRequest = m_Params.curl; // inherit default params
+            Curl::Client::Request sRequest;
 
             switch (aMethod) {
             case Curl::Client::Method::GET: sMethod = "GET"; break;
@@ -89,9 +90,10 @@ namespace S3 {
             default: throw std::invalid_argument("unknown method");
             }
 
-            sRequest.method                          = aMethod;
-            sRequest.url                             = fmt::format("http://{}/{}/{}", m_Params.host, m_Params.bucket, aName);
-            sRequest.body                            = aContent;
+            sRequest.method = aMethod;
+            sRequest.url    = fmt::format("http://{}/{}/{}", m_Params.host, m_Params.bucket, aName);
+            sRequest.body   = aContent;
+
             sRequest.headers["Authorization"]        = authorization(sMethod, aName, sContentHash, sDateTime);
             sRequest.headers["x-amz-content-sha256"] = sContentHash;
             sRequest.headers["x-amz-date"]           = sDateTime;
@@ -122,12 +124,11 @@ namespace S3 {
             throw Error(sMsg, aResult.status);
         }
 
-        Curl::Client m_Client;
-
     public:
         API(const Params& aParams)
         : m_Params(aParams)
         , m_Zone(Time::load("UTC"))
+        , m_Client(aParams.curl)
         {}
 
         using Error = Exception::HttpError;

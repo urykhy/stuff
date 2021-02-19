@@ -29,8 +29,8 @@ namespace Etcd {
         using List = std::list<Pair>;
 
     private:
-        const Params         m_Params;
-        Curl::Client         m_Client;
+        const Params m_Params;
+        Curl::Client m_Client;
 
         Pair decodePair(const Json::Value& aNode)
         {
@@ -42,7 +42,12 @@ namespace Etcd {
         Json::Value request(const std::string& aAPI, const std::string& aBody)
         {
             //BOOST_TEST_MESSAGE("etcd <- " << aAPI << ' ' << aBody);
-            auto sResult = m_Client.POST(m_Params.url + "/v3/" + aAPI, aBody);
+            const Curl::Client::Request sRequest{
+                .method = Curl::Client::Method::POST,
+                .url    = m_Params.url + "/v3/" + aAPI,
+                .body   = aBody,
+            };
+            auto sResult = m_Client(sRequest);
             //BOOST_TEST_MESSAGE("etcd -> " << sResult);
             return Protocol::parseResponse(sResult.status, sResult.body);
         }

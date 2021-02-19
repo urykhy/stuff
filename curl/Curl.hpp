@@ -39,12 +39,12 @@ namespace Curl {
             std::string      username   = {};
             std::string      password   = {};
             std::string      cookie     = {};
-            std::string      user_agent = "CurlClient";
+            std::string      user_agent = {};
             Headers          headers    = {};
 
             time_t ims        = 0;
-            time_t timeout_ms = 3000;
-            time_t connect_ms = 100;
+            time_t timeout_ms = 0;
+            time_t connect_ms = 0;
             bool   verbose    = false;
 
             RecvHandler callback = {};
@@ -60,7 +60,24 @@ namespace Curl {
             void clear() { *this = {}; }
         };
 
-        Client()
+        // default parameters
+        struct Params
+        {
+            std::string username;
+            std::string password;
+            std::string cookie;
+            std::string user_agent = "Curl++";
+            Headers     headers;
+
+            time_t timeout_ms = 3000;
+            time_t connect_ms = 100;
+            bool   verbose    = false;
+
+            Params() {}
+        };
+
+        Client(const Params& aParams = Params())
+        : m_Params(aParams)
         {
             m_Curl = curl_easy_init();
             if (m_Curl == nullptr) {
@@ -69,8 +86,7 @@ namespace Curl {
         }
         ~Client()
         {
-            if (m_Multi)
-                curl_multi_remove_handle(m_Multi, m_Curl);
+            detach();
             clear();
             curl_easy_cleanup(m_Curl);
         }
@@ -138,11 +154,22 @@ namespace Curl {
             return query(aRequest);
         }
 
+        void clear()
+        {
+            curl_easy_reset(m_Curl);
+            curl_slist_free_all(m_HeaderList);
+            m_HeaderList   = nullptr;
+            m_UploadOffset = 0;
+            m_UploadData   = {};
+            m_Result.clear();
+        }
+
     protected:
-        CURL*       m_Curl;
-        curl_slist* m_HeaderList = nullptr;
-        CURLM*      m_Multi      = nullptr;
-        Result      m_Result;
+        const Params m_Params;
+        CURL*        m_Curl;
+        curl_slist*  m_HeaderList = nullptr;
+        CURLM*       m_Multi      = nullptr;
+        Result       m_Result;
 
         std::string_view m_UploadData   = {};
         size_t           m_UploadOffset = 0;
@@ -206,15 +233,27 @@ namespace Curl {
             return sTime > 0 ? sTime : 0;
         }
 
-        void clear()
-        {
-            curl_easy_reset(m_Curl);
-            curl_slist_free_all(m_HeaderList);
-            m_HeaderList   = nullptr;
-            m_UploadOffset = 0;
-            m_UploadData   = {};
-            m_Result.clear();
-        }
+#define _GENERATE_GET(X)                                 \
+    auto x_##X(const Request& aRequest)                  \
+    {                                                    \
+        return aRequest.X > 0 ? aRequest.X : m_Params.X; \
+    }
+        _GENERATE_GET(timeout_ms)
+        _GENERATE_GET(connect_ms)
+        _GENERATE_GET(verbose)
+#undef _GENERATE_GET
+
+#define _GENERATE_GET(X)                                      \
+    const auto& x_##X(const Request& aRequest)                \
+    {                                                         \
+        return !aRequest.X.empty() ? aRequest.X : m_Params.X; \
+    }
+        _GENERATE_GET(username)
+        _GENERATE_GET(password)
+        _GENERATE_GET(cookie)
+        _GENERATE_GET(user_agent)
+        _GENERATE_GET(headers)
+#undef _GENERATE_GET
 
         //Result& query(const std::string& aUrl, bool aOwnBuffer = false)
         Result& query(const Request& aRequest)
@@ -234,32 +273,33 @@ namespace Curl {
             setopt(CURLOPT_FILETIME, 1);
             setopt(CURLOPT_NOSIGNAL, 1);
             setopt(CURLOPT_FOLLOWLOCATION, 1);
-            setopt(CURLOPT_TIMEOUT_MS, aRequest.timeout_ms);
-            setopt(CURLOPT_CONNECTTIMEOUT_MS, aRequest.connect_ms);
+            setopt(CURLOPT_TIMEOUT_MS, x_timeout_ms(aRequest));
+            setopt(CURLOPT_CONNECTTIMEOUT_MS, x_connect_ms(aRequest));
             //setopt(CURLOPT_BUFFERSIZE, 1024*1024);
 
             // user agent
-            if (!aRequest.user_agent.empty())
-                setopt(CURLOPT_USERAGENT, aRequest.user_agent.c_str());
+            if (auto sUseragent = x_user_agent(aRequest); !sUseragent.empty())
+                setopt(CURLOPT_USERAGENT, sUseragent.c_str());
 
             // set headers
-            for (auto& x : aRequest.headers) {
-                std::string sLine = x.first + ": " + x.second;
+            for (auto& [sName, sValue] : x_headers(aRequest)) {
+                std::string sLine = sName + ": " + sValue;
                 m_HeaderList      = curl_slist_append(m_HeaderList, sLine.c_str()); // make a copy
             }
             setopt(CURLOPT_HTTPHEADER, m_HeaderList);
 
             // auth
-            if (!aRequest.username.empty()) {
-                setopt(CURLOPT_USERNAME, aRequest.username.c_str());
-                setopt(CURLOPT_PASSWORD, aRequest.password.c_str());
+            if (auto sUsername = x_username(aRequest); !sUsername.empty()) {
+                auto sPassword = x_password(aRequest);
+                setopt(CURLOPT_USERNAME, sUsername.c_str());
+                setopt(CURLOPT_PASSWORD, sPassword.c_str());
             }
 
             // cookies // "name1=content1; name2=content2;"
-            if (!aRequest.cookie.empty())
-                setopt(CURLOPT_COOKIE, aRequest.cookie.c_str());
+            if (auto sCookie = x_cookie(aRequest); !sCookie.empty())
+                setopt(CURLOPT_COOKIE, sCookie.c_str());
 
-            if (aRequest.verbose)
+            if (x_verbose(aRequest))
                 setopt(CURLOPT_VERBOSE, 1);
 
             if (m_Multi) {
@@ -288,9 +328,18 @@ namespace Curl {
         }
 
         // support multi handle, used from Multi
-        void assign(CURLM* aMulti)
+        void attach(CURLM* aMulti)
         {
             m_Multi = aMulti;
         }
-    };
+
+        void detach()
+        {
+            if (m_Multi) {
+                curl_multi_remove_handle(m_Multi, m_Curl);
+                m_Multi = nullptr;
+            }
+        }
+
+    }; // namespace Curl
 } // namespace Curl

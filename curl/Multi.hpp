@@ -4,6 +4,7 @@
 #include <map>
 #include <mutex>
 
+#include <container/Pool.hpp>
 #include <container/RequestQueue.hpp>
 #include <threads/Group.hpp>
 #include <threads/SafeQueue.hpp>
@@ -61,12 +62,16 @@ namespace Curl {
                 sResult.status = easy->get_http_status();
                 sResult.mtime  = easy->get_mtime();
                 promise->set_value(std::move(sResult));
+                easy->clear();
             }
         };
 
         std::atomic_bool m_Stopping{false};
         const Params     m_Params;
         CURLM*           m_Handle = nullptr;
+
+        using ClientPtr = std::shared_ptr<Curl::Client>;
+        Container::ProducePool<ClientPtr> m_Pool;
 
         using Lock = std::unique_lock<std::mutex>;
         mutable std::mutex                m_Mutex;
@@ -77,6 +82,9 @@ namespace Curl {
         Multi(const Params& aParams)
         : m_Params(aParams)
         , m_Handle(curl_multi_init())
+        , m_Pool([](){
+            return std::make_shared<Client>();
+        }, [](auto sClient){ return true;})
         , m_Waiting([this](auto& aRequest) { // in queue request timeout. called with mutex held
             aRequest.promise->set_exception(std::make_exception_ptr(Error("timeout in queue")));
             m_Next.insert(std::move(aRequest));
@@ -124,6 +132,7 @@ namespace Curl {
                             notify(x->easy_handle, x->data.result);
                     }
                     m_Waiting.on_timer();
+                    m_Pool.cleanup();
                 }
             });
             tg.at_stop([this]() {
@@ -150,6 +159,9 @@ namespace Curl {
             } else {
                 sRequest.set_value();
             }
+            sRequest.easy->detach();
+            sRequest.easy->clear();
+            m_Pool.insert(sRequest.easy);
             sRequest.easy.reset();
             m_Next.insert(std::move(sRequest));
             startWaiting();
@@ -157,8 +169,8 @@ namespace Curl {
 
         void startRequest(Request&& aRequest)
         {
-            auto sEasy = std::make_shared<Client>();
-            sEasy->assign(m_Handle);
+            auto sEasy = m_Pool.get();
+            sEasy->attach(m_Handle);
             aRequest.easy = sEasy;
             auto sRequest = std::move(aRequest.request);
             {

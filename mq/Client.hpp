@@ -10,10 +10,10 @@ namespace MQ {
     {
         struct Params
         {
-            Curl::Client::Request curl;
-            std::string           url;
-            std::string           client_id = "default";
-            double                linger    = 5;
+            std::string          url;
+            std::string          client_id = "default";
+            double               linger    = 5;
+            Curl::Client::Params curl;
         };
 
     private:
@@ -31,6 +31,7 @@ namespace MQ {
     public:
         Client(const Params& aParams)
         : m_Params(aParams)
+        , m_Client(aParams.curl)
         , m_Queue(
               [this](Pair& aPair) {
                   unsigned sCode = put(aPair.hash, aPair.body);
@@ -76,10 +77,11 @@ namespace MQ {
 #endif
         unsigned put(const std::string& aHash, std::string_view aBody)
         {
-            Curl::Client::Request sRequest = m_Params.curl; // inherit default params
-            sRequest.method                = Curl::Client::Method::PUT;
-            sRequest.url                   = m_Params.url + '?' + "client=" + m_Params.client_id + "&hash=" + aHash;
-            sRequest.body                  = aBody;
+            const Curl::Client::Request sRequest{
+                .method = Curl::Client::Method::PUT,
+                .url    = m_Params.url + '?' + "client=" + m_Params.client_id + "&hash=" + aHash,
+                .body   = aBody,
+            };
             return m_Client(sRequest).status;
         }
     };

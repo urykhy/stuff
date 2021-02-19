@@ -44,7 +44,7 @@ BOOST_AUTO_TEST_CASE(Basic)
     BOOST_CHECK_EQUAL(sResult.body, "Hello World!");
     BOOST_CHECK_EQUAL(String::starts_with(sResult.headers["Server"], "CherryPy/"), true);
 
-    BOOST_CHECK_EQUAL(sClient.GET("http://127.0.0.1:8080/useragent").body, "CurlClient");
+    BOOST_CHECK_EQUAL(sClient.GET("http://127.0.0.1:8080/useragent").body, "Curl++");
 
     BOOST_CHECK_EQUAL(
         sClient(R{.url     = "http://127.0.0.1:8080/header",
@@ -165,8 +165,7 @@ BOOST_AUTO_TEST_CASE(InQueueTimeout)
 }
 BOOST_AUTO_TEST_CASE(Tmp)
 {
-    using R   = Curl::Client::Request;
-    auto sTmp = Curl::download(R{.url = "http://127.0.0.1:8080/hello"});
+    auto sTmp = Curl::download("http://127.0.0.1:8080/hello");
     BOOST_TEST_MESSAGE("downloaded to " << sTmp.name());
     BOOST_CHECK_EQUAL(sTmp.size(), 12);
 
@@ -174,7 +173,7 @@ BOOST_AUTO_TEST_CASE(Tmp)
     std::mutex         sMutex;
     uint64_t           sCounter = 0;
     Parser::StringList sUrls{"http://127.0.0.1:8080/hello", "http://127.0.0.1:8080/hello", "http://127.0.0.1:8080/hello"};
-    Curl::download(sUrls, R{}, 2, [&sMutex, &sCounter](const std::string& aUrl, File::Tmp& sTmp) mutable {
+    Curl::download(sUrls, 2, [&sMutex, &sCounter](const std::string& aUrl, File::Tmp& sTmp) mutable {
         std::unique_lock<std::mutex> lk(sMutex);
         sCounter++;
         BOOST_TEST_MESSAGE("mass download " << aUrl << " to " << sTmp.name());
@@ -184,19 +183,18 @@ BOOST_AUTO_TEST_CASE(Tmp)
 
     // step3. get download error
     Parser::StringList sUrls2{"http://127.0.0.1:8080/hello", "http://127.0.0.1:8080/nx_location"};
-    BOOST_CHECK_THROW(Curl::download(sUrls2, R{}, 2, [](const std::string& aUrl, File::Tmp& sTmp) mutable {}), Curl::Client::Error);
+    BOOST_CHECK_THROW(Curl::download(sUrls2, 2, [](const std::string& aUrl, File::Tmp& sTmp) mutable {}), Curl::Client::Error);
 }
 BOOST_AUTO_TEST_CASE(Index)
 {
-    using R = Curl::Client::Request;
     {
-        auto [sValid, sFiles]        = Curl::index(R{.url = "http://127.0.0.1:8080/auto_index"});
+        auto [sValid, sFiles]        = Curl::index("http://127.0.0.1:8080/auto_index");
         Parser::StringList sExpected = {{"../"}, {"20200331"}, {"20200401"}};
         BOOST_CHECK_EQUAL(sValid, true);
         BOOST_CHECK_EQUAL_COLLECTIONS(sExpected.begin(), sExpected.end(), sFiles.begin(), sFiles.end());
     }
     { // check IMS
-        auto [sValid, sFiles] = Curl::index(R{.url = "http://127.0.0.1:8080/auto_index", .ims = ::time(nullptr)});
+        auto [sValid, sFiles] = Curl::index("http://127.0.0.1:8080/auto_index", ::time(nullptr));
         BOOST_CHECK_EQUAL(sValid, false);
         BOOST_CHECK_EQUAL(sFiles.empty(), true);
     }
