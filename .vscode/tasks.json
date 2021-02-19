@@ -18,7 +18,9 @@
       "label": "meson: build all",
       "type": "shell",
       "command": "ninja",
-      "problemMatcher": ["$gcc"],
+      "problemMatcher": [
+        "$gcc"
+      ],
       "options": {
         "cwd": "${workspaceFolder}/${relativeFileDirname}/build"
       },
@@ -48,6 +50,15 @@
       "type": "shell",
       "command": "clang-format -i -style=file */*.hpp */*.cpp",
       "problemMatcher": []
+    },
+    {
+      "label": "build all configured projects",
+      "type": "shell",
+      "command": "for x in */build; do echo $x; done | parallel -I% 'pushd % && ninja -j1'",
+      "problemMatcher": [],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      }
     }
   ]
 }
