@@ -3,21 +3,19 @@
 #include <json/json.h>
 
 #include <format/Base64.hpp>
+#include <format/Json.hpp>
 
 namespace Etcd {
-    using Error = std::runtime_error;
+    struct EtcdTag;
+    using Error = Exception::Error<EtcdTag>;
 
-    struct TxnErrorTag;
-    using TxnError = Exception::Error<TxnErrorTag>;
+    struct TxnTag;
+    using TxnError = Exception::Error<TxnTag, Error>;
 } // namespace Etcd
 
 namespace Etcd::Protocol {
 
-    inline std::string to_string(const Json::Value& aJson)
-    {
-        Json::StreamWriterBuilder sBuilder;
-        return Json::writeString(sBuilder, aJson);
-    }
+    inline const auto& to_string = Format::Json::to_string;
 
     inline std::string get(const std::string& aKey)
     {
@@ -105,6 +103,22 @@ namespace Etcd::Protocol {
         return to_string(sRoot);
     }
 
+    inline std::string atomicRemove(const std::string& aKey, const std::string& aOld)
+    {
+        Json::Value sRoot;
+
+        auto& sCompare     = sRoot["compare"][0];
+        sCompare["key"]    = Format::Base64(aKey);
+        sCompare["result"] = "EQUAL";
+        sCompare["target"] = "VALUE";
+        sCompare["value"]  = Format::Base64(aOld);
+
+        auto& sOp  = sRoot["success"][0]["request_delete_range"];
+        sOp["key"] = Format::Base64(aKey);
+
+        return to_string(sRoot);
+    }
+
     inline Json::Value parseResponse(int aCode, const std::string& aBody)
     {
         if (aCode == 200) {
@@ -117,9 +131,11 @@ namespace Etcd::Protocol {
         throw Error("etcd: bad server response: http code: " + std::to_string(aCode) + ", message: " + aBody);
     }
 
-    inline bool isTransactionOk(const Json::Value& aResponse)
+    inline void checkTxnResponse(const Json::Value& aResponse)
     {
-        return aResponse.isObject() and aResponse["succeeded"].asBool();
+        if (aResponse.isObject() and aResponse["succeeded"].asBool())
+            return;
+        throw TxnError("etcd: transaction error");
     }
 
 } // namespace Etcd::Protocol

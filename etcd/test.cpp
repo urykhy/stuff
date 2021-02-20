@@ -71,6 +71,7 @@ BOOST_AUTO_TEST_CASE(notify)
     std::this_thread::sleep_for(4s); // sleep more than ttl
 
     // ensure key still here
+    BOOST_CHECK_EQUAL(true, sNotify.status().first);
     BOOST_CHECK_EQUAL(sValue, sClient.get(sParams.key));
 
     // update value, it must be updated in etcd too
@@ -111,6 +112,6 @@ BOOST_AUTO_TEST_CASE(atomic)
     BOOST_CHECK_EQUAL(sClient.get(sKey), "success");
     BOOST_CHECK_THROW(sClient.atomicUpdate(sKey, "test", "success"), Etcd::TxnError);
 
-    sClient.remove(sKey);
+    sClient.atomicRemove(sKey, "success");
 }
 BOOST_AUTO_TEST_SUITE_END()

@@ -5,6 +5,7 @@
 #include <format/Hex.hpp>
 #include <parser/Atoi.hpp>
 #include <parser/Base64.hpp>
+#include <parser/Json.hpp>
 
 #include "Protocol.hpp"
 
@@ -25,28 +26,29 @@ namespace Etcd {
         {
             std::string key;
             std::string value;
+
+            void from_json(const Format::Json::Value& aValue)
+            {
+                if (!aValue.isObject())
+                    throw Error("etcd: not object value");
+                key = Parser::Base64(aValue["key"].asString());
+                value = Parser::Base64(aValue["value"].asString());
+            }
         };
-        using List = std::list<Pair>;
+        using List = std::vector<Pair>;
 
     private:
         const Params m_Params;
         Curl::Client m_Client;
 
-        Pair decodePair(const Json::Value& aNode)
-        {
-            std::string sKey = Parser::Base64(aNode["key"].asString());
-            sKey.erase(0, m_Params.prefix.size());
-            return {sKey, Parser::Base64(aNode["value"].asString())};
-        }
-
         Json::Value request(const std::string& aAPI, const std::string& aBody)
         {
             //BOOST_TEST_MESSAGE("etcd <- " << aAPI << ' ' << aBody);
             const Curl::Client::Request sRequest{
-                .method = Curl::Client::Method::POST,
-                .url    = m_Params.url + "/v3/" + aAPI,
-                .body   = aBody,
-            };
+                .method  = Curl::Client::Method::POST,
+                .url     = m_Params.url + "/v3/" + aAPI,
+                .body    = aBody,
+                .headers = {{"Accept", "application/json"}, {"Content-Type", "application/json"}}};
             auto sResult = m_Client(sRequest);
             //BOOST_TEST_MESSAGE("etcd -> " << sResult);
             return Protocol::parseResponse(sResult.status, sResult.body);
@@ -60,8 +62,8 @@ namespace Etcd {
         std::string get(const std::string& aKey)
         {
             const auto sResult = request("kv/range", Protocol::get(m_Params.prefix + aKey));
-            if (sResult.isObject())
-                return decodePair(sResult["kvs"][0]).value;
+            if (sResult.isObject() and sResult.isMember("kvs"))
+                return Parser::Base64(sResult["kvs"][0]["value"].asString());
             return "";
         }
 
@@ -81,10 +83,9 @@ namespace Etcd {
 
             List sList;
             if (sResult.isObject()) {
-                auto&& sKvs = sResult["kvs"];
-                for (Json::Value::ArrayIndex i = 0; i != sKvs.size(); i++)
-                    sList.emplace_back(decodePair(sKvs[i]));
-
+                Parser::Json::from_value(sResult["kvs"], sList);
+                for (auto& sItem : sList)
+                    sItem.key.erase(0, m_Params.prefix.size());
                 return sList;
             }
             return sList;
@@ -111,18 +112,19 @@ namespace Etcd {
         void atomicPut(const std::string& aKey, const std::string& aValue)
         {
             const auto sResponse = request("kv/txn", Protocol::atomicPut(m_Params.prefix + aKey, aValue));
-            if (Protocol::isTransactionOk(sResponse))
-                return;
-            throw TxnError("transaction error for key: " + aKey);
+            Protocol::checkTxnResponse(sResponse);
         }
 
         void atomicUpdate(const std::string& aKey, const std::string& aOld, const std::string& aValue)
         {
             const auto sResponse = request("kv/txn", Protocol::atomicUpdate(m_Params.prefix + aKey, aOld, aValue));
-            if (Protocol::isTransactionOk(sResponse))
-                return;
-            throw TxnError("transaction error for key: " + aKey);
+            Protocol::checkTxnResponse(sResponse);
         }
 
+        void atomicRemove(const std::string& aKey, const std::string& aOld)
+        {
+            const auto sResponse = request("kv/txn", Protocol::atomicRemove(m_Params.prefix + aKey, aOld));
+            Protocol::checkTxnResponse(sResponse);
+        }
     }; // namespace Etcd
 } // namespace Etcd

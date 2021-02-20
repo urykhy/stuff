@@ -52,7 +52,16 @@ namespace MQ {
 
         Json::Value etcd_request(asio_http::asio::io_service& aService, const std::string& aAPI, std::string&& aBody, asio_http::asio::yield_context yield)
         {
-            auto sResult = asio_http::async(aService, {.method = asio_http::http::verb::post, .url = m_Params.etcd.url + "/v3/" + aAPI, .body = std::move(aBody)}, yield).get();
+            auto sResult = asio_http::async(
+                               aService,
+                               {.method  = asio_http::http::verb::post,
+                                .url     = m_Params.etcd.url + "/v3/" + aAPI,
+                                .body    = std::move(aBody),
+                                .headers = {
+                                    {asio_http::http::field::accept, "application/json"},
+                                    {asio_http::http::field::content_type, "application/json"}}},
+                               yield)
+                               .get();
             return Etcd::Protocol::parseResponse(static_cast<unsigned>(sResult.result()), sResult.body());
         }
 
@@ -84,12 +93,10 @@ namespace MQ {
 
             if (sInitial) {
                 auto sResponse = etcd_request(aService, "kv/txn", Etcd::Protocol::atomicPut(sKey, formatState(sState)), yield);
-                if (not Etcd::Protocol::isTransactionOk(sResponse))
-                    throw Etcd::TxnError("transaction error");
+                Etcd::Protocol::checkTxnResponse(sResponse);
             } else {
                 auto sResponse = etcd_request(aService, "kv/txn", Etcd::Protocol::atomicUpdate(sKey, sOld, formatState(sState)), yield);
-                if (not Etcd::Protocol::isTransactionOk(sResponse))
-                    throw Etcd::TxnError("transaction error");
+                Etcd::Protocol::checkTxnResponse(sResponse);
             }
             DEBUG("accept block " << aHash);
 
@@ -121,8 +128,7 @@ namespace MQ {
             }
 
             auto sQuery = aRequest.target();
-            if (sQuery.size() > m_Params.max_size)
-            {
+            if (sQuery.size() > m_Params.max_size) {
                 aResponse.result(http::status::payload_too_large);
                 return;
             }

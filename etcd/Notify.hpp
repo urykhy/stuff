@@ -13,15 +13,16 @@ namespace Etcd {
         {
             Client::Params addr;
             std::string    key;
-            int            ttl    = 60;
-            int            period = 20;
+            int            ttl      = 60;
+            int            period   = 20;
+            bool           no_clear = false;
         };
 
     private:
         const Params      m_Params;
         Etcd::Client      m_Client;
         Threads::Periodic m_Periodic;
-        std::string       m_PrevValue;
+        std::string       m_EtcdValue;
 
         using Lock = std::unique_lock<std::mutex>;
         mutable std::mutex m_Mutex;
@@ -49,22 +50,17 @@ namespace Etcd {
             m_Client.put(m_Params.key, sValue, sLease);
 
             Lock lk(m_Mutex);
-            m_PrevValue = sValue;
+            m_EtcdValue = sValue;
             m_Lease     = sLease;
             m_Refresh   = true;
             m_LastError.clear();
         };
 
-        bool updatedValue() const
-        {
-            Lock lk(m_Mutex);
-            return m_PrevValue != m_Value;
-        }
-
         void cleanup()
         {
             try {
-                m_Client.dropLease(getLease());
+                if (!m_Params.no_clear)
+                    m_Client.dropLease(getLease());
             } catch (...) {
             }
         };
@@ -72,7 +68,7 @@ namespace Etcd {
         void refresh()
         {
             try {
-                if (m_Refresh and not updatedValue()) {
+                if (m_Refresh) {
                     m_Client.updateLease(getLease());
                 } else {
                     init();
@@ -93,16 +89,18 @@ namespace Etcd {
             init();
         }
 
-        std::string lastError() const
-        {
-            Lock lk(m_Mutex);
-            return m_LastError;
-        }
-
         void update(const std::string& aValue)
         {
             Lock lk(m_Mutex);
-            m_Value = aValue;
+            m_Value   = aValue;
+            m_Refresh = false;
+        }
+
+        using Status = std::pair<bool, std::string>;
+        Status status() const
+        {
+            Lock lk(m_Mutex);
+            return {m_Refresh, m_LastError};
         }
 
         void start(Threads::Group& aGroup)
