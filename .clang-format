@@ -26,7 +26,7 @@
     { Regex: "^<[a-z_]+>", Priority: 10 },
     { Regex: '<boost\/.*>', Priority: 11 },
     { Regex: '<thrift\/.*>', Priority: 11 },
-    { Regex: '^<[A-Za-z_0-9]+\/[A-Za-z_0-9]+\.hpp>', Priority: 20 },
+    { Regex: '^<[A-Za-z_-0-9]+\/[A-Za-z_-0-9]+\.hpp>', Priority: 20 },
     { Regex: '^"', Priority: 30 },
   ],
 }
