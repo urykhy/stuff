@@ -162,6 +162,17 @@ namespace cbor {
         }
     }
 
+    template <class T>
+    void read(istream& s, std::vector<T>& l)
+    {
+        size_t mt = get_uint(s, ensure_type(s, CBOR_LIST));
+        l.reserve(mt);
+        for (size_t i = 0; i < mt; i++) {
+            l.emplace_back();
+            read(s, l.back());
+        }
+    }
+
     template <class K, class V>
     void read(istream& s, std::map<K, V>& map)
     {

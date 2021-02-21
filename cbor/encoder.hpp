@@ -120,6 +120,15 @@ namespace cbor {
         }
     }
 
+    template <class T>
+    void write(ostream& out, const std::vector<T>& l)
+    {
+        write_type_value(out, CBOR_LIST, l.size());
+        for (const auto& x : l) {
+            write(out, x);
+        }
+    }
+
     template <class K, class V>
     void write(ostream& out, const std::map<K, V>& map)
     {
