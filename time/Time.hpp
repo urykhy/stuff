@@ -24,7 +24,8 @@ namespace Time
         DATETIME,
         RFC1123,
         ISO,
-        ISO8601,
+        ISO8601_TZ,  // with T and Z
+        ISO8601_LTZ, // with -,:,T and Z
         FORMAT_MAX
     };
 
@@ -36,7 +37,8 @@ namespace Time
             "%E4Y-%m-%d %H:%M:%S",
             "%a, %d %b %E4Y %H:%M:%S %Z",
             "%E4Y%m%d%H%M%S",
-            "%E4Y%m%dT%H%M%SZ"
+            "%E4Y%m%dT%H%M%SZ",
+            "%E4Y-%m-%dT%H:%M:%SZ"
         };
         if (aFormat >= FORMAT_MAX)
             throw "formatString";
@@ -49,7 +51,7 @@ namespace Time
     public:
         Zone(const cctz::time_zone aZone) : m_Zone(aZone) { }
 
-        time_t parse(const std::string aValue, fmt aFormat) const
+        time_t parse(const std::string& aValue, fmt aFormat) const
         {
             SC::time_point sPoint;
             if (!cctz::parse(formatString(aFormat), aValue, m_Zone, &sPoint))

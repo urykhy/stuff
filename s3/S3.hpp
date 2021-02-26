@@ -6,7 +6,7 @@
 
 #include <curl/Curl.hpp>
 #include <exception/Error.hpp>
-#include <rapidxml/rapidxml.hpp>
+#include <parser/XML.hpp>
 #include <ssl/Digest.hpp>
 #include <ssl/HMAC.hpp>
 #include <time/Time.hpp>
@@ -32,6 +32,7 @@ namespace S3 {
         std::string authorization(
             std::string_view aMethod,
             std::string_view aName,
+            std::string_view aQuery,
             std::string_view aHash,
             std::string_view aDateTime) const
         {
@@ -42,14 +43,14 @@ namespace S3 {
             const std::string      sCR   = fmt::format(
                 "{}\n"      // HTTP method
                 "/{}/{}\n"  // URI
-                "\n"        // query string
+                "{}\n"      // query string
                 "host:{}\n" // headers
                 "x-amz-content-sha256:{}\n"
                 "x-amz-date:{}\n"
                 "\n"
                 "host;x-amz-content-sha256;x-amz-date\n" // signed headers
                 "{}",                                    // content hash
-                aMethod, m_Params.bucket, aName, m_Params.host, aHash, aDateTime, aHash);
+                aMethod, m_Params.bucket, aName, aQuery, m_Params.host, aHash, aDateTime, aHash);
 
             const std::string sSTS = fmt::format(
                 "AWS4-HMAC-SHA256\n"
@@ -74,10 +75,13 @@ namespace S3 {
             return sHeader;
         }
 
-        Curl::Client::Request make(Curl::Client::Method aMethod, std::string_view& aName, std::string_view aContent = {}) const
+        Curl::Client::Request make(Curl::Client::Method aMethod,
+                                   std::string_view     aName,
+                                   std::string_view     aContent = {},
+                                   std::string_view     aQuery   = {}) const
         {
             const time_t      sNow         = ::time(nullptr);
-            const std::string sDateTime    = m_Zone.format(sNow, Time::ISO8601);
+            const std::string sDateTime    = m_Zone.format(sNow, Time::ISO8601_TZ);
             const std::string sContentHash = SSLxx::DigestStr(EVP_sha256(), aContent);
             std::string_view  sMethod;
 
@@ -91,10 +95,11 @@ namespace S3 {
             }
 
             sRequest.method = aMethod;
-            sRequest.url    = fmt::format("http://{}/{}/{}", m_Params.host, m_Params.bucket, aName);
+            sRequest.url    = fmt::format("http://{}/{}/{}?{}", m_Params.host, m_Params.bucket, aName, aQuery);
             sRequest.body   = aContent;
+            //BOOST_TEST_MESSAGE("url: " << sRequest.url);
 
-            sRequest.headers["Authorization"]        = authorization(sMethod, aName, sContentHash, sDateTime);
+            sRequest.headers["Authorization"]        = authorization(sMethod, aName, aQuery, sContentHash, sDateTime);
             sRequest.headers["x-amz-content-sha256"] = sContentHash;
             sRequest.headers["x-amz-date"]           = sDateTime;
 
@@ -111,11 +116,8 @@ namespace S3 {
                     rapidxml::xml_document<> sDoc;
                     sDoc.parse<rapidxml::parse_non_destructive>(aResult.body.data());
                     auto sNode = sDoc.first_node("Error");
-                    if (sNode) {
-                        sNode = sNode->first_node("Message");
-                        if (sNode)
-                            sMsg.assign(sNode->value(), sNode->value_size());
-                    }
+                    if (sNode)
+                        Parser::XML::from_node(sNode->first_node("Message"), sMsg);
                 } catch (...) {
                 }
             }
@@ -154,6 +156,96 @@ namespace S3 {
             if (sResult.status != 204)
                 reportError(sResult);
         }
+
+        struct Entry
+        {
+            std::string key;
+            time_t      mtime = 0;
+            size_t      size  = 0;
+
+            void from_xml(const Parser::XML::Node* aNode)
+            {
+                if (aNode == nullptr)
+                    return;
+                std::string sTime;
+                Parser::XML::from_node(aNode->first_node("Key"), key);
+                Parser::XML::from_node(aNode->first_node("LastModified"), sTime); // mtime
+                mtime = API::parse(sTime);
+                Parser::XML::from_node(aNode->first_node("Size"), size);
+            }
+        };
+
+        struct List
+        {
+            bool truncated = false;
+
+            std::vector<Entry> keys;
+        };
+
+        struct ListParams
+        {
+            std::string prefix = {};
+            std::string after  = {};
+            unsigned    limit  = {};
+        };
+        static ListParams defaultListParams() { return ListParams{}; }
+
+        List LIST(const ListParams& aParams = defaultListParams())
+        {
+            List sList;
+
+            // parameters must be in order
+            std::string sQuery = "list-type=2";
+            if (aParams.limit != 0)
+                sQuery += ("&max-keys=" + std::to_string(aParams.limit));
+            if (!aParams.prefix.empty())
+                sQuery += ("&prefix=" + aParams.prefix);
+            if (!aParams.after.empty())
+                sQuery += ("&start-after=" + aParams.after);
+
+            auto sResult = m_Client(make(Curl::Client::Method::GET, {}, {}, sQuery));
+            if (sResult.status != 200)
+                reportError(sResult);
+
+            auto sHeader = sResult.headers.find("Content-Type");
+            if (sHeader == sResult.headers.end() or sHeader->second != "application/xml")
+                throw std::runtime_error("XML response expected");
+
+            try {
+                m_ZonePtr = &m_Zone;
+                auto sXML = Parser::XML::parse(sResult.body);
+                auto sLBR = sXML->first_node("ListBucketResult");
+                if (!sLBR)
+                    throw std::runtime_error("ListBucketResult node not found");
+                Parser::XML::from_node(sLBR->first_node("IsTruncated"), sList.truncated);
+                uint64_t sCount = 0;
+                Parser::XML::from_node(sLBR->first_node("KeyCount"), sCount);
+                sList.keys.reserve(sCount);
+                Parser::XML::from_node(sLBR->first_node("Contents"), sList.keys);
+                m_ZonePtr = nullptr;
+                return sList;
+            } catch (const std::exception& e) {
+                m_ZonePtr = nullptr;
+                throw std::runtime_error(std::string("XML processing error: ") + e.what());
+            }
+        }
+
+    private:
+        friend struct Entry;
+
+        static thread_local Time::Zone* m_ZonePtr;
+
+        static time_t parse(std::string& aTime)
+        {
+            auto sPos = aTime.find('.');
+            if (sPos != std::string::npos) {
+                aTime.erase(sPos);
+                aTime.push_back('Z');
+            }
+            return m_ZonePtr->parse(aTime, Time::ISO8601_LTZ);
+        }
     };
+
+    inline thread_local Time::Zone* API::m_ZonePtr = nullptr;
 
 } // namespace S3

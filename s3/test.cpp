@@ -14,6 +14,20 @@ BOOST_AUTO_TEST_CASE(simple)
     sAPI.PUT("some_file", "test data");
     auto sResult = sAPI.GET("some_file");
 
+    bool sFound = false;
+    auto sList = sAPI.LIST();
+    for (auto& x : sList.keys)
+    {
+        BOOST_TEST_MESSAGE(fmt::format("{}\t{}\t{}", x.key, x.size, x.mtime));
+        if (x.key == "some_file")
+        {
+            sFound = true;
+            BOOST_CHECK_EQUAL(x.size, 9); // `test data`
+        }
+    }
+    BOOST_CHECK_EQUAL(sList.truncated, false);
+    BOOST_CHECK_EQUAL(sFound, true);
+
     try {
         auto sResult = sAPI.GET("some_nx_file");
     } catch (const S3::API::Error& e) {

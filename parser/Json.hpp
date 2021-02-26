@@ -48,14 +48,14 @@ namespace Parser::Json {
         aValue = aJson.asUInt64();
     }
 
-    void from_value(const Value& aJson, double& aValue)
+    inline void from_value(const Value& aJson, double& aValue)
     {
         if (not aJson.isDouble())
             throw std::invalid_argument("not double value");
         aValue = aJson.asDouble();
     }
 
-    void from_value(const Value& aJson, std::string& aValue)
+    inline void from_value(const Value& aJson, std::string& aValue)
     {
         if (not aJson.isString())
             throw std::invalid_argument("not string value");
