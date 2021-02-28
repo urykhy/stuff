@@ -3,6 +3,7 @@
 #include <limits>
 #include <memory>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include "Atoi.hpp"
@@ -75,3 +76,11 @@ namespace Parser::XML {
     }
 
 } // namespace Parser::XML
+
+namespace rapidxml {
+    template <class T>
+    void operator>>(xml_node<>& aNode, T& aValue)
+    {
+        Parser::XML::from_node(&aNode, aValue);
+    }
+} // namespace rapidxml

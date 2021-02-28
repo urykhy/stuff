@@ -10,6 +10,7 @@
 #include <ssl/Digest.hpp>
 #include <ssl/HMAC.hpp>
 #include <time/Time.hpp>
+#include <unsorted/Raii.hpp>
 
 namespace S3 {
     struct Params
@@ -117,7 +118,7 @@ namespace S3 {
                     sDoc.parse<rapidxml::parse_non_destructive>(aResult.body.data());
                     auto sNode = sDoc.first_node("Error");
                     if (sNode)
-                        Parser::XML::from_node(sNode->first_node("Message"), sMsg);
+                        *sNode->first_node("Message") >> sMsg;
                 } catch (...) {
                 }
             }
@@ -167,11 +168,12 @@ namespace S3 {
             {
                 if (aNode == nullptr)
                     return;
-                std::string sTime;
-                Parser::XML::from_node(aNode->first_node("Key"), key);
-                Parser::XML::from_node(aNode->first_node("LastModified"), sTime); // mtime
-                mtime = API::parse(sTime);
-                Parser::XML::from_node(aNode->first_node("Size"), size);
+                std::string sLastModified;
+
+                *aNode->first_node("Key") >> key;
+                *aNode->first_node("LastModified") >> sLastModified;
+                *aNode->first_node("Size") >> size;
+                mtime = API::parse(sLastModified);
             }
         };
 
@@ -212,20 +214,22 @@ namespace S3 {
                 throw std::runtime_error("XML response expected");
 
             try {
+                Util::Raii sCleanZonePtr([this]() { m_ZonePtr = nullptr; });
                 m_ZonePtr = &m_Zone;
+
                 auto sXML = Parser::XML::parse(sResult.body);
                 auto sLBR = sXML->first_node("ListBucketResult");
                 if (!sLBR)
                     throw std::runtime_error("ListBucketResult node not found");
-                Parser::XML::from_node(sLBR->first_node("IsTruncated"), sList.truncated);
+                *sLBR->first_node("IsTruncated") >> sList.truncated;
+
                 uint64_t sCount = 0;
-                Parser::XML::from_node(sLBR->first_node("KeyCount"), sCount);
+                *sLBR->first_node("KeyCount") >> sCount;
                 sList.keys.reserve(sCount);
-                Parser::XML::from_node(sLBR->first_node("Contents"), sList.keys);
-                m_ZonePtr = nullptr;
+
+                *sLBR->first_node("Contents") >> sList.keys;
                 return sList;
             } catch (const std::exception& e) {
-                m_ZonePtr = nullptr;
                 throw std::runtime_error(std::string("XML processing error: ") + e.what());
             }
         }
