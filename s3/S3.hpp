@@ -9,6 +9,7 @@
 #include <parser/XML.hpp>
 #include <ssl/Digest.hpp>
 #include <ssl/HMAC.hpp>
+#include <string/String.hpp>
 #include <time/Time.hpp>
 #include <unsorted/Raii.hpp>
 
@@ -31,27 +32,45 @@ namespace S3 {
         Curl::Client m_Client;
 
         std::string authorization(
-            std::string_view aMethod,
-            std::string_view aName,
-            std::string_view aQuery,
-            std::string_view aHash,
-            std::string_view aDateTime) const
+            Curl::Client::Method         aMethod,
+            const Curl::Client::Headers& aHeaders,
+            std::string_view             aName,
+            std::string_view             aQuery,
+            std::string_view             aHash,
+            std::string_view             aDateTime) const
         {
             using namespace SSLxx;
             using namespace SSLxx::HMAC;
 
             const std::string_view sDate = aDateTime.substr(0, 8);
-            const std::string      sCR   = fmt::format(
-                "{}\n"      // HTTP method
-                "/{}/{}\n"  // URI
-                "{}\n"      // query string
-                "host:{}\n" // headers
-                "x-amz-content-sha256:{}\n"
-                "x-amz-date:{}\n"
-                "\n"
-                "host;x-amz-content-sha256;x-amz-date\n" // signed headers
-                "{}",                                    // content hash
-                aMethod, m_Params.bucket, aName, aQuery, m_Params.host, aHash, aDateTime, aHash);
+
+            std::string_view sMethod;
+            switch (aMethod) {
+            case Curl::Client::Method::GET: sMethod = "GET"; break;
+            case Curl::Client::Method::PUT: sMethod = "PUT"; break;
+            case Curl::Client::Method::DELETE: sMethod = "DELETE"; break;
+            default: throw std::invalid_argument("unknown method");
+            }
+
+            // sign 'host' and all amz headers. in order.
+            std::string sHeaders       = fmt::format("host:{}\n", m_Params.host);
+            std::string sSignedHeaders = "host";
+
+            for (const auto& [sName, sValue] : aHeaders) {
+                if (String::starts_with(sName, "x-amz-")) {
+                    sHeaders += fmt::format("{}:{}\n", sName, sValue);
+                    sSignedHeaders += fmt::format(";{}", sName);
+                }
+            }
+
+            const std::string sCR = fmt::format(
+                "{}\n"     // HTTP method
+                "/{}/{}\n" // URI
+                "{}\n"     // query
+                "{}\n"     // headers
+                "{}\n"     // signed headers
+                "{}",      // content hash
+                sMethod, m_Params.bucket, aName, aQuery, sHeaders, sSignedHeaders, aHash);
 
             const std::string sSTS = fmt::format(
                 "AWS4-HMAC-SHA256\n"
@@ -69,9 +88,9 @@ namespace S3 {
             std::string sHeader = fmt::format(
                 "AWS4-HMAC-SHA256 "
                 "Credential={}/{}/{}/s3/aws4_request,"
-                "SignedHeaders=host;x-amz-content-sha256;x-amz-date,"
+                "SignedHeaders={},"
                 "Signature={}",
-                m_Params.access_key, sDate, m_Params.region, sSignature);
+                m_Params.access_key, sDate, m_Params.region, sSignedHeaders, sSignature);
 
             return sHeader;
         }
@@ -84,25 +103,19 @@ namespace S3 {
             const time_t      sNow         = ::time(nullptr);
             const std::string sDateTime    = m_Zone.format(sNow, Time::ISO8601_TZ);
             const std::string sContentHash = SSLxx::DigestStr(EVP_sha256(), aContent);
-            std::string_view  sMethod;
 
             Curl::Client::Request sRequest;
-
-            switch (aMethod) {
-            case Curl::Client::Method::GET: sMethod = "GET"; break;
-            case Curl::Client::Method::PUT: sMethod = "PUT"; break;
-            case Curl::Client::Method::DELETE: sMethod = "DELETE"; break;
-            default: throw std::invalid_argument("unknown method");
-            }
 
             sRequest.method = aMethod;
             sRequest.url    = fmt::format("http://{}/{}/{}?{}", m_Params.host, m_Params.bucket, aName, aQuery);
             sRequest.body   = aContent;
             //BOOST_TEST_MESSAGE("url: " << sRequest.url);
 
-            sRequest.headers["Authorization"]        = authorization(sMethod, aName, aQuery, sContentHash, sDateTime);
             sRequest.headers["x-amz-content-sha256"] = sContentHash;
             sRequest.headers["x-amz-date"]           = sDateTime;
+            if (aMethod == Curl::Client::Method::PUT)
+                sRequest.headers["x-amz-meta-sha256"] = sContentHash;
+            sRequest.headers["Authorization"] = authorization(aMethod, sRequest.headers, aName, aQuery, sContentHash, sDateTime);
 
             return sRequest;
         }
@@ -148,6 +161,10 @@ namespace S3 {
             auto sResult = m_Client(make(Curl::Client::Method::GET, aName));
             if (sResult.status != 200)
                 reportError(sResult);
+            if (auto sIt = sResult.headers.find("x-amz-meta-sha256"); sIt != sResult.headers.end()) {
+                if (SSLxx::DigestStr(EVP_sha256(), sResult.body) != sIt->second)
+                    throw std::runtime_error("Checksum mismatch");
+            }
             return sResult.body;
         }
 
