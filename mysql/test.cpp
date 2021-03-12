@@ -75,7 +75,8 @@ BOOST_AUTO_TEST_CASE(updateable)
     {
         using Container = std::map<std::string, std::string>;
         static void parse(Container& aDest, const MySQL::Row& aRow) { aDest[aRow[0].as_string()] = aRow[1].as_string(); }
-        static std::string query() { return "select dept_no, dept_name from departments"; }
+        static std::string query(time_t aTimestamp) { return "select dept_no, dept_name from departments"; }
+        static void merge(Container& aSrc, Container& aDst) { std::swap(aSrc, aDst); }
     };
 
     MySQL::Connection c(cfg);
