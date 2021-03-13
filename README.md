@@ -17,6 +17,7 @@ some information about stuff
 - s3 - curl based client to minio
 - sentry - sentry logs from c++, supports __cxa_throw.
 - ssl - openssl wrappers
+- sqlite - tiny sqlite wrapper
 - threads - thread group, work queue, pipeline.
 
 ### scripts
