@@ -1,18 +1,9 @@
 #pragma once
 #include <optional>
 
-#include "cbor-internals.hpp"
+#include "cbor-basic.hpp"
 
 namespace cbor {
-
-    template <class T>
-    void write(ostream& out, const std::optional<T>& t)
-    {
-        if (t.has_value())
-            write(out, t.value());
-        else
-            write_special(out, CBOR_NULL);
-    }
 
     template <class T>
     void read(istream& s, std::optional<T>& t)
@@ -25,5 +16,14 @@ namespace cbor {
         s.unget();
         t.emplace();
         read(s, t.value());
+    }
+
+    template <class T>
+    void write(ostream& out, const std::optional<T>& t)
+    {
+        if (t.has_value())
+            write(out, t.value());
+        else
+            write_special(out, CBOR_NULL);
     }
 } // namespace cbor

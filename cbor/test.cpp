@@ -1,17 +1,11 @@
 #define BOOST_TEST_MODULE Suites
 #include <boost/test/unit_test.hpp>
 
-#include <container/Stream.hpp>
-#include <format/Hex.hpp>
-
-#include "cbor-custom.hpp"
-#include "cbor-proxy.hpp"
-#include "cbor-tuple.hpp"
-#include "cbor-optional.hpp"
-#include "decoder.hpp"
-#include "encoder.hpp"
+#include "cbor.hpp"
 #include "tutorial.hpp"
 
+#include <container/Stream.hpp>
+#include <format/Hex.hpp>
 
 BOOST_AUTO_TEST_SUITE(Cbor)
 BOOST_AUTO_TEST_CASE(list)
@@ -143,6 +137,7 @@ BOOST_AUTO_TEST_CASE(substring)
 BOOST_AUTO_TEST_CASE(optional)
 {
     std::optional<std::string> sVal;
+
     cbor::omemstream out;
     cbor::write(out, std::string("test"));
     cbor::write(out, sVal);

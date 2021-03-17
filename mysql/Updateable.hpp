@@ -3,8 +3,7 @@
 #include <mutex>
 #include <optional>
 
-#include <cbor/encoder.hpp>
-#include <cbor/decoder.hpp>
+#include <cbor/cbor.hpp>
 #include <file/Interface.hpp>
 
 #include <Client.hpp>
@@ -28,24 +27,13 @@ namespace MySQL {
         void dump(File::IWriter* aWriter) override
         {
             Lock lk(m_Mutex);
-            cbor::write_type_value(*aWriter, cbor::CBOR_MAP, m_Data.size());
-            for (auto& x : m_Data) {
-                cbor::write(*aWriter, x.first);
-                cbor::write(*aWriter, x.second);
-            }
+            cbor::write(*aWriter, m_Data);
         }
 
         void restore(File::IExactReader* aReader) override
         {
             typename Policy::Container sData;
-            size_t sSize = cbor::get_uint(*aReader, cbor::ensure_type(*aReader, cbor::CBOR_MAP));
-            for (size_t i = 0; i < sSize; i++) {
-                Key   key;
-                Value value;
-                cbor::read(*aReader, key);
-                cbor::read(*aReader, value);
-                sData.emplace(std::move(key), std::move(value));
-            }
+            cbor::read(*aReader, sData);
             Lock lk(m_Mutex);
             std::swap(m_Data, sData);
             lk.unlock();

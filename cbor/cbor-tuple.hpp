@@ -1,10 +1,9 @@
 #pragma once
 #include <tuple>
 
-#include <mpl/Mpl.hpp>
+#include "cbor-basic.hpp"
 
-#include "decoder.hpp"
-#include "encoder.hpp"
+#include <mpl/Mpl.hpp>
 
 namespace cbor {
     template <typename>
@@ -14,18 +13,6 @@ namespace cbor {
     template <typename... T>
     struct is_tuple<std::tuple<T...>> : std::true_type
     {};
-
-    template <class T>
-    typename std::enable_if<is_tuple<T>::value, void>::type
-    write(ostream& out, const T&& t)
-    {
-        write_type_value(out, CBOR_LIST, std::tuple_size<T>::value);
-        Mpl::for_each_element(
-            [&out](const auto& x) {
-                write(out, x);
-            },
-            t);
-    }
 
     template <class T>
     typename std::enable_if<is_tuple<T>::value, void>::type
@@ -42,16 +29,16 @@ namespace cbor {
             t);
     }
 
-    template <class... T>
-    typename std::enable_if<(sizeof...(T) > 1), void>::type
-    write(ostream& out, const T&&... t)
+    template <class T>
+    typename std::enable_if<is_tuple<T>::value, void>::type
+    write(ostream& out, const T& t)
     {
-        write_type_value(out, CBOR_LIST, sizeof...(t));
-        Mpl::for_each_argument(
+        write_type_value(out, CBOR_LIST, std::tuple_size<T>::value);
+        Mpl::for_each_element(
             [&out](const auto& x) {
                 write(out, x);
             },
-            t...);
+            t);
     }
 
     template <class... T>
@@ -65,6 +52,18 @@ namespace cbor {
         Mpl::for_each_argument(
             [&in](auto& x) {
                 read(in, x);
+            },
+            t...);
+    }
+
+    template <class... T>
+    typename std::enable_if<(sizeof...(T) > 1), void>::type
+    write(ostream& out, const T&... t)
+    {
+        write_type_value(out, CBOR_LIST, sizeof...(t));
+        Mpl::for_each_argument(
+            [&out](const auto& x) {
+                write(out, x);
             },
             t...);
     }

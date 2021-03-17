@@ -44,7 +44,7 @@ namespace Container {
             read(&aData, sizeof(aData));
         }
 
-        void unget()
+        void unget() override
         {
             if (m_Offset == 0)
                 throw EndOfBuffer();
