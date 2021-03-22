@@ -3,10 +3,10 @@
 #include <mutex>
 #include <optional>
 
+#include "Client.hpp"
+
 #include <cbor/cbor.hpp>
 #include <file/Interface.hpp>
-
-#include <Client.hpp>
 
 namespace MySQL {
     template <class Policy>
@@ -16,7 +16,7 @@ namespace MySQL {
         mutable std::mutex m_Mutex;
 
         typename Policy::Container m_Data;
-        time_t m_Timestamp = 0;
+        typename Policy::Timestamp m_Timestamp = 0;
 
         using Key   = typename Policy::Container::key_type;
         using Value = typename Policy::Container::mapped_type;
@@ -41,13 +41,14 @@ namespace MySQL {
 
         void update(MySQL::Connection& aConnection)
         {
-            const time_t sTimestamp = ::time(nullptr);
+            Lock       lk(m_Mutex);
+            const auto sTimestamp = Policy::now(m_Data); // `timestamp` can be derived from cached data
+            lk.unlock();
             typename Policy::Container sData;
             aConnection.Query(Policy::query(m_Timestamp));
             aConnection.Use([&sData](const MySQL::Row& aRow) { Policy::parse(sData, aRow); });
-            Lock lk(m_Mutex);
+            lk.lock();
             Policy::merge(sData, m_Data);
-            lk.unlock();
             m_Timestamp = sTimestamp;
         }
         std::optional<Value> find(const Key& k) const

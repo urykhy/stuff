@@ -4,7 +4,6 @@
 #include <curl/Curl.hpp>
 #include <networking/Resolve.hpp>
 #include <threads/WaitGroup.hpp>
-#include <profile/Profile.hpp>
 
 #include "Router.hpp"
 

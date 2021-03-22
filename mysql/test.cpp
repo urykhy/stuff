@@ -72,8 +72,11 @@ BOOST_AUTO_TEST_CASE(updateable)
     struct Departments
     {
         using Container = std::map<std::string, std::string>;
+        using Timestamp = time_t;
+
         static void        parse(Container& aDest, const MySQL::Row& aRow) { aDest[aRow[0].as_string()] = aRow[1].as_string(); }
-        static std::string query(time_t aTimestamp) { return "select dept_no, dept_name from departments"; }
+        static Timestamp   now(Container& aInfo) { return 0; }
+        static std::string query(Timestamp aTimestamp) { return "select dept_no, dept_name from departments"; }
         static void        merge(Container& aSrc, Container& aDst) { std::swap(aSrc, aDst); }
     };
 
@@ -256,7 +259,7 @@ BOOST_AUTO_TEST_CASE(mock)
     MySQL::Mock::SqlSet sExpectedSQL{
         {"BEGIN", {}},
         {"SELECT id, task, worker, cookie FROM task_queue WHERE status = 'new' OR (status = 'started' AND updated < DATE_SUB(NOW(), INTERVAL 1 HOUR)) ORDER BY id ASC LIMIT 1 FOR UPDATE",
-             {{"12", "mock task", "", "existing cookie"}}},
+         {{"12", "mock task", "", "existing cookie"}}},
         {"UPDATE task_queue SET status = 'started', worker = 'test' WHERE id = 12", {}},
         {"COMMIT", {}},
         {"UPDATE task_queue SET cookie = 'updated cookie' WHERE id = 12", {}},
