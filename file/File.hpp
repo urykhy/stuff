@@ -91,9 +91,9 @@ namespace File {
     }
 
     template <class T>
-    inline void write(const std::string& aName, T&& aHandler)
+    inline void write(const std::string& aName, T&& aHandler, int aFlags = 0)
     {
-        FileWriter sFile(aName);
+        FileWriter sFile(aName, aFlags);
         auto       sType = getFilterType(aName);
 
         if (sType == PLAIN) {

@@ -1,3 +1,5 @@
+#pragma once
+
 #include <civil_time.h>
 #include <time_zone.h>
 

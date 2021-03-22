@@ -24,7 +24,7 @@ namespace File {
         explicit FileWriter(int aFD)
         : m_FD(aFD)
         {}
-        FileWriter(const std::string& aName, int aFlags = 0) // O_APPEND | O_TRUNC
+        FileWriter(const std::string& aName, int aFlags = 0) // O_APPEND | O_TRUNC; O_EXCL
         {
             m_FD = ::open(aName.c_str(), O_WRONLY | O_CREAT | aFlags, 0644);
             if (m_FD == -1)

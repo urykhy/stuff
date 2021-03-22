@@ -6,120 +6,74 @@
 #include <boost/algorithm/string/predicate.hpp>
 
 #define FILE_NO_ARCHIVE
+#include "Client.hpp"
+
 #include <file/Dir.hpp>
 #include <file/File.hpp>
-#include <threads/Group.hpp>
-#include <time/Time.hpp>
+#include <threads/DiskQueue.hpp>
 #include <unsorted/Log4cxx.hpp>
 #include <unsorted/Raii.hpp>
 
-#include "Client.hpp"
-
 namespace MySQL::Upload {
-    class Worker
+
+    using List = std::list<std::string>;
+
+    class Consumer
     {
-        const std::string     m_BaseFolder;
-        const MySQL::Config   m_Config;
-        volatile bool         m_Stop = false;
-        std::atomic<uint32_t> m_Size{0};
-        enum
-        {
-            DELAY_ON_ERROR = 10
-        };
+        Threads::DiskQueue::Consumer m_Consumer;
+        const std::string            m_LogTable;
+        const MySQL::Config          m_Config;
 
-        using FileList = std::vector<std::string>;
-
-        FileList update()
+        void upload(const std::string& sName)
         {
-            FileList sResult = File::listFiles(m_BaseFolder, ".sql");
-            std::sort(sResult.begin(), sResult.end());
-            return sResult;
-        }
-
-        void upload(const std::string& sFilename)
-        {
-            INFO("start uploading " << sFilename);
+            INFO("start uploading " << sName);
+            bool              sAlready  = false;
+            const std::string sFileName = File::getFilename(sName);
             MySQL::Connection sClient(m_Config);
+
             sClient.Query("BEGIN");
-            File::by_string(sFilename, [&sClient](auto sView) {
+            sClient.Query("SELECT 1 FROM " + m_LogTable + " WHERE name = '" + sFileName + "'");
+            sClient.Use([&sAlready](MySQL::Row&&) { sAlready = true; });
+            if (sAlready) {
+                INFO("already uploaded");
+                return;
+            }
+            sClient.Query("INSERT INTO " + m_LogTable + "(name) VALUES('" + sFileName + "')");
+            File::by_string(sName, [&sClient](auto sView) {
                 sClient.Query(std::string(sView));
             });
-            std::filesystem::remove(sFilename);
             sClient.Query("COMMIT");
             INFO("success");
         }
 
-        void worker()
-        {
-            time_t sLastError = 0;
-            while (!m_Stop) {
-                if (sLastError + DELAY_ON_ERROR > time(NULL)) {
-                    Threads::sleep(0.5);
-                    continue;
-                }
-                const auto sFiles = update();
-                if (sFiles.empty()) {
-                    Threads::sleep(0.5);
-                    continue;
-                }
-                m_Size = sFiles.size();
-                for (const auto& x : sFiles) {
-                    try {
-                        upload(x);
-                        m_Size--;
-                    } catch (const std::exception& e) {
-                        WARN("failed: " << e.what());
-                        sLastError = time(NULL);
-                    }
-                }
-            }
-        }
-
     public:
-        Worker(const std::string aBaseFolder, const Config& aConfig)
-        : m_BaseFolder(aBaseFolder)
+        Consumer(const std::string& aBase, const std::string& aLogTable, const Config& aConfig)
+        : m_Consumer({.base = aBase, .ext = ".upload.sql"}, [this](const std::string& aName) { upload(aName); })
+        , m_LogTable(aLogTable)
         , m_Config(aConfig)
         {}
 
-        void start(Threads::Group& aGroup)
-        {
-            aGroup.start([this]() { worker(); });
-            aGroup.at_stop([this]() { m_Stop = true; });
-        }
-
-        uint32_t size() const { return m_Size; }
+        void     start(Threads::Group& aGroup) { m_Consumer.start(aGroup); }
+        uint32_t size() const { return m_Consumer.size(); }
     };
 
-    class Queue
+    class Producer
     {
-        const std::string m_BaseFolder;
+        Threads::DiskQueue::Producer m_Producer;
 
     public:
-        Queue(const std::string aBaseFolder)
-        : m_BaseFolder(aBaseFolder)
+        Producer(const std::string aBase)
+        : m_Producer({.base = aBase, .ext = "upload.sql"})
         {}
 
-        using List = std::list<std::string>;
-        void push(const List& aData)
+        void push(const std::string& aName, const List& aData)
         {
-            Time::Zone        t(cctz::utc_time_zone());
-            const std::string sFileName = t.format(::time(NULL), Time::ISO);
-            const std::string sTmpName  = m_BaseFolder + "/" + sFileName + ".tmp";
-            const std::string sName     = m_BaseFolder + "/" + sFileName + ".sql";
-
-            Util::Raii sGuard([&sTmpName]() {
-                std::error_code ec; // avoid throw
-                std::filesystem::remove(sTmpName, ec);
-            });
-            File::write(sTmpName, [&aData](File::IWriter* aWriter) {
+            m_Producer.push(aName, [aData](auto* aFile) {
                 for (auto& x : aData) {
-                    aWriter->write(x.c_str(), x.size());
-                    aWriter->write("\n", 1);
+                    aFile->write(x.c_str(), x.size());
+                    aFile->write("\n", 1);
                 }
             });
-            std::filesystem::rename(sTmpName, sName);
-            sGuard.dismiss();
-            INFO("queued file " << sName);
         }
     };
 } // namespace MySQL::Upload

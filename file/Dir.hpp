@@ -59,4 +59,28 @@ namespace File {
 
         return sResult;
     }
+
+    class DirSync
+    {
+        int m_FD = -1;
+    public:
+        DirSync(const std::string& aName)
+        {
+            m_FD = ::open(aName.c_str(), O_RDONLY | O_DIRECTORY);
+            if (m_FD == -1)
+                throw Exception::ErrnoError("DirSync: fail to open: " + aName);
+        }
+
+        void operator()()
+        {
+            if (-1 == fsync(m_FD))
+                throw Exception::ErrnoError("DirSync: fail to fsync");
+        }
+
+        ~DirSync()
+        {
+            close(m_FD);
+        }
+    };
+
 } // namespace File
