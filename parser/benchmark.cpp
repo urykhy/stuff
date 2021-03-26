@@ -4,9 +4,7 @@
 
 #include "Json.hpp"
 
-#include <cbor/cbor-custom.hpp>
-#include <cbor/decoder.hpp>
-#include <cbor/encoder.hpp>
+#include <cbor/cbor.hpp>
 
 struct Tmp
 {

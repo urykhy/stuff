@@ -6,6 +6,7 @@
 
 #include <boost/algorithm/string/predicate.hpp>
 
+#include <exception/Error.hpp>
 #include <unsorted/Raii.hpp>
 
 namespace File {
@@ -63,6 +64,7 @@ namespace File {
     class DirSync
     {
         int m_FD = -1;
+
     public:
         DirSync(const std::string& aName)
         {

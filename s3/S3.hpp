@@ -95,14 +95,17 @@ namespace S3 {
             return sHeader;
         }
 
+        using ContentWithHash = std::pair<std::string_view, std::string_view>;
+
         Curl::Client::Request make(Curl::Client::Method aMethod,
                                    std::string_view     aName,
-                                   std::string_view     aContent = {},
-                                   std::string_view     aQuery   = {}) const
+                                   ContentWithHash      aContentWithHash = {},
+                                   std::string_view     aQuery           = {}) const
         {
-            const time_t      sNow         = ::time(nullptr);
-            const std::string sDateTime    = m_Zone.format(sNow, Time::ISO8601_TZ);
-            const std::string sContentHash = SSLxx::DigestStr(EVP_sha256(), aContent);
+            const auto [aContent, aContentHash] = aContentWithHash;
+            const time_t      sNow              = ::time(nullptr);
+            const std::string sDateTime         = m_Zone.format(sNow, Time::ISO8601_TZ);
+            const std::string sContentHash(aContentHash.empty() ? SSLxx::DigestStr(EVP_sha256(), aContent) : aContentHash);
 
             Curl::Client::Request sRequest;
 
@@ -149,9 +152,9 @@ namespace S3 {
 
         using Error = Exception::HttpError;
 
-        void PUT(std::string_view aName, std::string_view aContent)
+        void PUT(std::string_view aName, std::string_view aContent, std::string_view aSha256 = {})
         {
-            auto sResult = m_Client(make(Curl::Client::Method::PUT, aName, aContent));
+            auto sResult = m_Client(make(Curl::Client::Method::PUT, aName, {aContent, aSha256}));
             if (sResult.status != 200)
                 reportError(sResult);
         }
@@ -166,6 +169,30 @@ namespace S3 {
                     throw std::runtime_error("Checksum mismatch");
             }
             return sResult.body;
+        }
+
+        struct HeadResult
+        {
+            int         status = 0;
+            size_t      size   = 0;
+            time_t      mtime  = 0;
+            std::string sha256;
+        };
+
+        HeadResult HEAD(std::string_view aName)
+        {
+            HeadResult sHead;
+            auto       sResult = m_Client(make(Curl::Client::Method::GET, aName));
+            sHead.status       = sResult.status;
+            if (sHead.status != 200)
+                return sHead;
+            if (auto sIt = sResult.headers.find("Content-Length"); sIt != sResult.headers.end())
+                sHead.size = Parser::Atoi<size_t>(sIt->second);
+            if (auto sIt = sResult.headers.find("Last-Modified"); sIt != sResult.headers.end())
+                sHead.mtime = m_Zone.parse(sIt->second, Time::RFC1123);
+            if (auto sIt = sResult.headers.find("x-amz-meta-sha256"); sIt != sResult.headers.end())
+                sHead.sha256 = sIt->second;
+            return sHead;
         }
 
         void DELETE(std::string_view aName)
