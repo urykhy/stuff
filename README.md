@@ -13,7 +13,7 @@ some information about stuff
 - mysql - mysql client, task queue, message queue.
 - prometheus - small metrics library
 - protobuf - simple protobuf parser with polymorphic allocator support
-- rpc - games with swagger
+- swagger - codegeneration from openapi
 - s3 - curl based client to minio
 - sentry - sentry logs from c++, supports __cxa_throw.
 - ssl - openssl wrappers
