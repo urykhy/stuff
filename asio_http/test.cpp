@@ -27,9 +27,9 @@ BOOST_AUTO_TEST_CASE(simple)
             BOOST_TEST_MESSAGE(x.name() << " = " << x.value());
 
         if (sSerial == 1)
-            BOOST_CHECK_EQUAL(aRequest.at("User-Agent"), "Curl/Client");
+            BOOST_CHECK_EQUAL(aRequest["User-Agent"], "Curl++");
         if (sSerial == 2)
-            BOOST_CHECK_EQUAL(aRequest.at("User-Agent"), "Beast/cxx");
+            BOOST_CHECK_EQUAL(aRequest["User-Agent"], "Beast/cxx");
 
         aResponse.result(http::status::ok);
         aResponse.set(http::field::content_type, "text/html");

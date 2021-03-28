@@ -4,8 +4,8 @@
 #include <asio_http/Client.hpp>
 #include <asio_http/Router.hpp>
 #include <asio_http/Server.hpp>
-
 #include <common.v1.hpp>
+#include <format/Hex.hpp>
 #include <keyValue.v1.hpp>
 
 struct Common : api::common_1_0
@@ -100,10 +100,10 @@ struct KeyValue : api::keyValue_1_0
     }
 
     std::pair<boost::beast::http::status, get_kx_multi_response>
-    get_kx_multi_i(asio_http::asio::io_service& aService,
-        const get_kx_multi_parameters& aRequest,
-        const get_kx_multi_body& aBody,
-        asio_http::asio::yield_context yield)
+    get_kx_multi_i(asio_http::asio::io_service&   aService,
+                   const get_kx_multi_parameters& aRequest,
+                   const get_kx_multi_body&       aBody,
+                   asio_http::asio::yield_context yield)
         override
     {
         return {boost::beast::http::status::ok, {}};
@@ -111,20 +111,20 @@ struct KeyValue : api::keyValue_1_0
 
     std::pair<boost::beast::http::status, put_kx_multi_response>
     put_kx_multi_i(boost::asio::io_service&,
-        const put_kx_multi_parameters&,
-        const put_kx_multi_body&,
-        boost::asio::yield_context)
-    override
+                   const put_kx_multi_parameters&,
+                   const put_kx_multi_body&,
+                   boost::asio::yield_context)
+        override
     {
         return {boost::beast::http::status::ok, {}};
     }
 
     std::pair<boost::beast::http::status, delete_kx_multi_response>
     delete_kx_multi_i(boost::asio::io_service&,
-        const delete_kx_multi_parameters&,
-        const delete_kx_multi_body&,
-        boost::asio::yield_context)
-    override
+                      const delete_kx_multi_parameters&,
+                      const delete_kx_multi_body&,
+                      boost::asio::yield_context)
+        override
     {
         return {boost::beast::http::status::ok, {}};
     }
@@ -182,5 +182,18 @@ BOOST_AUTO_TEST_CASE(simple)
     sRequest  = {.method = asio_http::http::verb::delete_, .url = "http://127.0.0.1:2081/api/v1/kv/123"};
     sResponse = asio_http::async(sAsio, std::move(sRequest)).get();
     BOOST_CHECK_EQUAL(sResponse.result(), asio_http::http::status::not_found);
+
+    // call with cbor:
+    {
+        asio_http::ClientRequest sRequest{.method  = asio_http::http::verb::get,
+                                          .url     = "http://127.0.0.1:2081/api/v1/enum",
+                                          .headers = {{asio_http::http::field::host, "127.0.0.1"}, {asio_http::http::field::accept, "application/cbor"}}};
+        auto                     sResponse = asio_http::async(sAsio, std::move(sRequest)).get();
+        BOOST_CHECK_EQUAL(sResponse.result(), asio_http::http::status::ok);
+        std::vector<std::string> sResult;
+        cbor::from_string(sResponse.body(), sResult);
+        const std::vector<std::string> sExpected{{"one"}, {"two"}};
+        BOOST_CHECK_EQUAL_COLLECTIONS(sResult.begin(), sResult.end(), sExpected.begin(), sExpected.end());
+    }
 }
 BOOST_AUTO_TEST_SUITE_END()

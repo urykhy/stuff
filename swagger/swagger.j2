@@ -1,4 +1,5 @@
 #include <asio_http/Router.hpp>
+#include <cbor/cbor.hpp>
 #include <format/Json.hpp>
 #include <parser/Atoi.hpp>
 #include <parser/Json.hpp>
@@ -56,6 +57,11 @@ namespace api {
                                 Parser::Json::from_value(aJson, "{{ t.name }}", {{ t.name }});
                             {%- endfor %}
                             }
+                            void cbor_read(cbor::istream& in) {
+                            {%- for t in s.fields %}
+                                cbor::read(in, {{ t.name }});
+                            {%- endfor %}
+                            }
                             };
                         {%- endif %}
                     {%- else %}
@@ -70,18 +76,29 @@ namespace api {
             {% endif %}
             void __parse(const asio_http::Request& aRequest) {
                 {%- if json > 0 %}
-                    const auto sJson = Parser::Json::parse(aRequest.body());
                     {%- for s in schema | swagger_decode() %}
                         {%- if loop.last %}
-                            {%- if 'fields' in s %}
-                                {%- for t in s.fields %}
-                                    Parser::Json::from_value(sJson, "{{ t.name }}", {{ t.name }});
-                                {%- endfor %}
-                            {%- else %}
-                                Parser::Json::from_value(sJson, {{ s.name }});
+                            if (aRequest["Content-Type"] == "application/cbor") {
+                                auto sIn = cbor::imemstream(aRequest.body());
+                                {%- if 'fields' in s %}
+                                    {%- for t in s.fields %}
+                                        cbor::read(sIn, {{ t.name }});
+                                    {%- endfor %}
+                                {%- else %}
+                                    cbor::read(sIn, {{ s.name }});
+                                {%- endif %}
+                            } else {
+                                const auto sJson = Parser::Json::parse(aRequest.body());
+                                {%- if 'fields' in s %}
+                                    {%- for t in s.fields %}
+                                        Parser::Json::from_value(sJson, "{{ t.name }}", {{ t.name }});
+                                    {%- endfor %}
+                                {%- else %}
+                                    Parser::Json::from_value(sJson, {{ s.name }});
+                                {%- endif %}
                             {%- endif %}
-                        {%- endif %}
-                    {%- endfor %}
+                        {%- endfor %}
+                    }
                 {%- endif %}
                 {%- if binary > 0 %}
                     body = aRequest.body();
@@ -108,6 +125,11 @@ namespace api {
                                 {%- endfor %}
                                 return sValue;
                             }
+                            void cbor_write(cbor::ostream& out) const {
+                                {%- for t in s.fields %}
+                                    cbor::write(out, {{ t.name }});
+                                {%- endfor %}
+                            }
                         };
                         {%- endif %}
                     {%- else %}
@@ -121,23 +143,38 @@ namespace api {
                 std::string data;
             {% endif %}
 
-            void __result(asio_http::Response& aResponse) {
+            void __result(const asio_http::Request& aRequest, asio_http::Response& aResponse) {
             {%- if json > 0 %}
-                ::Json::Value sValue;
                 {%- set schema = doc['paths'][path][method].get('responses',{}).get('200',{}).get('content',{}).get('application/json').get('schema') %}
                 {%- for s in schema | swagger_decode() %}
                     {%- if loop.last %}
-                        {%- if 'fields' in s %}
-                            {%- for t in s.fields %}
-                                sValue["{{ t.name}}"] = Format::Json::to_value({{ t.name }});
-                            {%- endfor %}
-                        {%- else %}
-                            sValue = Format::Json::to_value({{ s.name }});
-                        {%- endif %}
+                        const auto sAccept = aRequest["Accept"];
+                        const auto sContentType = aRequest["Content-Type"];
+                        if (sAccept == "application/cbor" or (sAccept.empty() and sContentType == "application/cbor")) {
+                            cbor::omemstream sOut;
+                            {%- if 'fields' in s %}
+                                {%- for t in s.fields %}
+                                    cbor::write(sOut, {{ t.name }});
+                                {%- endfor %}
+                            {%- else %}
+                                cbor::write(sOut, {{ s.name }});
+                            {%- endif %}
+                            aResponse.set(boost::beast::http::field::content_type, "application/cbor");
+                            aResponse.body().append(sOut.str());
+                        } else {
+                            ::Json::Value sValue;
+                            {%- if 'fields' in s %}
+                                {%- for t in s.fields %}
+                                    sValue["{{ t.name}}"] = Format::Json::to_value({{ t.name }});
+                                {%- endfor %}
+                            {%- else %}
+                                sValue = Format::Json::to_value({{ s.name }});
+                            {%- endif %}
+                            aResponse.set(boost::beast::http::field::content_type, "application/json");
+                            aResponse.body().append(Format::Json::to_string(sValue));
+                        }
                     {%- endif %}
                 {%- endfor %}
-                aResponse.set(boost::beast::http::field::content_type, "application/json");
-                aResponse.body().append(Format::Json::to_string(sValue));
             {% endif %}
             {%- if binary > 0 %}
                 aResponse.set(boost::beast::http::field::content_type, "application/octet-stream");
@@ -164,7 +201,7 @@ namespace api {
             try {
                 auto [sStatus, sResponse] = {{name}}_i(aService, sParameters, sBody, yield);
                 aResponse.result(sStatus);
-                sResponse.__result(aResponse);
+                sResponse.__result(aRequest, aResponse);
             } catch (const std::exception& e) {
                 aResponse.result(http::status::internal_server_error);
                 return;
