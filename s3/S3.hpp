@@ -283,14 +283,9 @@ namespace S3 {
 
         static thread_local Time::Zone* m_ZonePtr;
 
-        static time_t parse(std::string& aTime)
+        static time_t parse(const std::string& aTime)
         {
-            auto sPos = aTime.find('.');
-            if (sPos != std::string::npos) {
-                aTime.erase(sPos);
-                aTime.push_back('Z');
-            }
-            return m_ZonePtr->parse(aTime, Time::ISO8601_LTZ);
+            return m_ZonePtr->parse(aTime);
         }
     };
 
