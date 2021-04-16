@@ -35,6 +35,7 @@ namespace cbor {
     void read(istream& s, std::list<T>& l)
     {
         size_t mt = get_uint(s, ensure_type(s, CBOR_LIST));
+        l.clear();
         for (size_t i = 0; i < mt; i++) {
             l.emplace_back();
             read(s, l.back());
@@ -56,6 +57,7 @@ namespace cbor {
     read(istream& s, std::vector<T>& data)
     {
         size_t len = get_uint(s, ensure_type(s, CBOR_BINARY));
+        data.clear();
         data.resize(len / sizeof(T));
         s.read(&data[0], len);
     }
@@ -72,6 +74,7 @@ namespace cbor {
     void read(istream& s, std::vector<T>& l)
     {
         size_t mt = get_uint(s, ensure_type(s, CBOR_LIST));
+        l.clear();
         l.reserve(mt);
         for (size_t i = 0; i < mt; i++) {
             l.emplace_back();
@@ -93,6 +96,7 @@ namespace cbor {
     void read(istream& s, std::map<K, V>& map)
     {
         size_t mt = get_uint(s, ensure_type(s, CBOR_MAP));
+        map.clear();
         for (size_t i = 0; i < mt; i++) {
             K key;
             V value;
@@ -117,6 +121,7 @@ namespace cbor {
     void read(istream& s, std::unordered_map<K, V>& map)
     {
         size_t mt = get_uint(s, ensure_type(s, CBOR_MAP));
+        map.clear();
         for (size_t i = 0; i < mt; i++) {
             K key;
             V value;

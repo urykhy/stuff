@@ -10,6 +10,7 @@ namespace cbor {
     void read(istream& s, boost::multi_index_container<T, I, A>& t)
     {
         size_t mt = get_uint(s, ensure_type(s, CBOR_LIST));
+        t.clear();
         for (size_t i = 0; i < mt; i++) {
             T tmp;
             read(s, tmp);
