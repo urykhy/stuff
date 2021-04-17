@@ -21,6 +21,10 @@ paths:
               schema:
                 type: string
                 format: binary
+          headers:
+            x-timestamp:
+              schema:
+                type: integer
         '404':
           description: Not Found
       operationId: get-kv-key

@@ -143,6 +143,11 @@ namespace api {
                 std::string data;
             {% endif %}
 
+            {%- set headers = doc['paths'][path][method].get('responses',{}).get('200',{}).get('headers',{}) %}
+            {%- for x in headers %}
+                {{ headers[x].schema.type | swagger_type }} {{ x | replace('-','_') }} = {};
+            {%- endfor %}
+
             void __result(const asio_http::Request& aRequest, asio_http::Response& aResponse) {
             {%- if json > 0 %}
                 {%- set schema = doc['paths'][path][method].get('responses',{}).get('200',{}).get('content',{}).get('application/json').get('schema') %}
@@ -179,7 +184,12 @@ namespace api {
             {%- if binary > 0 %}
                 aResponse.set(boost::beast::http::field::content_type, "application/octet-stream");
                 aResponse.body().append(data);
-            {% endif %}
+            {%- endif %}
+
+            {%- set headers = doc['paths'][path][method].get('responses',{}).get('200',{}).get('headers',{}) %}
+            {%- for x in headers %}
+                aResponse.set("{{ x }}", {{ x | replace('-','_') }});
+            {%- endfor %}
             }
         };
 

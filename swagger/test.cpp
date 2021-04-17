@@ -55,7 +55,7 @@ struct KeyValue : api::keyValue_1_0
         auto sIt = m_Store.find(aRequest.key.value());
         if (sIt == m_Store.end())
             return {boost::beast::http::status::not_found, {}};
-        return {boost::beast::http::status::ok, {sIt->second}};
+        return {boost::beast::http::status::ok, {sIt->second, 123}};
     }
 
     std::pair<boost::beast::http::status, put_kv_key_response>
@@ -174,6 +174,7 @@ BOOST_AUTO_TEST_CASE(simple)
     sResponse = asio_http::async(sAsio, std::move(sRequest)).get();
     BOOST_CHECK_EQUAL(sResponse.result(), asio_http::http::status::ok);
     BOOST_CHECK_EQUAL(sResponse.body(), "one more");
+    BOOST_CHECK_EQUAL(sResponse["x-timestamp"].to_string(), "123");
 
     sRequest  = {.method = asio_http::http::verb::delete_, .url = "http://127.0.0.1:2081/api/v1/kv/123"};
     sResponse = asio_http::async(sAsio, std::move(sRequest)).get();
