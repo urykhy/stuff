@@ -1,23 +1,25 @@
 #define BOOST_TEST_MODULE Suites
 #include <boost/test/unit_test.hpp>
-#include "Parser.hpp"
+
 #include "Atoi.hpp"
-#include "Hex.hpp"
-#include "Url.hpp"
-#include "format/Base64.hpp"
-#include <format/Hex.hpp>
-#include <format/Url.hpp>
-#include <format/ULeb128.hpp>
-#include "ULeb128.hpp"
 #include "Autoindex.hpp"
 #include "Base64.hpp"
-#include "Multipart.hpp"
+#include "Hex.hpp"
 #include "Json.hpp"
+#include "Multipart.hpp"
+#include "Parser.hpp"
+#include "ULeb128.hpp"
+#include "Url.hpp"
+#include "format/Base64.hpp"
+
+#include <format/Hex.hpp>
+#include <format/ULeb128.hpp>
+#include <format/Url.hpp>
 
 BOOST_AUTO_TEST_SUITE(parser)
 BOOST_AUTO_TEST_CASE(simple)
 {
-    std::string line="asd,zxc,123,";
+    std::string line = "asd,zxc,123,";
     {
         std::vector<std::string_view> result;
         BOOST_CHECK(Parser::simple(line, result));
@@ -29,7 +31,8 @@ BOOST_AUTO_TEST_CASE(quoted)
 {
     {
         std::list<std::string> result;
-        std::string line="asd,\"foo\",\"Super, \"\"luxurious\"\" truck\",";
+
+        std::string line = "asd,\"foo\",\"Super, \"\"luxurious\"\" truck\",";
         BOOST_CHECK(Parser::quoted(line, [&result](std::string& aStr) mutable {
             result.push_back(aStr);
         }));
@@ -40,7 +43,8 @@ BOOST_AUTO_TEST_CASE(quoted)
 
     {
         std::list<std::string> result;
-        std::string line="asd,\"foo\"";
+
+        std::string line = "asd,\"foo\"";
         BOOST_CHECK(Parser::quoted(line, [&result](std::string& aStr) mutable {
             result.push_back(aStr);
         }));
@@ -48,10 +52,11 @@ BOOST_AUTO_TEST_CASE(quoted)
 
     {
         std::list<std::string> result;
-        std::string line="asd,\"foo";
+
+        std::string line = "asd,\"foo";
         BOOST_CHECK(false == Parser::quoted(line, [&result](std::string& aStr) mutable {
-            result.push_back(aStr);
-        }));
+                        result.push_back(aStr);
+                    }));
     }
 }
 BOOST_AUTO_TEST_CASE(escape)
@@ -59,10 +64,12 @@ BOOST_AUTO_TEST_CASE(escape)
     {
         std::list<std::string> result;
 
-        std::string line=R"(asd,f\,oo,Super\, "luxurious" truck,)";
-        BOOST_CHECK(Parser::quoted(line, [&result](std::string& aStr) mutable {
-            result.push_back(aStr);
-        }, ',', '"', '\\'));
+        std::string line = R"(asd,f\,oo,Super\, "luxurious" truck,)";
+        BOOST_CHECK(Parser::quoted(
+            line, [&result](std::string& aStr) mutable {
+                result.push_back(aStr);
+            },
+            ',', '"', '\\'));
 
         std::list<std::string> expected = {"asd", "f,oo", "Super, \"luxurious\" truck", ""};
         BOOST_CHECK_EQUAL_COLLECTIONS(result.begin(), result.end(), expected.begin(), expected.end());
@@ -70,7 +77,7 @@ BOOST_AUTO_TEST_CASE(escape)
     {
         std::list<std::string> result;
 
-        std::string line=R"("a\\sd",f"oo,"Super, \"luxurious"" truck",)";
+        std::string line = R"("a\\sd",f"oo,"Super, \"luxurious"" truck",)";
         BOOST_CHECK(Parser::quoted(line, [&result](std::string& aStr) mutable {
             result.push_back(aStr);
         }));
@@ -80,17 +87,17 @@ BOOST_AUTO_TEST_CASE(escape)
     }
     {
         std::list<std::string> result;
-        std::string line=R"(asd,foo\)";
+        std::string            line = R"(asd,foo\)";
         BOOST_CHECK(false == Parser::quoted(line, [&result](std::string& aStr) mutable {
-            result.push_back(aStr);
-        }));
+                        result.push_back(aStr);
+                    }));
     }
     {
         std::list<std::string> result;
-        std::string line=R"(asd,\"foo,"""bar""")";
+        std::string            line = R"(asd,\"foo,"""bar""")";
         BOOST_CHECK(true == Parser::quoted(line, [&result](std::string& aStr) mutable {
-            result.push_back(aStr);
-        }));
+                        result.push_back(aStr);
+                    }));
         auto it = result.begin();
         BOOST_CHECK_EQUAL(*it++, "asd");
         BOOST_CHECK_EQUAL(*it++, "\"foo");
@@ -154,12 +161,23 @@ BOOST_AUTO_TEST_CASE(url)
     sParsed = Parser::url("http://localhost");
     BOOST_CHECK_EQUAL(sParsed.query, "/");
 }
+BOOST_AUTO_TEST_CASE(query)
+{
+    bool sCalled = false;
+    Parser::http_query("?q=random%20word", [&](auto name, auto value) {
+        BOOST_CHECK_EQUAL(name, "q");
+        BOOST_CHECK_EQUAL(value, "random word");
+        sCalled = true;
+    });
+    BOOST_CHECK_EQUAL(sCalled, true);
+}
 BOOST_AUTO_TEST_CASE(multipart)
 {
     // boundary is "--" + Content-Type/boundary
-    const std::string_view sBoundary = "--" "------------------------30476e420cacf245";
+    const std::string_view sBoundary = "--"
+                                       "------------------------30476e420cacf245";
     const std::string_view sData =
-R"(--------------------------30476e420cacf245
+        R"(--------------------------30476e420cacf245
 Content-Disposition: form-data; name="key1"
 
 value1
@@ -177,10 +195,9 @@ simple text
 --------------------------30476e420cacf245--)";
 
     unsigned sCounter = 0;
-    Parser::multipart(sData, sBoundary, [&sCounter](auto aMeta, std::string_view aData){
+    Parser::multipart(sData, sBoundary, [&sCounter](auto aMeta, std::string_view aData) {
         sCounter++;
-        switch (sCounter)
-        {
+        switch (sCounter) {
         case 1:
             BOOST_CHECK_EQUAL(aMeta.name, "key1");
             BOOST_CHECK_EQUAL(aData, "value1");
@@ -197,11 +214,11 @@ simple text
 }
 BOOST_AUTO_TEST_CASE(path_params)
 {
-    const std::string_view sPath = "/api/v1/kv/123?timestamp=456";
+    const std::string_view sPath    = "/api/v1/kv/123?timestamp=456";
     const std::string_view sPattern = "/api/v1/kv/{id}";
 
     size_t sCount = 0;
-    Parser::http_path_params(sPath, sPattern, [&sCount](auto aName, auto aValue){
+    Parser::http_path_params(sPath, sPattern, [&sCount](auto aName, auto aValue) {
         BOOST_CHECK_EQUAL(aName, "id");
         BOOST_CHECK_EQUAL(aValue, "123");
         sCount++;
@@ -210,7 +227,7 @@ BOOST_AUTO_TEST_CASE(path_params)
 }
 BOOST_AUTO_TEST_CASE(autoindex)
 {
-    const std::string sBody=R"(
+    const std::string        sBody    = R"(
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">
 <html>
  <head>
@@ -225,23 +242,25 @@ BOOST_AUTO_TEST_CASE(autoindex)
 <tr><td valign="top"><img src="/icons/folder.gif" alt="[DIR]"></td><td><a href="dygraf/">dygraf/</a></td><td align="right">2016-07-02 10:04  </td><td align="right">  - </td></tr>
     )";
     const Parser::StringList expected = {"calque/", "dygraf/"};
-    const auto result = Parser::Autoindex(sBody);
+    const auto               result   = Parser::Autoindex(sBody);
     BOOST_CHECK_EQUAL_COLLECTIONS(result.begin(), result.end(), expected.begin(), expected.end());
 }
 BOOST_AUTO_TEST_CASE(base64)
 {
-    const std::string sStr = Parser::from_hex("31ff");
+    const std::string sStr    = Parser::from_hex("31ff");
     const std::string sBase64 = Format::Base64(sStr);
     BOOST_CHECK_EQUAL("Mf8=", sBase64);
     BOOST_CHECK_EQUAL(Format::to_hex(sStr), Format::to_hex(Parser::Base64(sBase64)));
 }
 BOOST_AUTO_TEST_CASE(json)
 {
-    struct Tmp {
-        std::string base = {};
-        unsigned index = {};
+    struct Tmp
+    {
+        std::string base  = {};
+        unsigned    index = {};
 
-        void from_json(const ::Json::Value& aJson) {
+        void from_json(const ::Json::Value& aJson)
+        {
             Parser::Json::from_value(aJson, "base", base);
             Parser::Json::from_value(aJson, "index", index);
         }
@@ -251,11 +270,11 @@ BOOST_AUTO_TEST_CASE(json)
     };
     std::vector<Tmp> sTmp;
 
-    const std::string sStr = R"([{"base": "string1", "index": 123},{"base": "string2"}])";
-    auto sJson = Parser::Json::parse(sStr);
+    const std::string sStr  = R"([{"base": "string1", "index": 123},{"base": "string2"}])";
+    auto              sJson = Parser::Json::parse(sStr);
     Parser::Json::from_value(sJson, sTmp);
 
-    const std::vector<Tmp> sExpected = {{"string1",123}, {"string2", 0}};
+    const std::vector<Tmp> sExpected = {{"string1", 123}, {"string2", 0}};
     BOOST_CHECK(sTmp == sExpected);
 }
 BOOST_AUTO_TEST_SUITE_END()

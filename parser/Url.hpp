@@ -9,7 +9,7 @@
 #include "Parser.hpp"
 
 namespace Parser {
-    inline std::string url_decode(const std::string& aData)
+    inline std::string url_decode(std::string_view aData)
     {
         enum
         {
@@ -112,7 +112,7 @@ namespace Parser {
                 if (sEnd != std::string_view::npos) {
                     auto sKey   = aStr.substr(0, sEnd);
                     auto sValue = aStr.substr(sEnd + 1);
-                    aHandler(sKey, sValue);
+                    aHandler(sKey, url_decode(sValue));
                 } else
                     aHandler(aStr, std::string_view());
             },
@@ -149,7 +149,7 @@ namespace Parser {
             {
                 sName.remove_prefix(1);
                 sName.remove_suffix(1);
-                aHandler(sName, sValues[i]);
+                aHandler(sName, url_decode(sValues[i]));
             }
         }
     }

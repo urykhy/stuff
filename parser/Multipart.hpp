@@ -4,6 +4,8 @@
 
 #include "Parser.hpp"
 
+#include <string/String.hpp>
+
 namespace Parser {
     template <class T>
     void multipart(std::string_view aData, std::string_view aBoundary, T&& aHandler)
