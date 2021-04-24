@@ -145,12 +145,22 @@ namespace Parser {
         for (size_t i = 0; i < sNames.size(); i++)
         {
             auto sName = sNames[i];
-            if (!sName.empty() and sName.front() == '{' and sName.back() == '}')
-            {
-                sName.remove_prefix(1);
-                sName.remove_suffix(1);
-                aHandler(sName, url_decode(sValues[i]));
-            }
+            if (sName.empty())
+                continue;
+
+            auto sLeft = sName.find('{');
+            auto sRight = sName.find('}');
+            if (sLeft == std::string_view::npos or sRight == std::string_view::npos)
+                continue;
+
+            auto sValue = sValues[i];
+            sValue.remove_prefix(sLeft);
+            sValue.remove_suffix(sName.size() - sRight - 1);
+
+            sName.remove_prefix(sLeft + 1);
+            sName.remove_suffix(sName.size() + sLeft - sRight + 1);
+
+            aHandler(sName, url_decode(sValue));
         }
     }
 } // namespace Parser

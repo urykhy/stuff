@@ -11,6 +11,23 @@ from urllib.parse import urlparse
 script_path = str(pathlib.Path(__file__).parent.absolute())
 environment = Environment()
 
+def expand_ref(item):
+    if '$ref' in item:
+        c = None
+        for x in item['$ref'].split('/'):
+            if x == '#':
+                c = doc
+            else:
+                c = c[x]
+        return c
+    else:
+        return item
+
+
+def swagger_raise(message):
+    raise Exception('Jinja2 %s' % (message))
+environment.globals['swagger_raise'] = swagger_raise
+
 
 def swagger_prefix(p):
     xr = []
@@ -22,9 +39,28 @@ def swagger_prefix(p):
 environment.filters['swagger_prefix'] = swagger_prefix
 
 
+def swagger_expand_ref(p):
+    return expand_ref(p)
+environment.filters['swagger_expand_ref'] = swagger_expand_ref
+
+
+def swagger_expand_refs(p):
+    return list(map(lambda x: expand_ref(x), p))
+environment.filters['swagger_expand_refs'] = swagger_expand_refs
+
+
 def swagger_path(p):
     return urlparse(p).path
 environment.filters['swagger_path'] = swagger_path
+
+
+def swagger_enum(p):
+    e = p['schema']['enum']
+    xt = p['schema']['type']
+    if xt == "string":
+        return ','.join(list(map(lambda x: f'"{x}"', e)))
+    return ','.join(e)
+environment.filters['swagger_enum'] = swagger_enum
 
 
 def swagger_method(x):
@@ -34,6 +70,11 @@ def swagger_method(x):
 environment.filters['swagger_method'] = swagger_method
 
 
+def swagger_name(x):
+    return x['name'].lower().replace('-','_')
+environment.filters['swagger_name'] = swagger_name
+
+
 def swagger_type(x):
     if x == "string":
         return "std::string"
@@ -41,6 +82,8 @@ def swagger_type(x):
         return "double"
     if x == "integer":
         return "uint64_t"
+    if x == "boolean":
+        return "bool"
     if x.startswith('array<'):
         xt = re.compile('array<(.*)>').search(x).group(1)
         return f"std::vector<{swagger_type(xt)}>"
@@ -51,12 +94,16 @@ environment.filters['swagger_type'] = swagger_type
 
 def swagger_assign(x, name):
     xt = x['schema']['type']
+    if xt == "array":
+        xt = x['schema']['items']['type']
     if xt == 'string':
         return f"{name}"
     if xt == 'integer':
         return f"Parser::Atoi<uint64_t>({name})";
     if xt == 'number':
         return f"Parser::Atof<double>({name})";
+    if xt == "boolean":
+        return f"({name} == \"true\" or {name} == \"1\")";
     raise Exception("unexpected type: " + str(x))
 environment.filters['swagger_assign'] = swagger_assign
 
@@ -98,6 +145,8 @@ def collapse():
 
 def swagger_decode_step(x, name=''):
     global decodeStack
+
+    x = expand_ref(x)
 
     if x.get('type') == 'object':
         decodeStack.append(f'begin object {name}')

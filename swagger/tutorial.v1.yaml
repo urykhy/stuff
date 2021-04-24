@@ -8,12 +8,12 @@ info:
 servers:
   - url: 'http://localhost:3000/api/v1'
 paths:
-  /test:
+  /test_1/complex_body_response:
     get:
       summary: Test method
       tags:
         - Tutorial
-      operationId: get-test
+      operationId: get-complex-body
       requestBody:
         content:
           application/json:
@@ -39,8 +39,104 @@ paths:
       responses:
         '200':
           description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      idx:
+                        type: string
+              examples:
+                example-1:
+                  value:
+                    - - idx: string
+      description: test 1
+    parameters: []
+  '/test_2/parameters/{id}.json':
+    get:
+      summary: Your GET endpoint
+      tags:
+        - Tutorial
+      responses:
+        '200':
+          description: OK
+          content:
+            application/octet-stream:
+              schema:
+                type: object
+                properties: {}
+      operationId: get-parameters
+      parameters:
+        - schema:
+            type: integer
+          in: header
+          name: x-header-int
+        - schema:
+            type: string
+            default: two
+            enum:
+              - one
+              - two
+              - three
+          in: header
+          name: x-header-str-required-enum
+          required: true
+        - schema:
+            type: array
+            items:
+              type: string
+          in: query
+          name: idx-array-string
+          style: form
+          explode: false
+        - schema:
+            type: string
+          in: query
+          name: string-required
+          required: true
+        - $ref: '#/components/parameters/xRefHeader'
+      description: test 2
+    parameters:
+      - schema:
+          type: string
+        name: id
+        in: path
+        required: true
+  /test_3/response/ref:
+    get:
+      summary: Your GET endpoint
+      tags:
+        - Tutorial
+      responses:
+        '200':
+          $ref: '#/components/responses/xRefResponse'
+      operationId: get-ref-to-response
+      parameters: []
+      description: test 3
     parameters: []
 components:
   schemas: {}
+  parameters:
+    xRefHeader:
+      name: x-ref-header
+      in: header
+      required: false
+      schema:
+        type: string
+  responses:
+    xRefResponse:
+      description: Example response
+      content:
+        application/json:
+          schema:
+            type: array
+            items:
+              type: array
+              items:
+                type: number
 tags:
   - name: Tutorial

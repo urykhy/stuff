@@ -83,7 +83,8 @@ namespace cbor {
     }
 
     template <class T>
-    void write(ostream& out, const std::vector<T>& l)
+    typename std::enable_if<!std::is_trivial<T>::value, void>::type
+    write(ostream& out, const std::vector<T>& l)
     {
         write_type_value(out, CBOR_LIST, l.size());
         for (const auto& x : l) {

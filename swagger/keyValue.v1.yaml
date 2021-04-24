@@ -28,6 +28,11 @@ paths:
         '404':
           description: Not Found
       operationId: get-kv-key
+      parameters:
+        - schema:
+            type: integer
+          in: header
+          name: If-modified-since
     parameters:
       - schema:
           type: string

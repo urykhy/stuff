@@ -13,6 +13,7 @@ paths:
       parameters:
         - schema:
             type: string
+            default: default
           in: query
           name: client
           required: true
