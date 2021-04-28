@@ -10,11 +10,6 @@
 #include "Router.hpp"
 
 namespace asio_http {
-    namespace asio  = boost::asio;
-    namespace beast = boost::beast;
-    namespace http  = beast::http;
-    namespace net   = boost::asio;
-    using tcp       = boost::asio::ip::tcp;
 
     struct ClientRequest
     {

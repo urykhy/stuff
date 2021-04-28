@@ -10,8 +10,6 @@
 #include "Router.hpp"
 
 namespace asio_http {
-    namespace asio = boost::asio;
-    using tcp      = boost::asio::ip::tcp;
 
     inline void session(asio::io_service& aService, beast::tcp_stream& aStream, RouterPtr aRouter, asio::yield_context yield)
     {

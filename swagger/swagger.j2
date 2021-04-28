@@ -7,6 +7,7 @@
 #include <format/Json.hpp>
 #include <parser/Atoi.hpp>
 #include <parser/Json.hpp>
+#include <parser/Url.hpp>
 
 {% macro complex_schema(schema, mode) -%}
     {%- for s in schema | swagger_decode() %}

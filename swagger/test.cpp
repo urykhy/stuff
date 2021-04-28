@@ -1,13 +1,18 @@
 #define BOOST_TEST_MODULE Suites
 #include <boost/test/unit_test.hpp>
 
+#include "common.v1.hpp"
+#include "keyValue.v1.hpp"
+#include "tutorial.v1.hpp"
+
 #include <asio_http/Client.hpp>
 #include <asio_http/Router.hpp>
 #include <asio_http/Server.hpp>
-#include <common.v1.hpp>
 #include <format/Hex.hpp>
-#include <keyValue.v1.hpp>
-#include <tutorial.v1.hpp>
+#include <resource/Get.hpp>
+#include <resource/Server.hpp>
+
+DECLARE_RESOURCE(swagger_ui_tar)
 
 struct Common : api::common_1_0
 {
@@ -140,55 +145,58 @@ BOOST_AUTO_TEST_CASE(simple)
     Common sCommon;
     sCommon.configure(sRouter);
 
+    resource::Server sUI("/swagger/", resource::swagger_ui_tar());
+    sUI.configure(sRouter);
+
     KeyValue sKeyValue;
     sKeyValue.configure(sRouter);
 
     Threads::Asio sAsio;
-    asio_http::startServer(sAsio, 2081, sRouter);
+    asio_http::startServer(sAsio, 3000, sRouter); // using same port as in seagger schema
     Threads::Group sGroup;
     sAsio.start(sGroup);
 
-    asio_http::ClientRequest sRequest{.method = asio_http::http::verb::get, .url = "http://127.0.0.1:2081/api/v1/enum", .headers = {{asio_http::http::field::host, "127.0.0.1"}}};
+    asio_http::ClientRequest sRequest{.method = asio_http::http::verb::get, .url = "http://127.0.0.1:3000/api/v1/enum", .headers = {{asio_http::http::field::host, "127.0.0.1"}}};
     auto                     sResponse = asio_http::async(sAsio, std::move(sRequest)).get();
     BOOST_CHECK_EQUAL(sResponse.result(), asio_http::http::status::ok);
     BOOST_CHECK_EQUAL(sResponse.body(), "[\n\t\"one\",\n\t\"two\"\n]");
 
-    sRequest  = {.method = asio_http::http::verb::get, .url = "http://127.0.0.1:2081/api/v1/status", .headers = {{asio_http::http::field::host, "127.0.0.1"}}};
+    sRequest  = {.method = asio_http::http::verb::get, .url = "http://127.0.0.1:3000/api/v1/status", .headers = {{asio_http::http::field::host, "127.0.0.1"}}};
     sResponse = asio_http::async(sAsio, std::move(sRequest)).get();
     BOOST_CHECK_EQUAL(sResponse.result(), asio_http::http::status::ok);
     BOOST_CHECK_EQUAL(sResponse.body(), "{\n\t\"load\" : 1.5,\n\t\"status\" : \"ready\"\n}");
 
     // part 2. key value
-    sRequest  = {.method = asio_http::http::verb::get, .url = "http://127.0.0.1:2081/api/v1/kv/123"};
+    sRequest  = {.method = asio_http::http::verb::get, .url = "http://127.0.0.1:3000/api/v1/kv/123"};
     sResponse = asio_http::async(sAsio, std::move(sRequest)).get();
     BOOST_CHECK_EQUAL(sResponse.result(), asio_http::http::status::not_found);
 
-    sRequest  = {.method = asio_http::http::verb::put, .url = "http://127.0.0.1:2081/api/v1/kv/123", .body = "test"};
+    sRequest  = {.method = asio_http::http::verb::put, .url = "http://127.0.0.1:3000/api/v1/kv/123", .body = "test"};
     sResponse = asio_http::async(sAsio, std::move(sRequest)).get();
     BOOST_CHECK_EQUAL(sResponse.result(), asio_http::http::status::created);
 
-    sRequest  = {.method = asio_http::http::verb::put, .url = "http://127.0.0.1:2081/api/v1/kv/123", .body = "one more"};
+    sRequest  = {.method = asio_http::http::verb::put, .url = "http://127.0.0.1:3000/api/v1/kv/123", .body = "one more"};
     sResponse = asio_http::async(sAsio, std::move(sRequest)).get();
     BOOST_CHECK_EQUAL(sResponse.result(), asio_http::http::status::ok);
 
-    sRequest  = {.method = asio_http::http::verb::get, .url = "http://127.0.0.1:2081/api/v1/kv/123", .headers = {{asio_http::http::field::if_modified_since, "123"}}};
+    sRequest  = {.method = asio_http::http::verb::get, .url = "http://127.0.0.1:3000/api/v1/kv/123", .headers = {{asio_http::http::field::if_modified_since, "123"}}};
     sResponse = asio_http::async(sAsio, std::move(sRequest)).get();
     BOOST_CHECK_EQUAL(sResponse.result(), asio_http::http::status::ok);
     BOOST_CHECK_EQUAL(sResponse.body(), "one more");
     BOOST_CHECK_EQUAL(sResponse["x-timestamp"].to_string(), "123");
 
-    sRequest  = {.method = asio_http::http::verb::delete_, .url = "http://127.0.0.1:2081/api/v1/kv/123"};
+    sRequest  = {.method = asio_http::http::verb::delete_, .url = "http://127.0.0.1:3000/api/v1/kv/123"};
     sResponse = asio_http::async(sAsio, std::move(sRequest)).get();
     BOOST_CHECK_EQUAL(sResponse.result(), asio_http::http::status::ok);
 
-    sRequest  = {.method = asio_http::http::verb::delete_, .url = "http://127.0.0.1:2081/api/v1/kv/123"};
+    sRequest  = {.method = asio_http::http::verb::delete_, .url = "http://127.0.0.1:3000/api/v1/kv/123"};
     sResponse = asio_http::async(sAsio, std::move(sRequest)).get();
     BOOST_CHECK_EQUAL(sResponse.result(), asio_http::http::status::not_found);
 
     // call with cbor:
     {
         asio_http::ClientRequest sRequest{.method  = asio_http::http::verb::get,
-                                          .url     = "http://127.0.0.1:2081/api/v1/enum",
+                                          .url     = "http://127.0.0.1:3000/api/v1/enum",
                                           .headers = {{asio_http::http::field::host, "127.0.0.1"}, {asio_http::http::field::accept, "application/cbor"}}};
         auto                     sResponse = asio_http::async(sAsio, std::move(sRequest)).get();
         BOOST_CHECK_EQUAL(sResponse.result(), asio_http::http::status::ok);
@@ -197,5 +205,11 @@ BOOST_AUTO_TEST_CASE(simple)
         const std::vector<std::string> sExpected{{"one"}, {"two"}};
         BOOST_CHECK_EQUAL_COLLECTIONS(sResult.begin(), sResult.end(), sExpected.begin(), sExpected.end());
     }
+
+    // embedded swagger ui
+    sRequest  = {.method = asio_http::http::verb::get, .url = "http://127.0.0.1:3000/swagger/index.html"};
+    sResponse = asio_http::async(sAsio, std::move(sRequest)).get();
+    BOOST_CHECK_EQUAL(sResponse.result(), asio_http::http::status::ok);
+    BOOST_CHECK_EQUAL(sResponse.body().size(), 1425);
 }
 BOOST_AUTO_TEST_SUITE_END()

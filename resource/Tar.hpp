@@ -52,8 +52,8 @@ namespace resource
         std::map<std::string, std::string_view> m_Index;
 
     public:
-        using NotFound = std::runtime_error;
-        using BadInput = std::runtime_error;
+        using NotFound = std::invalid_argument;
+        using BadInput = std::invalid_argument;
 
         Tar(std::string_view aData)
         {

@@ -1,13 +1,17 @@
 #pragma once
 
+#include <boost/asio.hpp>
+#include <boost/asio/spawn.hpp>
 #include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>
 
 namespace asio_http
 {
-    namespace asio = boost::asio;
+    namespace asio  = boost::asio;
     namespace beast = boost::beast;
-    namespace http = beast::http;
+    namespace http  = beast::http;
+    namespace net   = boost::asio;
+    using tcp       = boost::asio::ip::tcp;
 
     using Request = http::request<http::string_body>;
     using Response = http::response<http::string_body>;

@@ -3,10 +3,10 @@
 #include <string_view>
 
 #define DECLARE_RESOURCE(name)                          \
-extern "C" const char _binary____ ## name ## _start;    \
-extern "C" const char _binary____ ## name ## _end;      \
+extern "C" const char _binary_ ## name ## _start;    \
+extern "C" const char _binary_ ## name ## _end;      \
 namespace resource {                                    \
     inline std::string_view name () {                   \
-        return std::string_view(&_binary____ ## name ## _start, &_binary____ ## name ## _end - &_binary____ ## name ## _start); \
+        return std::string_view(&_binary_ ## name ## _start, &_binary_ ## name ## _end - &_binary_ ## name ## _start); \
     }                                                   \
 }
