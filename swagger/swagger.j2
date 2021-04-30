@@ -12,13 +12,10 @@
 {% macro complex_schema(schema, mode) -%}
     {%- for s in schema | swagger_decode() %}
         {%- if 'fields' in s %}
-            {%- if not loop.last %}
-                struct {{ s.type }} {
-            {%- endif %}
-            {%- for t in s.fields | sort(attribute='name') %}
-                {{ t.type | swagger_type }} {{ t.name }} = {};
-            {%- endfor %}
-            {%- if not loop.last %}
+            struct {{ s.type }} {
+                {%- for t in s.fields | sort(attribute='name') %}
+                    {{ t.type | swagger_type }} {{ t.name }} = {};
+                {%- endfor %}
                 {%- if mode %}
                     ::Json::Value to_json() const {
                         ::Json::Value sValue(::Json::objectValue);
@@ -45,6 +42,8 @@
                     }
                 {%- endif %}
             };
+            {%- if loop.last %}
+                {{ s.type | swagger_type }} {{ s.name }};
             {%- endif %}
         {%- else %}
             {{ s.type | swagger_type }} {{ s.name }};
@@ -63,6 +62,7 @@ namespace api {
             {%- set name = doc['paths'][path][method]['operationId'] | lower | replace('-', '_') %}
 
         struct {{ name }}_parameters {
+            {# parameters #}
             {%- set p1 = doc['paths'][path].get('parameters', []) | swagger_expand_refs %}
             {%- set p2 = doc['paths'][path][method].get('parameters', []) | swagger_expand_refs %}
             {%- set params = p1 + p2 | sort(attribute='name') %}
@@ -77,6 +77,17 @@ namespace api {
                     std::optional<{{ param['schema']['type'] | swagger_type }}> {{ param | swagger_name }};
                 {%- endif %}
             {%- endfor %}
+
+            {# body #}
+            {%- set body = doc['paths'][path][method].get('requestBody',{}).get('content',{}) %}
+            {%- set binary = body.get('application/octet-stream',{}) | length %}
+            {%- set json = body.get('application/json',{}) | length %}
+            {%- if binary > 0 %}
+                std::string body;
+            {%- elif json > 0 %}
+                {%- set schema = body.get('application/json').get('schema') %}
+                {{ complex_schema(schema, false) }}
+            {% endif %}
 
             void __parse(const asio_http::Request& aRequest) {
                 auto sQuery = aRequest.target();
@@ -143,112 +154,64 @@ namespace api {
                     {%- endif %}
                         throw std::invalid_argument("required param `{{ param['name'] }}` not specified");
                 {%- endfor %}
-            }
-        };
-        struct {{ name }}_body {
-            {%- set json = doc['paths'][path][method].get('requestBody',{}).get('content',{}).get('application/json',{}) | length %}
-            {%- if json > 0 %}
-                {%- set schema = doc['paths'][path][method].get('requestBody',{}).get('content',{}).get('application/json').get('schema') %}
-                {{ complex_schema(schema, false) }}
-            {%- endif %}
 
-            {%- set binary = doc['paths'][path][method].get('requestBody',{}).get('content',{}).get('application/octet-stream',{}) | length %}
-            {%- if binary > 0 %}
-                std::string body;
-            {% endif %}
-            void __parse(const asio_http::Request& aRequest) {
-                {%- if json > 0 %}
-                    {%- for s in schema | swagger_decode() %}
-                        {%- if loop.last %}
-                            if (aRequest["Content-Type"] == "application/cbor") {
-                                auto sIn = cbor::imemstream(aRequest.body());
-                                {%- if 'fields' in s %}
-                                    {%- for t in s.fields | sort(attribute='name') %}
-                                        cbor::read(sIn, {{ t.name }});
-                                    {%- endfor %}
-                                {%- else %}
-                                    cbor::read(sIn, {{ s.name }});
-                                {%- endif %}
-                            } else {
-                                const auto sJson = Parser::Json::parse(aRequest.body());
-                                {%- if 'fields' in s %}
-                                    {%- for t in s.fields | sort(attribute='name') %}
-                                        Parser::Json::from_value(sJson, "{{ t.name }}", {{ t.name }});
-                                    {%- endfor %}
-                                {%- else %}
-                                    Parser::Json::from_value(sJson, {{ s.name }});
-                                {%- endif %}
-                            }
-                            {%- endif %}
-                        {%- endfor %}
-                {%- endif %}
+                {# parse body #}
                 {%- if binary > 0 %}
                     body = aRequest.body();
+                {%- elif json > 0 %}
+                    if (aRequest["Content-Type"] == "application/cbor") {
+                        auto sIn = cbor::imemstream(aRequest.body());
+                        cbor::read(sIn, body);
+                    } else {
+                        const auto sJson = Parser::Json::parse(aRequest.body());
+                        Parser::Json::from_value(sJson, body);
+                    }
                 {%- endif %}
             }
         };
+
         struct {{ name }}_response {
             {%- set r200 = doc['paths'][path][method].get('responses',{}).get('200',{}) | swagger_expand_ref %}
-
+            {%- set binary = r200.get('content',{}).get('application/octet-stream',{}) | length %}
             {%- set json = r200.get('content',{}).get('application/json',{}) | length %}
-            {%- if json > 0 %}
+            {%- if binary > 0 %}
+                std::string body;
+            {% elif json > 0 %}
                 {%- set schema = r200.get('content',{}).get('application/json').get('schema') %}
                 {{ complex_schema(schema, true) }}
             {%- endif %}
-
-            {%- set binary = r200.get('content',{}).get('application/octet-stream',{}) | length %}
-            {%- if binary > 0 %}
-                std::string data;
-            {% endif %}
 
             {%- set headers = r200.get('headers',{}) %}
             {%- for k,v in headers | dictsort %}
                 std::optional<{{ v.schema.type | swagger_type }}> {{ k | lower | replace('-','_') }};
             {%- endfor %}
 
-            void __result(const asio_http::Request& aRequest, asio_http::Response& aResponse) {
-            {%- if json > 0 %}
-                {%- set schema = r200.get('content',{}).get('application/json').get('schema') %}
-                {%- for s in schema | swagger_decode() %}
-                    {%- if loop.last %}
-                        const auto sAccept = aRequest["Accept"];
-                        const auto sContentType = aRequest["Content-Type"];
-                        if (sAccept == "application/cbor" or (sAccept.empty() and sContentType == "application/cbor")) {
-                            cbor::omemstream sOut;
-                            {%- if 'fields' in s %}
-                                {%- for t in s.fields | sort(attribute='name') %}
-                                    cbor::write(sOut, {{ t.name }});
-                                {%- endfor %}
-                            {%- else %}
-                                cbor::write(sOut, {{ s.name }});
-                            {%- endif %}
-                            aResponse.set(boost::beast::http::field::content_type, "application/cbor");
-                            aResponse.body().append(sOut.str());
-                        } else {
-                            ::Json::Value sValue;
-                            {%- if 'fields' in s %}
-                                {%- for t in s.fields | sort(attribute='name') %}
-                                    sValue["{{ t.name}}"] = Format::Json::to_value({{ t.name }});
-                                {%- endfor %}
-                            {%- else %}
-                                sValue = Format::Json::to_value({{ s.name }});
-                            {%- endif %}
-                            aResponse.set(boost::beast::http::field::content_type, "application/json");
-                            aResponse.body().append(Format::Json::to_string(sValue));
-                        }
-                    {%- endif %}
-                {%- endfor %}
-            {% endif %}
-            {%- if binary > 0 %}
-                aResponse.set(boost::beast::http::field::content_type, "application/octet-stream");
-                aResponse.body().append(data);
-            {%- endif %}
+            void __format(const asio_http::Request& aRequest, asio_http::Response& aResponse) {
+                {#  format response body #}
+                {%- if binary > 0 %}
+                    aResponse.set(boost::beast::http::field::content_type, "application/octet-stream");
+                    aResponse.body().append(body);
+                {%- elif json > 0 %}
+                    const auto sAccept = aRequest["Accept"];
+                    const auto sContentType = aRequest["Content-Type"];
+                    if (sAccept == "application/cbor" or (sAccept.empty() and sContentType == "application/cbor")) {
+                        cbor::omemstream sOut;
+                        cbor::write(sOut, body);
+                        aResponse.set(boost::beast::http::field::content_type, "application/cbor");
+                        aResponse.body().append(sOut.str());
+                    } else {
+                        ::Json::Value sValue = Format::Json::to_value(body);
+                        aResponse.set(boost::beast::http::field::content_type, "application/json");
+                        aResponse.body().append(Format::Json::to_string(sValue));
+                    }
+                {%- endif %}
 
-            {%- set headers = r200.get('headers',{}) %}
-            {%- for k,v in headers | dictsort %}
-                if ({{ k | replace('-','_') }}.has_value())
-                    aResponse.set("{{ k }}", {{ k | lower | replace('-','_') }}.value());
-            {%- endfor %}
+                {#  push response headers #}
+                {%- set headers = r200.get('headers',{}) %}
+                {%- for k,v in headers | dictsort %}
+                    if ({{ k | replace('-','_') }}.has_value())
+                        aResponse.set("{{ k }}", {{ k | lower | replace('-','_') }}.value());
+                {%- endfor %}
             }
         };
 
@@ -257,11 +220,9 @@ namespace api {
             namespace http = boost::beast::http;
 
             {{name}}_parameters sParameters;
-            {{name}}_body sBody;
 
             try {
                 sParameters.__parse(aRequest);
-                sBody.__parse(aRequest);
             }
             catch (const std::invalid_argument& e) {
                 aResponse.result(http::status::bad_request);
@@ -274,9 +235,9 @@ namespace api {
             }
 
             try {
-                auto [sStatus, sResponse] = {{name}}_i(aService, sParameters, sBody, yield);
+                auto [sStatus, sResponse] = {{name}}_i(aService, sParameters, yield);
                 aResponse.result(sStatus);
-                sResponse.__result(aRequest, aResponse);
+                sResponse.__format(aRequest, aResponse);
             } catch (const std::exception& e) {
                 aResponse.result(http::status::internal_server_error);
                 return;
@@ -312,7 +273,7 @@ namespace api {
         {%- for method in doc['paths'][path] if method in ["get", "put", "post", "head", "delete"] %}
             {%- set name = doc['paths'][path][method]['operationId'] | lower | replace('-', '_') %}
             virtual std::pair<boost::beast::http::status, {{name}}_response> {{ name }}_i
-            (asio_http::asio::io_service& aService, const {{name}}_parameters& aRequest, const {{name}}_body& aBody, asio_http::asio::yield_context yield) = 0;
+            (asio_http::asio::io_service& aService, const {{name}}_parameters& aRequest, asio_http::asio::yield_context yield) = 0;
         {%- endfor %}
         {%- endfor %}
 

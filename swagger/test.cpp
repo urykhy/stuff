@@ -20,13 +20,12 @@ struct Common : api::common_1_0
     get_enum_i(
         asio_http::asio::io_service&   aService,
         const get_enum_parameters&     aRequest,
-        const get_enum_body&           aBody,
         asio_http::asio::yield_context yield)
         override
     {
         get_enum_response sResult;
-        sResult.base.push_back("one");
-        sResult.base.push_back("two");
+        sResult.body.push_back("one");
+        sResult.body.push_back("two");
         return {boost::beast::http::status::ok, sResult};
     }
 
@@ -34,13 +33,12 @@ struct Common : api::common_1_0
     get_status_i(
         asio_http::asio::io_service&   aService,
         const get_status_parameters&   aRequest,
-        const get_status_body&         aBody,
         asio_http::asio::yield_context yield)
         override
     {
         get_status_response sResult;
-        sResult.load   = 1.5;
-        sResult.status = "ready";
+        sResult.body.load   = 1.5;
+        sResult.body.status = "ready";
         return {boost::beast::http::status::ok, sResult};
     }
     virtual ~Common() {}
@@ -54,7 +52,6 @@ struct KeyValue : api::keyValue_1_0
     get_kv_key_i(
         asio_http::asio::io_service&   aService,
         const get_kv_key_parameters&   aRequest,
-        const get_kv_key_body&         aBody,
         asio_http::asio::yield_context yield)
         override
     {
@@ -68,11 +65,10 @@ struct KeyValue : api::keyValue_1_0
     put_kv_key_i(
         asio_http::asio::io_service&   aService,
         const put_kv_key_parameters&   aRequest,
-        const put_kv_key_body&         aBody,
         asio_http::asio::yield_context yield)
         override
     {
-        auto [_, sInsert] = m_Store.insert_or_assign(aRequest.key.value(), aBody.body);
+        auto [_, sInsert] = m_Store.insert_or_assign(aRequest.key.value(), aRequest.body);
         return {sInsert ? boost::beast::http::status::created : boost::beast::http::status::ok, {}};
     }
 
@@ -80,7 +76,6 @@ struct KeyValue : api::keyValue_1_0
     delete_kv_key_i(
         asio_http::asio::io_service&    aService,
         const delete_kv_key_parameters& aRequest,
-        const delete_kv_key_body&       aBody,
         asio_http::asio::yield_context  yield)
         override
     {
@@ -95,7 +90,6 @@ struct KeyValue : api::keyValue_1_0
     head_kv_key_i(
         asio_http::asio::io_service&   aService,
         const head_kv_key_parameters&  aRequest,
-        const head_kv_key_body&        aBody,
         asio_http::asio::yield_context yield)
         override
     {
@@ -108,7 +102,6 @@ struct KeyValue : api::keyValue_1_0
     std::pair<boost::beast::http::status, get_kx_multi_response>
     get_kx_multi_i(asio_http::asio::io_service&   aService,
                    const get_kx_multi_parameters& aRequest,
-                   const get_kx_multi_body&       aBody,
                    asio_http::asio::yield_context yield)
         override
     {
@@ -118,7 +111,6 @@ struct KeyValue : api::keyValue_1_0
     std::pair<boost::beast::http::status, put_kx_multi_response>
     put_kx_multi_i(boost::asio::io_service&,
                    const put_kx_multi_parameters&,
-                   const put_kx_multi_body&,
                    boost::asio::yield_context)
         override
     {
@@ -128,7 +120,6 @@ struct KeyValue : api::keyValue_1_0
     std::pair<boost::beast::http::status, delete_kx_multi_response>
     delete_kx_multi_i(boost::asio::io_service&,
                       const delete_kx_multi_parameters&,
-                      const delete_kx_multi_body&,
                       boost::asio::yield_context)
         override
     {

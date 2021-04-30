@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 
 import os
-import re
 import pathlib
+import re
 import sys
+from urllib.parse import urlparse
+
 import yaml
 from jinja2 import Template, Environment
-from urllib.parse import urlparse
 
 script_path = str(pathlib.Path(__file__).parent.absolute())
 environment = Environment()
+
 
 def expand_ref(item):
     if '$ref' in item:
@@ -71,7 +73,7 @@ environment.filters['swagger_method'] = swagger_method
 
 
 def swagger_name(x):
-    return x['name'].lower().replace('-','_')
+    return x['name'].lower().replace('-', '_')
 environment.filters['swagger_name'] = swagger_name
 
 
@@ -88,7 +90,7 @@ def swagger_type(x):
         xt = re.compile('array<(.*)>').search(x).group(1)
         return f"std::vector<{swagger_type(xt)}>"
     return x
-    #raise Exception("unexpected type: " + str(x))
+    # raise Exception("unexpected type: " + str(x))
 environment.filters['swagger_type'] = swagger_type
 
 
@@ -107,7 +109,6 @@ def swagger_assign(x, name):
     raise Exception("unexpected type: " + str(x))
 environment.filters['swagger_assign'] = swagger_assign
 
-
 resultList = []
 decodeStack = []
 def collapse():
@@ -118,7 +119,7 @@ def collapse():
     xname = None
     while True:
         x = decodeStack.pop()
-        #print(f"X: {x}", file=sys.stderr)
+        # print(f"X: {x}", file=sys.stderr)
         if not isinstance(x, str):
             if array:
                 arrayItem = x['type']
@@ -126,11 +127,11 @@ def collapse():
                 objectItem.append(x)
             continue
         if x.startswith('end'):
-            _,t = x.split(' ')
+            _, t = x.split(' ')
             if t == 'array':
                 array = True
         if x.startswith('begin'):
-            _,_,xname = x.split(' ')
+            _, _, xname = x.split(' ')
             break
     if array:
         info = {'type': f"array<{arrayItem}>", 'name': xname}
@@ -142,6 +143,7 @@ def collapse():
         info = {'type': f"{xname}_t", 'name': xname, 'fields': objectItem}
         resultList.append(info)
         decodeStack.append(info)
+
 
 def swagger_decode_step(x, name=''):
     global decodeStack
@@ -163,18 +165,18 @@ def swagger_decode_step(x, name=''):
     else:
         decodeStack.append({'type': x['type'], 'name': name})
 
+
 def swagger_decode(x):
     global resultList
     global decodeStack
     if x == {}:
         return []
-    swagger_decode_step(x, 'base')
+    swagger_decode_step(x, 'body')
     res = resultList
     resultList = []
     decodeStack = []
     return res
 environment.filters['swagger_decode'] = swagger_decode
-
 
 template = environment.from_string(open(script_path + '/swagger.j2').read())
 doc = yaml.safe_load(open(sys.argv[1], 'r'))
