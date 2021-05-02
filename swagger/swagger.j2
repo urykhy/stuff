@@ -53,8 +53,8 @@
 
 
 namespace api {
-    {% set name = (doc['info']['title'], doc['info']['version']) | join('_') | replace('.', '_') %}
-    struct {{ name }}
+    {% set Aname = (doc['info']['title'], doc['info']['version']) | join('_') | replace('.', '_') %}
+    namespace {{ Aname }}
     {
         {% for path in doc['paths'] %}
         {%- for method in doc['paths'][path]: %}
@@ -214,35 +214,48 @@ namespace api {
                 {%- endfor %}
             }
         };
+            {%- endif %}
+        {%- endfor %}
+        {%- endfor %}
+    }
 
-        void {{name}}(asio_http::asio::io_service& aService, const asio_http::Request& aRequest, asio_http::Response& aResponse, asio_http::asio::yield_context yield)
-        {
-            namespace http = boost::beast::http;
+    struct server_{{ Aname }}
+    {
+        {% for path in doc['paths'] %}
+        {%- for method in doc['paths'][path]: %}
+        {%- if method in ["get", "put", "post", "head", "delete"] %}
+            {%- set name = doc['paths'][path][method]['operationId'] | lower | replace('-', '_') %}
+                using {{name}}_parameters = {{Aname}}::{{name}}_parameters;
+                using {{name}}_response = {{Aname}}::{{name}}_response;
 
-            {{name}}_parameters sParameters;
+                void {{name}}(asio_http::asio::io_service& aService, const asio_http::Request& aRequest, asio_http::Response& aResponse, asio_http::asio::yield_context yield)
+                {
+                    namespace http = boost::beast::http;
 
-            try {
-                sParameters.__parse(aRequest);
-            }
-            catch (const std::invalid_argument& e) {
-                aResponse.result(http::status::bad_request);
-                aResponse.body().append(e.what());
-                return;
-            }
-            catch (const std::exception& e) {
-                aResponse.result(http::status::bad_request);
-                return;
-            }
+                    {{name}}_parameters sParameters;
 
-            try {
-                auto [sStatus, sResponse] = {{name}}_i(aService, sParameters, yield);
-                aResponse.result(sStatus);
-                sResponse.__format(aRequest, aResponse);
-            } catch (const std::exception& e) {
-                aResponse.result(http::status::internal_server_error);
-                return;
-            }
-        }
+                    try {
+                        sParameters.__parse(aRequest);
+                    }
+                    catch (const std::invalid_argument& e) {
+                        aResponse.result(http::status::bad_request);
+                        aResponse.body().append(e.what());
+                        return;
+                    }
+                    catch (const std::exception& e) {
+                        aResponse.result(http::status::bad_request);
+                        return;
+                    }
+
+                    try {
+                        auto [sStatus, sResponse] = {{name}}_i(aService, sParameters, yield);
+                        aResponse.result(sStatus);
+                        sResponse.__format(aRequest, aResponse);
+                    } catch (const std::exception& e) {
+                        aResponse.result(http::status::internal_server_error);
+                        return;
+                    }
+                }
             {%- endif %}
         {%- endfor %}
         {%- endfor %}
@@ -277,6 +290,6 @@ namespace api {
         {%- endfor %}
         {%- endfor %}
 
-        virtual ~{{ name }}() {}
+        virtual ~server_{{ Aname }}() {}
     };
 } // namespace api

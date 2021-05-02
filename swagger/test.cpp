@@ -14,7 +14,7 @@
 
 DECLARE_RESOURCE(swagger_ui_tar)
 
-struct Common : api::common_1_0
+struct Common : api::server_common_1_0
 {
     std::pair<boost::beast::http::status, get_enum_response>
     get_enum_i(
@@ -44,7 +44,7 @@ struct Common : api::common_1_0
     virtual ~Common() {}
 };
 
-struct KeyValue : api::keyValue_1_0
+struct KeyValue : api::server_keyValue_1_0
 {
     std::map<std::string, std::string> m_Store;
 
