@@ -14,7 +14,7 @@
 
 DECLARE_RESOURCE(swagger_ui_tar)
 
-struct Common : api::server_common_1_0
+struct Common : api::common_1_0::server
 {
     std::pair<boost::beast::http::status, get_enum_response>
     get_enum_i(
@@ -44,7 +44,7 @@ struct Common : api::server_common_1_0
     virtual ~Common() {}
 };
 
-struct KeyValue : api::server_keyValue_1_0
+struct KeyValue : api::keyValue_1_0::server
 {
     std::map<std::string, std::string> m_Store;
 
@@ -202,5 +202,19 @@ BOOST_AUTO_TEST_CASE(simple)
     sResponse = asio_http::async(sAsio, std::move(sRequest)).get();
     BOOST_CHECK_EQUAL(sResponse.result(), asio_http::http::status::ok);
     BOOST_CHECK_EQUAL(sResponse.body().size(), 1425);
+
+    // generated client
+    {
+        api::common_1_0::client sClient(sAsio, "http://127.0.0.1:3000");
+        auto sResponse = sClient.get_enum({});
+        BOOST_CHECK_EQUAL(sResponse.first, asio_http::http::status::ok);
+        const std::vector<std::string> sExpected={{"one"},{"two"}};
+        BOOST_CHECK_EQUAL_COLLECTIONS(sExpected.begin(), sExpected.end(), sResponse.second.body.begin(), sResponse.second.body.end());
+    }
+    {
+        api::keyValue_1_0::client sClient(sAsio, "http://127.0.0.1:3000");
+        BOOST_CHECK_EQUAL(sClient.put_kv_key({.key = "abc", .body="abc_data"}).first, asio_http::http::status::created);
+        BOOST_CHECK_EQUAL(sClient.get_kv_key({.key = "abc"}).second.body, "abc_data");
+    }
 }
 BOOST_AUTO_TEST_SUITE_END()

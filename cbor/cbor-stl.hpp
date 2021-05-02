@@ -71,7 +71,8 @@ namespace cbor {
     }
 
     template <class T>
-    void read(istream& s, std::vector<T>& l)
+    typename std::enable_if<!std::is_trivial<T>::value, void>::type
+    read(istream& s, std::vector<T>& l)
     {
         size_t mt = get_uint(s, ensure_type(s, CBOR_LIST));
         l.clear();

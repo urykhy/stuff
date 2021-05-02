@@ -31,6 +31,11 @@ def swagger_raise(message):
 environment.globals['swagger_raise'] = swagger_raise
 
 
+def swagger_is_array(p):
+    return p.startswith('array<')
+environment.tests['swagger_is_array'] = swagger_is_array
+
+
 def swagger_prefix(p):
     xr = []
     for n in urlparse(p).path.split('/'):
@@ -61,7 +66,7 @@ def swagger_enum(p):
     xt = p['schema']['type']
     if xt == "string":
         return ','.join(list(map(lambda x: f'"{x}"', e)))
-    return ','.join(e)
+    return ','.join(list(map(lambda x: f'{x}', e)))
 environment.filters['swagger_enum'] = swagger_enum
 
 
@@ -70,11 +75,6 @@ def swagger_method(x):
         x += "_"
     return x
 environment.filters['swagger_method'] = swagger_method
-
-
-def swagger_name(x):
-    return x['name'].lower().replace('-', '_')
-environment.filters['swagger_name'] = swagger_name
 
 
 def swagger_type(x):
@@ -93,21 +93,6 @@ def swagger_type(x):
     # raise Exception("unexpected type: " + str(x))
 environment.filters['swagger_type'] = swagger_type
 
-
-def swagger_assign(x, name):
-    xt = x['schema']['type']
-    if xt == "array":
-        xt = x['schema']['items']['type']
-    if xt == 'string':
-        return f"{name}"
-    if xt == 'integer':
-        return f"Parser::Atoi<uint64_t>({name})";
-    if xt == 'number':
-        return f"Parser::Atof<double>({name})";
-    if xt == "boolean":
-        return f"({name} == \"true\" or {name} == \"1\")";
-    raise Exception("unexpected type: " + str(x))
-environment.filters['swagger_assign'] = swagger_assign
 
 resultList = []
 decodeStack = []
@@ -166,12 +151,20 @@ def swagger_decode_step(x, name=''):
         decodeStack.append({'type': x['type'], 'name': name})
 
 
-def swagger_decode(x):
+def swagger_decode(x, name='body'):
     global resultList
     global decodeStack
     if x == {}:
         return []
-    swagger_decode_step(x, 'body')
+
+    swagger_decode_step(x, name)
+
+    # just a single value
+    if len(decodeStack) == 1 and len(resultList) == 0:
+        x = decodeStack.pop()
+        info = {'type': swagger_type(x['type']), 'name': name}
+        resultList.append(info)
+
     res = resultList
     resultList = []
     decodeStack = []

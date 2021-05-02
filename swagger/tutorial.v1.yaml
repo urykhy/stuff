@@ -69,6 +69,16 @@ paths:
               schema:
                 type: object
                 properties: {}
+          headers:
+            response-header-string:
+              schema:
+                type: string
+            response-header-bool:
+              schema:
+                type: boolean
+            response-header-int:
+              schema:
+                type: integer
       operationId: get-parameters
       parameters:
         - schema:
@@ -85,6 +95,14 @@ paths:
           in: header
           name: x-header-str-required-enum
           required: true
+        - schema:
+            type: number
+          in: header
+          name: x-header-number
+        - schema:
+            type: boolean
+          in: header
+          name: x-header-boolean
         - schema:
             type: array
             items:
