@@ -22,20 +22,20 @@
                     {%- endfor %}
                     return sValue;
                 }
+                void from_json(const ::Json::Value& aJson) {
+                    {%- for t in s.fields | sort(attribute='name') %}
+                        Parser::Json::from_value(aJson, "{{ t.name }}", {{ t.name }});
+                    {%- endfor %}
+                }
                 void cbor_write(cbor::ostream& out) const {
                     {%- for t in s.fields | sort(attribute='name') %}
                         cbor::write(out, {{ t.name }});
                     {%- endfor %}
                 }
-                void from_json(const ::Json::Value& aJson) {
-                {%- for t in s.fields | sort(attribute='name') %}
-                    Parser::Json::from_value(aJson, "{{ t.name }}", {{ t.name }});
-                {%- endfor %}
-                }
                 void cbor_read(cbor::istream& in) {
-                {%- for t in s.fields | sort(attribute='name') %}
-                    cbor::read(in, {{ t.name }});
-                {%- endfor %}
+                    {%- for t in s.fields | sort(attribute='name') %}
+                        cbor::read(in, {{ t.name }});
+                    {%- endfor %}
                 }
             };
             {%- if loop.last %}
@@ -56,13 +56,23 @@
     {%- endif %}
 {%- endmacro %}
 
+{% macro _for_every_method(doc) %}
+    {%- for path in doc['paths'] %}
+        {%- for method in doc['paths'][path] if method in ["get", "put", "post", "head", "delete"] %}
+            {%- set name = _name(doc['paths'][path][method]['operationId']) %}
+            {%- if name == '' %}
+                {%- set name = (doc['servers'][0]['url'], path) | join('') | swagger_prefix | replace('/','_') %}
+            {% endif %}
+            {{ caller(doc, path, method, name) }}
+        {%- endfor %}
+    {%- endfor %}
+{% endmacro %}
+
 namespace api {
     {% set Aname = (doc['info']['title'], doc['info']['version']) | join('_') | replace('.', '_') %}
     namespace {{ Aname }}
     {
-        {% for path in doc['paths'] %}
-        {%- for method in doc['paths'][path] if method in ["get", "put", "post", "head", "delete"] %}
-            {%- set name = _name(doc['paths'][path][method]['operationId']) %}
+        {% call(doc, path, method, name) _for_every_method(doc) %}
             struct {{ name }}_parameters {
                 {# parameters #}
                 {%- set p1 = doc['paths'][path].get('parameters', []) | swagger_expand_refs %}
@@ -277,14 +287,11 @@ namespace api {
                     {%- endfor %}
                 }
             };
-        {%- endfor %}
-        {%- endfor %}
+        {% endcall %}
 
         struct server
         {
-        {%- for path in doc['paths'] %}
-        {%- for method in doc['paths'][path] if method in ["get", "put", "post", "head", "delete"] %}
-            {%- set name = _name(doc['paths'][path][method]['operationId']) %}
+        {% call(doc, path, method, name) _for_every_method(doc) %}
             using {{name}}_parameters = {{Aname}}::{{name}}_parameters;
             using {{name}}_response = {{Aname}}::{{name}}_response;
             void {{name}}(asio_http::asio::io_service& aService, const asio_http::Request& aRequest, asio_http::Response& aResponse, asio_http::asio::yield_context yield)
@@ -316,8 +323,7 @@ namespace api {
                     return;
                 }
             }
-        {%- endfor %}
-        {%- endfor %}
+        {% endcall %}
 
             void configure(asio_http::RouterPtr aRouter) {
                 namespace http = boost::beast::http;
@@ -328,10 +334,13 @@ namespace api {
                                     switch (aRequest.method())
                                     {
                                     {%- for method in doc['paths'][path] if method in ["get", "put", "post", "head", "delete"] %}
-                                    {%- set name = _name(doc['paths'][path][method]['operationId']) %}
-                                    case http::verb::{{ method | swagger_method }}:
-                                        {{ name }}(aService, aRequest, aResponse, yield);
-                                        break;
+                                        {%- set name = _name(doc['paths'][path][method]['operationId']) %}
+                                        {%- if name == '' %}
+                                            {%- set name = (doc['servers'][0]['url'], path) | join('') | swagger_prefix | replace('/','_') %}
+                                        {% endif %}
+                                        case http::verb::{{ method | swagger_method }}:
+                                            {{ name }}(aService, aRequest, aResponse, yield);
+                                            break;
                                     {%- endfor -%}
                                     default: aResponse.result(http::status::method_not_allowed);
                                     }
@@ -339,14 +348,12 @@ namespace api {
                 {% endfor %}
             }
 
-        {% for path in doc['paths'] %}
-        {%- for method in doc['paths'][path] if method in ["get", "put", "post", "head", "delete"] %}
-            {%- set name = _name(doc['paths'][path][method]['operationId']) %}
-            virtual std::pair<boost::beast::http::status, {{name}}_response> {{ name }}_i
-            (asio_http::asio::io_service& aService, const {{name}}_parameters& aRequest, asio_http::asio::yield_context yield) = 0;
-        {%- endfor %}
-        {%- endfor %}
-
+        {% call(doc, path, method, name) _for_every_method(doc) %}
+            virtual std::pair<boost::beast::http::status, {{name}}_response>
+                {{ name }}_i(asio_http::asio::io_service& aService,
+                             const {{name}}_parameters& aRequest,
+                             asio_http::asio::yield_context yield) = 0;
+        {% endcall %}
             virtual ~server() {}
         };
 
@@ -361,9 +368,7 @@ namespace api {
             , m_Base(aBase)
             {}
 
-            {%- for path in doc['paths'] %}
-            {%- for method in doc['paths'][path] if method in ["get", "put", "post", "head", "delete"] %}
-                {%- set name = _name(doc['paths'][path][method]['operationId']) %}
+            {% call(doc, path, method, name) _for_every_method(doc) %}
                 using {{name}}_parameters = {{Aname}}::{{name}}_parameters;
                 using {{name}}_response = {{Aname}}::{{name}}_response;
                 std::pair<boost::beast::http::status, {{name}}_response> {{name}}(const {{name}}_parameters& aRequest)
@@ -384,8 +389,7 @@ namespace api {
                         throw std::runtime_error(sResponse.body());
                     return {sResponse.result(), {}};
                 }
-            {%- endfor %}
-            {%- endfor %}
+            {% endcall %}
         };
     }
 } // namespace api
