@@ -1,0 +1,38 @@
+openapi: 3.0.0
+info:
+  title: jsonParam
+  version: '1.0'
+  contact:
+    name: urykhy
+    email: urykhy@gmail.com
+servers:
+  - url: 'http://localhost:3000/api/v1'
+paths:
+  /test1:
+    get:
+      summary: Test 1
+      tags:
+        - Test
+      responses:
+        '200':
+          description: OK
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+      operationId: get-test1
+      parameters:
+        - in: query
+          name: param
+          style: form
+          explode: false
+          schema:
+            type: array
+            items:
+              type: object
+              properties:
+                param_1:
+                  type: string
+                param_2:
+                  type: boolean

@@ -2,6 +2,7 @@
 #include <boost/test/unit_test.hpp>
 
 #include "common.v1.hpp"
+#include "jsonParam.v1.hpp"
 #include "keyValue.v1.hpp"
 #include "tutorial.v1.hpp"
 
@@ -129,6 +130,17 @@ struct KeyValue : api::keyValue_1_0::server
     virtual ~KeyValue() {}
 };
 
+struct jsonParam : api::jsonParam_1_0::server
+{
+    virtual std::pair<boost::beast::http::status, get_test1_response>
+    get_test1_i(asio_http::asio::io_service&   aService,
+                const get_test1_parameters&    aRequest,
+                asio_http::asio::yield_context yield) override
+    {
+        return {boost::beast::http::status::ok, {swagger::format(aRequest.param)}};
+    }
+};
+
 BOOST_AUTO_TEST_SUITE(rpc)
 BOOST_AUTO_TEST_CASE(simple)
 {
@@ -141,6 +153,9 @@ BOOST_AUTO_TEST_CASE(simple)
 
     KeyValue sKeyValue;
     sKeyValue.configure(sRouter);
+
+    jsonParam sJsonParam;
+    sJsonParam.configure(sRouter);
 
     Threads::Asio sAsio;
     asio_http::startServer(sAsio, 3000, sRouter); // using same port as in seagger schema
@@ -206,15 +221,24 @@ BOOST_AUTO_TEST_CASE(simple)
     // generated client
     {
         api::common_1_0::client sClient(sAsio, "http://127.0.0.1:3000");
-        auto sResponse = sClient.get_enum({});
+        auto                    sResponse = sClient.get_enum({});
         BOOST_CHECK_EQUAL(sResponse.first, asio_http::http::status::ok);
-        const std::vector<std::string> sExpected={{"one"},{"two"}};
+        const std::vector<std::string> sExpected = {{"one"}, {"two"}};
         BOOST_CHECK_EQUAL_COLLECTIONS(sExpected.begin(), sExpected.end(), sResponse.second.body.begin(), sResponse.second.body.end());
     }
     {
         api::keyValue_1_0::client sClient(sAsio, "http://127.0.0.1:3000");
-        BOOST_CHECK_EQUAL(sClient.put_kv_key({.key = "abc", .body="abc_data"}).first, asio_http::http::status::created);
+        BOOST_CHECK_EQUAL(sClient.put_kv_key({.key = "abc", .body = "abc_data"}).first, asio_http::http::status::created);
         BOOST_CHECK_EQUAL(sClient.get_kv_key({.key = "abc"}).second.body, "abc_data");
+    }
+
+    // json param
+    {
+        api::jsonParam_1_0::client sClient(sAsio, "http://127.0.0.1:3000");
+        auto sResult = sClient.get_test1({
+            .param = {{"one", true}, {"two", false}}
+        });
+        BOOST_TEST_MESSAGE("json response: " << sResult.second.body);
     }
 }
 BOOST_AUTO_TEST_SUITE_END()
