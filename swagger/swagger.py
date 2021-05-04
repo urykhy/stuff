@@ -83,7 +83,7 @@ def swagger_type(x):
     if x == "number":
         return "double"
     if x == "integer":
-        return "uint64_t"
+        return "int64_t"
     if x == "boolean":
         return "bool"
     if x.startswith('array<'):

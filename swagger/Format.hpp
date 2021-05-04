@@ -19,7 +19,7 @@ namespace swagger {
 
     std::string format(const bool v) { return (v ? "true" : "false"); }
     std::string format(const std::string& v) { return v; }
-    std::string format(const uint64_t v) { return std::to_string(v); }
+    std::string format(const int64_t v) { return std::to_string(v); }
     std::string format(double v) { return std::to_string(v); }
 
     template <class T>
@@ -47,7 +47,7 @@ namespace swagger {
 
     void parse(const std::string& s, bool& v) { v = (s == "true" or s == "yes" or s == "1"); }
     void parse(const std::string& s, std::string& v) { v = s; }
-    void parse(const std::string& s, uint64_t& v) { v = Parser::Atoi<uint64_t>(s); }
+    void parse(const std::string& s, int64_t& v) { v = Parser::Atoi<int64_t>(s); }
     void parse(const std::string& s, double& v) { v = Parser::Atof<double>(s); }
 
     template <class T>
