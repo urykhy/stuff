@@ -27,15 +27,11 @@
                         Parser::Json::from_value(aJson, "{{ t.name }}", {{ t.name }});
                     {%- endfor %}
                 }
-                void cbor_write(cbor::ostream& out) const {
-                    {%- for t in s.fields | sort(attribute='name') %}
-                        cbor::write(out, {{ t.name }});
-                    {%- endfor %}
+                void cbor_write(cbor::ostream& aOut) const {
+                    cbor::write(aOut, {{ s.fields | sort(attribute='name') | map(attribute='name') | join(',') }});
                 }
-                void cbor_read(cbor::istream& in) {
-                    {%- for t in s.fields | sort(attribute='name') %}
-                        cbor::read(in, {{ t.name }});
-                    {%- endfor %}
+                void cbor_read(cbor::istream& aIn) {
+                    cbor::read(aIn, {{ s.fields | sort(attribute='name') | map(attribute='name') | join(',') }});
                 }
             };
             {%- if loop.last %}
