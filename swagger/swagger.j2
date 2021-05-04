@@ -348,7 +348,10 @@ namespace api {
             virtual std::pair<boost::beast::http::status, {{name}}_response>
                 {{ name }}_i(asio_http::asio::io_service& aService,
                              const {{name}}_parameters& aRequest,
-                             asio_http::asio::yield_context yield) = 0;
+                             asio_http::asio::yield_context yield)
+            {
+                return {boost::beast::http::status::not_implemented, {}};
+            }
         {% endcall %}
             virtual ~server() {}
         };

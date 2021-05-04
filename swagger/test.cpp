@@ -100,33 +100,6 @@ struct KeyValue : api::keyValue_1_0::server
         return {boost::beast::http::status::ok, {}};
     }
 
-    std::pair<boost::beast::http::status, get_kx_multi_response>
-    get_kx_multi_i(asio_http::asio::io_service&   aService,
-                   const get_kx_multi_parameters& aRequest,
-                   asio_http::asio::yield_context yield)
-        override
-    {
-        return {boost::beast::http::status::ok, {}};
-    }
-
-    std::pair<boost::beast::http::status, put_kx_multi_response>
-    put_kx_multi_i(boost::asio::io_service&,
-                   const put_kx_multi_parameters&,
-                   boost::asio::yield_context)
-        override
-    {
-        return {boost::beast::http::status::ok, {}};
-    }
-
-    std::pair<boost::beast::http::status, delete_kx_multi_response>
-    delete_kx_multi_i(boost::asio::io_service&,
-                      const delete_kx_multi_parameters&,
-                      boost::asio::yield_context)
-        override
-    {
-        return {boost::beast::http::status::ok, {}};
-    }
-
     virtual ~KeyValue() {}
 };
 
