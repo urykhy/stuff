@@ -1,3 +1,4 @@
+#include <regex>
 #include <set>
 #include <string>
 #include <vector>
@@ -7,6 +8,7 @@
 #include <asio_http/Client.hpp>
 #include <asio_http/Router.hpp>
 #include <cbor/cbor.hpp>
+#include <container/Algorithm.hpp>
 
 {% macro complex_schema(schema, name='body', opt=False) -%}
     {%- for s in schema | swagger_decode(name) %}
@@ -115,6 +117,7 @@ namespace api {
                             swagger::parse(sValue, {{ _name(param) }});
                     {%- endfor %}
 
+                    {# limits #}
                     {%- for param in params if param['schema'].get('enum', none) is not none %}
                         if ( swagger::is_specified({{ _name(param) }}) ) {
                             static const std::set<{{ param.schema.type | swagger_type }}> sAllowed ={ {{ param | swagger_enum }} };
@@ -123,6 +126,89 @@ namespace api {
                         }
                     {%- endfor %}
 
+                    {# number limits #}
+                    {%- for param in params if param['schema'].get('type', none) in ('integer','number') %}
+                        {% with %}
+                        {%- set xname = _name(param) %}
+                        {%- set schema = param['schema'] %}
+                        {%- set have_limit = ('minimum' in schema) or ('maximum' in schema) or ('multipleOf' in schema) %}
+                        {%- if have_limit %}
+                        if ( swagger::is_specified({{ xname }}) ) {
+                            {%- if 'minimum' in schema %}
+                                if ({{ xname }}.value() < {%- if schema.get('exclusiveMinimum', false) is false %}={%- endif %} {{ schema['minimum'] }})
+                                    throw std::invalid_argument("param `{{ param.name }}` violates minimum limit");
+                            {%- endif %}
+                            {%- if 'maximum' in schema %}
+                                if ({{ xname }}.value() > {%- if schema.get('exclusiveMaximum', false) is false %}={%- endif %} {{ schema['maximum'] }})
+                                    throw std::invalid_argument("param `{{ param.name }}` violates maximum limit");
+                            {%- endif %}
+                            {%- if 'multipleOf' in schema %}
+                                if ({{ xname }}.value() % {{ schema['multipleOf'] }} != 0)
+                                    throw std::invalid_argument("param `{{ param.name }}` violates multipleOf limit");
+                            {%- endif %}
+                        }
+                        {%- endif %}
+                        {%- endwith %}
+                    {%- endfor %}
+
+                    {# string limits #}
+                    {%- for param in params if param['schema'].get('type', none) == 'string' %}
+                        {% with %}
+                        {%- set xname = _name(param) %}
+                        {%- set schema = param['schema'] %}
+                        {%- set have_limit = ('minLength' in schema) or ('maxLength' in schema) or ('pattern' in schema) %}
+                        {%- if have_limit %}
+                        if ( swagger::is_specified({{ xname }}) ) {
+                            {%- if 'minLength' in schema %}
+                                if ({{ xname }}.value().size() < {{ schema['minLength'] }})
+                                    throw std::invalid_argument("param `{{ param.name }}` violates minimum string length");
+                            {%- endif %}
+                            {%- if 'maxLength' in schema %}
+                                if ({{ xname }}.value().size() > {{ schema['maxLength'] }})
+                                    throw std::invalid_argument("param `{{ param.name }}` violates maximum string length");
+                            {%- endif %}
+                            {%- if 'pattern' in schema %}
+                                if (std::regex_match({{ xname }}.value(), std::regex("{{ schema['pattern'] }}")))
+                                    throw std::invalid_argument("param `{{ param.name }}` violates pattern");
+                            {%- endif %}
+                        }
+                        {%- endif %}
+                        {%- endwith %}
+                    {%- endfor %}
+
+                    {# array limits #}
+                    {%- for param in params if param['schema'].get('type', none) == 'array' %}
+                    {% with %}
+                        {%- set xname = _name(param) %}
+                        {%- set schema = param['schema'] %}
+                        {%- set have_limit = ('minItems' in schema) or ('maxItems' in schema) or ('uniqueItems' in schema) %}
+                        {%- if have_limit %}
+                            {%- if 'minItems' in schema %}
+                                if ({{ xname }}.size() < {{ schema['minItems'] }})
+                                    throw std::invalid_argument("param `{{ param.name }}` violates minimum array length");
+                            {%- endif %}
+                            {%- if 'maxItems' in schema %}
+                                if ({{ xname }}.size() > {{ schema['maxItems'] }})
+                                    throw std::invalid_argument("param `{{ param.name }}` violates maximum array length");
+                            {%- endif %}
+                            {%- if 'uniqueItems' in schema %}
+                                if (!Container::is_unique({{ xname }}))
+                                    throw std::invalid_argument("param `{{ param.name }}` contain duplicates");
+                            {%- endif %}
+                        {%- endif %}
+                        {%- if param.in == 'query' %}
+                            {%- if param.get('style','form') != 'form' or param.get('explode', true) != false %}
+                                {{ swagger_raise('only [style=form, explode=false] arrays are supported in query') }}
+                            {%- endif %}
+                        {%- elif param.in in ('path', 'header') %}
+                            {%- if param.get('style','simple') != 'simple' %}
+                                {{ swagger_raise('only [style=simple] arrays are supported in path') }}
+                            {%- endif %}
+                        {%- endif %}
+                    {%- endwith %}
+                    {%- endfor %}
+
+                    {# default value #}
                     {%- for param in params if param['schema'].get('default', none) is not none %}
                         {%- set d = param['schema']['default'] %}
                         if ( !swagger::is_specified({{ _name(param) }}) )
@@ -136,6 +222,7 @@ namespace api {
                             {%- endif -%};
                     {%- endfor %}
 
+                    {# required flag #}
                     {%- for param in params if param['required'] and param['schema'].get('default', none) is none %}
                         if ( !swagger::is_specified({{ _name(param) }}) )
                             throw std::invalid_argument("required param `{{ param.name }}` not specified");

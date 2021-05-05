@@ -27,7 +27,7 @@ def expand_ref(item):
 
 
 def swagger_raise(message):
-    raise Exception('Jinja2 %s' % (message))
+    raise Exception('Jinja2: %s' % (message))
 environment.globals['swagger_raise'] = swagger_raise
 
 

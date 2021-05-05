@@ -83,6 +83,11 @@ paths:
       parameters:
         - schema:
             type: integer
+            minimum: 1
+            maximum: 50
+            exclusiveMinimum: true
+            exclusiveMaximum: true
+            multipleOf: 2
           in: header
           name: x-header-int
         - schema:
@@ -107,12 +112,18 @@ paths:
             type: array
             items:
               type: string
+            minItems: 5
+            maxItems: 10
+            uniqueItems: true
           in: query
           name: idx-array-string
           style: form
           explode: false
         - schema:
             type: string
+            minLength: 5
+            maxLength: 10
+            pattern: '^[a-z]+$'
           in: query
           name: string-required
           required: true
@@ -156,5 +167,7 @@ components:
               type: array
               items:
                 type: number
+  securitySchemes: {}
 tags:
   - name: Tutorial
+security: []

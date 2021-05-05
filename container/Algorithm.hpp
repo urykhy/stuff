@@ -1,5 +1,7 @@
 #pragma once
 
+#include <vector>
+
 namespace Container {
 
     template <class T, class Predicate>
@@ -34,5 +36,15 @@ namespace Container {
             }
         }
         dest.insert(it2, source.end());
+    }
+
+    template<class T>
+    bool is_unique(const std::vector<T>& aData)
+    {
+        for (size_t i = 0; i < aData.size(); i++)
+            for (size_t j = i + 1; j < aData.size(); j++)
+                if (aData[i] == aData[j])
+                    return false;
+        return true;
     }
 } // namespace Container

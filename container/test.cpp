@@ -80,9 +80,9 @@ BOOST_AUTO_TEST_CASE(no_timeouts)
     container::RequestQueue<std::string> sQueue([](std::string& aRequest) {
         BOOST_CHECK(false);
     });
-    sQueue.insert("first", 10);
-    sQueue.insert("second", 10);
-    sQueue.insert("third", 10);
+    sQueue.insert("first", 100);
+    sQueue.insert("second", 100);
+    sQueue.insert("third", 100);
     BOOST_CHECK_EQUAL(sQueue.empty(), false);
     BOOST_CHECK_EQUAL(sQueue.size(), 3);
     BOOST_CHECK_EQUAL(*sQueue.get(), "first");
@@ -106,5 +106,14 @@ BOOST_AUTO_TEST_CASE(session)
 		}();
 		BOOST_CHECK_EQUAL(S::get<std::string_view>("b").has_value(), false);
     }();
+}
+BOOST_AUTO_TEST_CASE(is_uniq)
+{
+    BOOST_CHECK_EQUAL(Container::is_unique(std::vector({1,1})), false);
+    BOOST_CHECK_EQUAL(Container::is_unique(std::vector({1,2,3,4,1})), false);
+
+    BOOST_CHECK_EQUAL(Container::is_unique(std::vector({1})), true);
+    BOOST_CHECK_EQUAL(Container::is_unique(std::vector({1,2})), true);
+    BOOST_CHECK_EQUAL(Container::is_unique(std::vector({1,2,3,4})), true);
 }
 BOOST_AUTO_TEST_SUITE_END()
