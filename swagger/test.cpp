@@ -17,30 +17,30 @@ DECLARE_RESOURCE(swagger_ui_tar)
 
 struct Common : api::common_1_0::server
 {
-    std::pair<boost::beast::http::status, get_enum_response>
+    get_enum_response_v
     get_enum_i(
         asio_http::asio::io_service&   aService,
         const get_enum_parameters&     aRequest,
         asio_http::asio::yield_context yield)
         override
     {
-        get_enum_response sResult;
+        get_enum_response_200 sResult;
         sResult.body.push_back("one");
         sResult.body.push_back("two");
-        return {boost::beast::http::status::ok, sResult};
+        return sResult;
     }
 
-    std::pair<boost::beast::http::status, get_status_response>
+    get_status_response_v
     get_status_i(
         asio_http::asio::io_service&   aService,
         const get_status_parameters&   aRequest,
         asio_http::asio::yield_context yield)
         override
     {
-        get_status_response sResult;
+        get_status_response_200 sResult;
         sResult.body.load   = 1.5;
         sResult.body.status = "ready";
-        return {boost::beast::http::status::ok, sResult};
+        return sResult;
     }
     virtual ~Common() {}
 };
@@ -49,7 +49,7 @@ struct KeyValue : api::keyValue_1_0::server
 {
     std::map<std::string, std::string> m_Store;
 
-    std::pair<boost::beast::http::status, get_kv_key_response>
+    get_kv_key_response_v
     get_kv_key_i(
         asio_http::asio::io_service&   aService,
         const get_kv_key_parameters&   aRequest,
@@ -58,11 +58,11 @@ struct KeyValue : api::keyValue_1_0::server
     {
         auto sIt = m_Store.find(aRequest.key.value());
         if (sIt == m_Store.end())
-            return {boost::beast::http::status::not_found, {}};
-        return {boost::beast::http::status::ok, {sIt->second, aRequest.if_modified_since}};
+            return boost::beast::http::status::not_found;
+        return get_kv_key_response_200{sIt->second, aRequest.if_modified_since};
     }
 
-    std::pair<boost::beast::http::status, put_kv_key_response>
+    put_kv_key_response_v
     put_kv_key_i(
         asio_http::asio::io_service&   aService,
         const put_kv_key_parameters&   aRequest,
@@ -70,10 +70,13 @@ struct KeyValue : api::keyValue_1_0::server
         override
     {
         auto [_, sInsert] = m_Store.insert_or_assign(aRequest.key.value(), aRequest.body);
-        return {sInsert ? boost::beast::http::status::created : boost::beast::http::status::ok, {}};
+        if (sInsert)
+            return put_kv_key_response_201{};
+        else
+            return put_kv_key_response_200{};
     }
 
-    std::pair<boost::beast::http::status, delete_kv_key_response>
+    delete_kv_key_response_v
     delete_kv_key_i(
         asio_http::asio::io_service&    aService,
         const delete_kv_key_parameters& aRequest,
@@ -82,12 +85,12 @@ struct KeyValue : api::keyValue_1_0::server
     {
         auto sIt = m_Store.find(aRequest.key.value());
         if (sIt == m_Store.end())
-            return {boost::beast::http::status::not_found, {}};
+            return boost::beast::http::status::not_found;
         m_Store.erase(sIt);
-        return {boost::beast::http::status::ok, {}};
+        return boost::beast::http::status::ok;
     }
 
-    std::pair<boost::beast::http::status, head_kv_key_response>
+    head_kv_key_response_v
     head_kv_key_i(
         asio_http::asio::io_service&   aService,
         const head_kv_key_parameters&  aRequest,
@@ -96,8 +99,8 @@ struct KeyValue : api::keyValue_1_0::server
     {
         auto sIt = m_Store.find(aRequest.key.value());
         if (sIt == m_Store.end())
-            return {boost::beast::http::status::not_found, {}};
-        return {boost::beast::http::status::ok, {}};
+            return boost::beast::http::status::not_found;
+        return boost::beast::http::status::ok;
     }
 
     virtual ~KeyValue() {}
@@ -105,12 +108,12 @@ struct KeyValue : api::keyValue_1_0::server
 
 struct jsonParam : api::jsonParam_1_0::server
 {
-    virtual std::pair<boost::beast::http::status, get_test1_response>
+    get_test1_response_v
     get_test1_i(asio_http::asio::io_service&   aService,
                 const get_test1_parameters&    aRequest,
                 asio_http::asio::yield_context yield) override
     {
-        return {boost::beast::http::status::ok, {swagger::format(aRequest.param)}};
+        return get_test1_response_200{swagger::format(aRequest.param)};
     }
 };
 
@@ -194,24 +197,30 @@ BOOST_AUTO_TEST_CASE(simple)
     // generated client
     {
         api::common_1_0::client sClient(sAsio, "http://127.0.0.1:3000");
-        auto                    sResponse = sClient.get_enum({});
-        BOOST_CHECK_EQUAL(sResponse.first, asio_http::http::status::ok);
+
+        auto        sResponse = sClient.get_enum({});
         const std::vector<std::string> sExpected = {{"one"}, {"two"}};
-        BOOST_CHECK_EQUAL_COLLECTIONS(sExpected.begin(), sExpected.end(), sResponse.second.body.begin(), sResponse.second.body.end());
+        BOOST_CHECK_EQUAL_COLLECTIONS(sExpected.begin(), sExpected.end(), sResponse.body.begin(), sResponse.body.end());
     }
     {
         api::keyValue_1_0::client sClient(sAsio, "http://127.0.0.1:3000");
-        BOOST_CHECK_EQUAL(sClient.put_kv_key({.key = "abc", .body = "abc_data"}).first, asio_http::http::status::created);
-        BOOST_CHECK_EQUAL(sClient.get_kv_key({.key = "abc"}).second.body, "abc_data");
+
+        auto R1 = sClient.put_kv_key({.key = "abc", .body = "abc_data"});
+        std::get<api::keyValue_1_0::put_kv_key_response_201>(R1);
+
+        auto R2 = sClient.get_kv_key({.key = "abc"});
+        BOOST_CHECK_EQUAL(R2.body, "abc_data");
+
+        // call not implemented method
+        BOOST_CHECK_THROW(sClient.get_kx_multi({}), Exception::HttpError);
     }
 
     // json param
     {
         api::jsonParam_1_0::client sClient(sAsio, "http://127.0.0.1:3000");
-        auto sResult = sClient.get_test1({
-            .param = {{"one", true}, {"two", false}}
-        });
-        BOOST_TEST_MESSAGE("json response: " << sResult.second.body);
+
+        auto        R1 = sClient.get_test1({.param = {{"one", true}, {"two", false}}});
+        BOOST_TEST_MESSAGE("json response: " << R1.body);
     }
 }
 BOOST_AUTO_TEST_SUITE_END()

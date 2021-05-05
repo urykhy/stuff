@@ -10,7 +10,7 @@ import yaml
 from jinja2 import Template, Environment
 
 script_path = str(pathlib.Path(__file__).parent.absolute())
-environment = Environment()
+environment = Environment(extensions=['jinja2.ext.do'])
 
 
 def expand_ref(item):

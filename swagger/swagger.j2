@@ -1,6 +1,7 @@
 #include <regex>
 #include <set>
 #include <string>
+#include <variant>
 #include <vector>
 
 #include "Format.hpp"
@@ -9,6 +10,7 @@
 #include <asio_http/Router.hpp>
 #include <cbor/cbor.hpp>
 #include <container/Algorithm.hpp>
+#include <exception/Error.hpp>
 
 {% macro complex_schema(schema, name='body', opt=False) -%}
     {%- for s in schema | swagger_decode(name) %}
@@ -63,6 +65,13 @@
             {% endif %}
             {{ caller(doc, path, method, name) }}
         {%- endfor %}
+    {%- endfor %}
+{% endmacro %}
+
+{% macro _for_every_response(doc, path, method, name) %}
+    {%- for k,v in doc['paths'][path][method].get('responses',{}) | dictsort %}
+        {%- set response = v | swagger_expand_ref %}
+        {{ caller(name, k, response) }}
     {%- endfor %}
 {% endmacro %}
 
@@ -307,18 +316,26 @@ namespace api {
                 }
             };
 
-            struct {{ name }}_response {
-                {%- set r200 = doc['paths'][path][method].get('responses',{}).get('200',{}) | swagger_expand_ref %}
-                {%- set binary = r200.get('content',{}).get('application/octet-stream',{}) | length %}
-                {%- set json = r200.get('content',{}).get('application/json',{}) | length %}
+            {% call(name, k, response) _for_every_response(doc, path, method, name) %}
+            struct {{ name }}_response_{{ k }}
+                {%- if k | int >= 300 %} : public
+                    {%- if k | int == 400 %}
+                        std::invalid_argument
+                    {%- else %}
+                        std::runtime_error
+                    {%- endif %}
+                {%- endif %}
+            {
+                {%- set binary = response.get('content',{}).get('application/octet-stream',{}) | length %}
+                {%- set json = response.get('content',{}).get('application/json',{}) | length %}
                 {%- if binary > 0 %}
                     std::string body;
                 {%- elif json > 0 %}
-                    {%- set schema = r200.get('content',{}).get('application/json').get('schema') %}
+                    {%- set schema = response.get('content',{}).get('application/json').get('schema') %}
                     {{ complex_schema(schema) }}
                 {%- endif %}
 
-                {%- set headers = r200.get('headers',{}) %}
+                {%- set headers = response.get('headers',{}) %}
                 {%- for k,v in headers | dictsort %}
                     {{ complex_schema(v['schema'], _name(k), True) }}
                 {%- endfor %}
@@ -327,7 +344,7 @@ namespace api {
                     {#  format response body #}
                     {%- if binary > 0 %}
                         aResponse.set(boost::beast::http::field::content_type, "application/octet-stream");
-                        aResponse.body().append(body);
+                        aResponse.body() = std::move(body);
                     {%- elif json > 0 %}
                         const auto sAccept = aRequest["Accept"];
                         const auto sContentType = aRequest["Content-Type"];
@@ -335,11 +352,11 @@ namespace api {
                             cbor::omemstream sOut;
                             cbor::write(sOut, body);
                             aResponse.set(boost::beast::http::field::content_type, "application/cbor");
-                            aResponse.body().append(sOut.str());
+                            aResponse.body() = std::move(sOut.str());
                         } else {
                             ::Json::Value sValue = Format::Json::to_value(body);
                             aResponse.set(boost::beast::http::field::content_type, "application/json");
-                            aResponse.body().append(Format::Json::to_string(sValue));
+                            aResponse.body() = Format::Json::to_string(sValue);
                         }
                     {%- endif %}
 
@@ -348,6 +365,8 @@ namespace api {
                         if ( swagger::is_specified({{ _name(k) }}) )
                             aResponse.set("{{ k }}", Format::url_encode(swagger::format({{ _name(k) }})));
                     {%- endfor -%}
+
+                    aResponse.result({{ k }});
                 }
 
                 void __parse(asio_http::Response& aResponse)
@@ -369,41 +388,56 @@ namespace api {
                             swagger::parse(sValue, {{ _name(k) }});
                     {%- endfor %}
                 }
+
+                {#  default c-tor for runtime-error #}
+                {%- if k | int >= 300 %}
+                {{ name }}_response_{{ k }}()
+                : std::runtime_error("{{ response['description'] }}")
+                {}
+                {%- endif %}
             };
+            {%- endcall %}
         {% endcall %}
 
         struct server
         {
         {% call(doc, path, method, name) _for_every_method(doc) %}
-            using {{name}}_parameters = {{Aname}}::{{name}}_parameters;
-            using {{name}}_response = {{Aname}}::{{name}}_response;
-            void {{name}}(asio_http::asio::io_service& aService, const asio_http::Request& aRequest, asio_http::Response& aResponse, asio_http::asio::yield_context yield)
+            using {{ name }}_parameters = {{ Aname }}::{{ name }}_parameters;
+            {% call(name, k, response) _for_every_response(doc, path, method, name) %}
+                using {{ name }}_response_{{ k }} = {{ Aname }}::{{ name }}_response_{{ k }};
+            {% endcall %}
+            void {{ name }}(asio_http::asio::io_service& aService, const asio_http::Request& aRequest, asio_http::Response& aResponse, asio_http::asio::yield_context yield)
             {
                 namespace http = boost::beast::http;
 
-                {{name}}_parameters sParameters;
+                {{ name }}_parameters sParameters;
 
                 try {
                     sParameters.__parse(aRequest);
                 }
-                catch (const std::invalid_argument& e) {
-                    aResponse.result(http::status::bad_request);
-                    aResponse.body().append(e.what());
-                    return;
-                }
                 catch (const std::exception& e) {
                     aResponse.result(http::status::bad_request);
+                    aResponse.set("X-From-Swagger", "1");
+                    aResponse.body() = e.what();
                     return;
                 }
 
                 try {
-                    auto [sStatus, sResponse] = {{name}}_i(aService, sParameters, yield);
-                    aResponse.result(sStatus);
-                    sResponse.__format(aRequest, aResponse);
+                    auto sResponse = {{ name }}_i(aService, sParameters, yield);
+                    std::visit([&](auto&& arg) {
+                        using T = std::decay_t<decltype(arg)>;
+                        if constexpr (std::is_same_v<T, boost::beast::http::status>)
+                        {
+                            aResponse.result(arg);
+                            aResponse.set("X-From-Swagger", "1");
+                        } else {
+                            arg.__format(aRequest, aResponse);
+                        }
+                    }, sResponse);
                 } catch (const std::exception& e) {
                     aResponse.result(http::status::internal_server_error);
-                    aResponse.body().append(e.what());
-                    return;
+                    aResponse.set("X-From-Swagger", "1");
+                    aResponse.body() = e.what();
                 }
             }
         {% endcall %}
@@ -431,13 +465,20 @@ namespace api {
                 {% endfor %}
             }
 
+        {# server can respond with plain http status #}
         {% call(doc, path, method, name) _for_every_method(doc) %}
-            virtual std::pair<boost::beast::http::status, {{name}}_response>
+            using {{ name }}_response_v = std::variant<
+                boost::beast::http::status
+                {%- call(name, k, response) _for_every_response(doc, path, method, name) -%}
+                    , {{ Aname }}::{{ name }}_response_{{ k }}
+                {%- endcall %}
+            >;
+            virtual {{ name }}_response_v
                 {{ name }}_i(asio_http::asio::io_service& aService,
-                             const {{name}}_parameters& aRequest,
+                             const {{ name }}_parameters& aRequest,
                              asio_http::asio::yield_context yield)
             {
-                return {boost::beast::http::status::not_implemented, {}};
+                return {boost::beast::http::status::not_implemented};
             }
         {% endcall %}
             virtual ~server() {}
@@ -455,25 +496,61 @@ namespace api {
             {}
 
             {% call(doc, path, method, name) _for_every_method(doc) %}
-                using {{name}}_parameters = {{Aname}}::{{name}}_parameters;
-                using {{name}}_response = {{Aname}}::{{name}}_response;
-                std::pair<boost::beast::http::status, {{name}}_response> {{name}}(const {{name}}_parameters& aRequest)
+                using {{ name }}_parameters = {{ Aname }}::{{ name }}_parameters;
+
+                {# detect if we have only one successul response kind #}
+                {%- set variant_list = [] %}
+                {%- call(name, k, response) _for_every_response(doc, path, method, name) -%}
+                    {%- if k | int < 300 %}
+                        {% do variant_list.append( Aname + "::" + name + "_response_" + k ) %}
+                    {%- endif %}
+                {%- endcall %}
+                {%- if variant_list | length == 1 %}
+                    {%- set returnType = variant_list | first %}
+                {%- else %}
+                    using {{ name }}_response_v = std::variant<
+                        {{ variant_list | join(',') }}
+                    >;
+                    {%- set returnType = name + "_response_v" %}
+                {%- endif %}
+
+                {# client response with successful struct, or throw #}
+                {{ returnType }} {{ name }}(const {{ name }}_parameters& aRequest)
                 {
                     namespace http = boost::beast::http;
                     asio_http::ClientRequest sRequest = aRequest.__format();
                     sRequest.url = m_Base + sRequest.url;
                     auto sResponse = asio_http::async(m_Asio, std::move(sRequest)).get();
-                    if (sResponse.result() == asio_http::http::status::ok)
+                    const auto sFromSwagger = !sResponse["X-From-Swagger"].empty();
+
+                    {# default error codes (w/o without content-type) #}
+                    if (sFromSwagger)
                     {
-                        {{name}}_response sResponseBody;
-                        sResponseBody.__parse(sResponse);
-                        return {boost::beast::http::status::ok, sResponseBody};
+                        if (sResponse.result() == asio_http::http::status::bad_request)
+                            throw std::invalid_argument(sResponse.body());
+                        throw Exception::HttpError(
+                            sResponse.body(),
+                            static_cast<unsigned>(sResponse.result()));
                     }
-                    if (sResponse.result() == asio_http::http::status::bad_request)
-                        throw std::invalid_argument(sResponse.body());
-                    if (sResponse.result() == asio_http::http::status::internal_server_error)
-                        throw std::runtime_error(sResponse.body());
-                    return {sResponse.result(), {}};
+
+                    {# normal user responses #}
+                    {% call(name, k, response) _for_every_response(doc, path, method, name) %}
+                        if (sResponse.result() == asio_http::http::int_to_status({{ k }}))
+                        {
+                            {{ name }}_response_{{ k }} sResponseBody;
+                            sResponseBody.__parse(sResponse);
+                            {%- if k | int < 300 %}
+                                return sResponseBody;
+                            {%- else %}
+                                throw sResponseBody;
+                            {%- endif %}
+                        }
+                    {% endcall %}
+
+                    {# no match - throw #}
+                    throw Exception::HttpError(
+                        "unexpected http response: " + sResponse.body(),
+                        static_cast<unsigned>(sResponse.result()));
                 }
             {% endcall %}
         };
