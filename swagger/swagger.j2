@@ -48,6 +48,14 @@
     {%- endfor %}
 {%- endmacro %}
 
+{% macro _err_class(k) %}
+    {%- if k | int in (400, 403, 404, 405, 412, 413, 417, 422, 501) -%}
+        std::invalid_argument
+    {%- else -%}
+        std::runtime_error
+    {%- endif -%}
+{% endmacro %}
+
 {% macro _name(n) %}
     {%- if n is mapping %}
         {{- n.name | lower | replace('-','_') -}}
@@ -318,13 +326,7 @@ namespace api {
 
             {% call(name, k, response) _for_every_response(doc, path, method, name) %}
             struct {{ name }}_response_{{ k }}
-                {%- if k | int >= 300 %} : public
-                    {%- if k | int == 400 %}
-                        std::invalid_argument
-                    {%- else %}
-                        std::runtime_error
-                    {%- endif %}
-                {%- endif %}
+                {%- if k | int >= 300 %} : public {{ _err_class(k) }}{%- endif %}
             {
                 {%- set binary = response.get('content',{}).get('application/octet-stream',{}) | length %}
                 {%- set json = response.get('content',{}).get('application/json',{}) | length %}
@@ -391,9 +393,7 @@ namespace api {
 
                 {#  default c-tor for runtime-error #}
                 {%- if k | int >= 300 %}
-                {{ name }}_response_{{ k }}()
-                : std::runtime_error("{{ response['description'] }}")
-                {}
+                    {{ name }}_response_{{ k }}() : {{ _err_class(k) }}("{{ response['description'] }}"){}
                 {%- endif %}
             };
             {%- endcall %}
