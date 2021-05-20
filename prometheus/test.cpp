@@ -1,13 +1,13 @@
 #define BOOST_TEST_MODULE Suites
 #include <boost/test/unit_test.hpp>
 
-#include <asio_http/Client.hpp>
-#include <asio_http/Server.hpp>
-#include <networking/Servername.hpp>
-
 #include "API.hpp"
 #include "Common.hpp"
 #include "Metrics.hpp"
+
+#include <asio_http/Client.hpp>
+#include <asio_http/Server.hpp>
+#include <networking/Servername.hpp>
 
 BOOST_AUTO_TEST_SUITE(Prometheus)
 BOOST_AUTO_TEST_CASE(counter)
@@ -53,6 +53,7 @@ BOOST_AUTO_TEST_CASE(router)
 
     auto sResponse = asio_http::async(sAsio, std::move(sRequest)).get();
     BOOST_CHECK_EQUAL(sResponse.result(), asio_http::http::status::ok);
-    BOOST_TEST_MESSAGE("metrics: \n" << sResponse.body());
+    BOOST_TEST_MESSAGE("metrics: \n"
+                       << sResponse.body());
 }
 BOOST_AUTO_TEST_SUITE_END()

@@ -2,12 +2,12 @@
 
 #include <sstream>
 
+#include "Common.hpp"
+#include "Manager.hpp"
+
 #include <asio_http/Router.hpp>
 #include <format/List.hpp>
 #include <threads/Periodic.hpp>
-
-#include "Common.hpp"
-#include "Manager.hpp"
 
 namespace Prometheus {
 
@@ -34,10 +34,8 @@ namespace Prometheus {
 
         // run with 1/2 period, to switch buckets in Histogramm
         sUpdater.start(aGroup, aPeriod / 2, []() {
-            static bool sSend = false;
             Manager::instance().onTimer();
-            sSend = !sSend;
         });
     }
 
-} // namespace
+} // namespace Prometheus

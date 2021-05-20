@@ -3,13 +3,12 @@
 #include <array>
 #include <cmath>
 
-namespace Prometheus
-{
-    template<unsigned SIZE = 1000>
+namespace Prometheus {
+    template <unsigned SIZE = 1000>
     class Histogramm
     {
         using A = std::array<uint64_t, SIZE>;
-        A m_Storage{};
+        A           m_Storage{};
         const float m_Max;
 
     public:
@@ -36,22 +35,20 @@ namespace Prometheus
             return sCount;
         }
 
-        template<class P, class T>
+        template <class P, class T>
         void quantile(const P& aProb, T aHandler) const
         {
-            const float sTotal = total();
-            size_t sIndex = 0;
-            float  sCount = 0;
-            unsigned sMaxUsedBucket = 0;
+            const float sTotal         = total();
+            size_t      sIndex         = 0;
+            float       sCount         = 0;
+            unsigned    sMaxUsedBucket = 0;
 
-            for (unsigned i = 0; i < SIZE; i++)
-            {
+            for (unsigned i = 0; i < SIZE; i++) {
                 sCount += m_Storage[i];
                 if (m_Storage[i] > 0)
                     sMaxUsedBucket = i;
 
-                if (sCount / sTotal > aProb[sIndex])
-                {
+                if (sCount / sTotal > aProb[sIndex]) {
                     if (sIndex >= aProb.size())
                         continue;
                     aHandler(sIndex, m_Max * i / SIZE);
@@ -66,4 +63,4 @@ namespace Prometheus
             m_Storage = {};
         }
     };
-}
+} // namespace Prometheus

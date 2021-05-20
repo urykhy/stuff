@@ -3,10 +3,10 @@
 #include <sys/resource.h>
 #include <sys/time.h>
 
+#include "Metrics.hpp"
+
 #include <file/Dir.hpp>
 #include <time/Meter.hpp>
-
-#include "Metrics.hpp"
 
 namespace Prometheus {
 
