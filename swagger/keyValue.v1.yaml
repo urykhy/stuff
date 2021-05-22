@@ -22,17 +22,13 @@ paths:
                 type: string
                 format: binary
           headers:
-            x-timestamp:
+            etag:
               schema:
                 type: integer
         '404':
           description: Not Found
       operationId: get-kv-key
-      parameters:
-        - schema:
-            type: integer
-          in: header
-          name: If-modified-since
+      parameters: []
     parameters:
       - schema:
           type: string
@@ -47,11 +43,17 @@ paths:
           description: OK
         '201':
           description: Created
+        '412':
+          description: Precondition Failed
       parameters:
         - schema:
             type: integer
-          in: query
-          name: timestamp
+          in: header
+          name: If-Match
+        - schema:
+            type: string
+          in: header
+          name: If-None-Match
       tags:
         - KeyValue
       requestBody:
@@ -68,14 +70,25 @@ paths:
           description: OK
         '404':
           description: Not Found
+        '412':
+          description: Precondition Failed
       tags:
         - KeyValue
+      parameters:
+        - schema:
+            type: integer
+          in: header
+          name: If-Match
     head:
       summary: Check if value exists
       operationId: head-kv-key
       responses:
         '200':
           description: OK
+          headers:
+            etag:
+              schema:
+                type: integer
         '404':
           description: Not Found
       tags:

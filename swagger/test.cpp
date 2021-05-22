@@ -47,7 +47,12 @@ struct Common : api::common_1_0::server
 
 struct KeyValue : api::keyValue_1_0::server
 {
-    std::map<std::string, std::string> m_Store;
+    struct data
+    {
+        int16_t     version = {};
+        std::string value;
+    };
+    std::map<std::string, data> m_Store;
 
     get_kv_key_response_v
     get_kv_key_i(
@@ -59,7 +64,7 @@ struct KeyValue : api::keyValue_1_0::server
         auto sIt = m_Store.find(aRequest.key.value());
         if (sIt == m_Store.end())
             return boost::beast::http::status::not_found;
-        return get_kv_key_response_200{sIt->second, aRequest.if_modified_since};
+        return get_kv_key_response_200{sIt->second.value, sIt->second.version};
     }
 
     put_kv_key_response_v
@@ -69,7 +74,36 @@ struct KeyValue : api::keyValue_1_0::server
         asio_http::asio::yield_context yield)
         override
     {
-        auto [_, sInsert] = m_Store.insert_or_assign(aRequest.key.value(), aRequest.body);
+        // atomic update
+        if (aRequest.if_match.has_value()) {
+            auto sIt = m_Store.find(aRequest.key.value());
+            if (sIt == m_Store.end())
+                return put_kv_key_response_412{};
+            if (sIt->second.version != aRequest.if_match.value())
+                return put_kv_key_response_412{};
+            sIt->second.value = aRequest.body;
+            sIt->second.version++;
+            return put_kv_key_response_200{};
+        }
+
+        // atomic insert
+        if (aRequest.if_none_match.has_value())
+        {
+            if (aRequest.if_none_match.value() != "*")
+                return put_kv_key_response_412{};
+            auto sIt = m_Store.find(aRequest.key.value());
+            if (sIt != m_Store.end())
+                return put_kv_key_response_412{};
+            m_Store[aRequest.key.value()] = data{1, aRequest.body};
+            return put_kv_key_response_201{};
+        }
+
+        // unconditional update or insert
+        auto& sValue = m_Store[aRequest.key.value()];
+        const bool sInsert = sValue.version == 0;
+        sValue.value = aRequest.body;
+        sValue.version++;
+
         if (sInsert)
             return put_kv_key_response_201{};
         else
@@ -83,6 +117,18 @@ struct KeyValue : api::keyValue_1_0::server
         asio_http::asio::yield_context  yield)
         override
     {
+        // atomic delete
+        if (aRequest.if_match.has_value()) {
+            auto sIt = m_Store.find(aRequest.key.value());
+            if (sIt == m_Store.end())
+                return delete_kv_key_response_412{};
+            if (sIt->second.version != aRequest.if_match.value())
+                return delete_kv_key_response_412{};
+            m_Store.erase(sIt);
+            return delete_kv_key_response_200{};
+        }
+
+        // unconditional delete
         auto sIt = m_Store.find(aRequest.key.value());
         if (sIt == m_Store.end())
             return boost::beast::http::status::not_found;
@@ -148,33 +194,6 @@ BOOST_AUTO_TEST_CASE(simple)
     BOOST_CHECK_EQUAL(sResponse.result(), asio_http::http::status::ok);
     BOOST_CHECK_EQUAL(sResponse.body(), "{\n\t\"load\" : 1.5,\n\t\"status\" : \"ready\"\n}");
 
-    // part 2. key value
-    sRequest  = {.method = asio_http::http::verb::get, .url = "http://127.0.0.1:3000/api/v1/kv/123"};
-    sResponse = asio_http::async(sAsio, std::move(sRequest)).get();
-    BOOST_CHECK_EQUAL(sResponse.result(), asio_http::http::status::not_found);
-
-    sRequest  = {.method = asio_http::http::verb::put, .url = "http://127.0.0.1:3000/api/v1/kv/123", .body = "test"};
-    sResponse = asio_http::async(sAsio, std::move(sRequest)).get();
-    BOOST_CHECK_EQUAL(sResponse.result(), asio_http::http::status::created);
-
-    sRequest  = {.method = asio_http::http::verb::put, .url = "http://127.0.0.1:3000/api/v1/kv/123", .body = "one more"};
-    sResponse = asio_http::async(sAsio, std::move(sRequest)).get();
-    BOOST_CHECK_EQUAL(sResponse.result(), asio_http::http::status::ok);
-
-    sRequest  = {.method = asio_http::http::verb::get, .url = "http://127.0.0.1:3000/api/v1/kv/123", .headers = {{asio_http::http::field::if_modified_since, "123"}}};
-    sResponse = asio_http::async(sAsio, std::move(sRequest)).get();
-    BOOST_CHECK_EQUAL(sResponse.result(), asio_http::http::status::ok);
-    BOOST_CHECK_EQUAL(sResponse.body(), "one more");
-    BOOST_CHECK_EQUAL(sResponse["x-timestamp"].to_string(), "123");
-
-    sRequest  = {.method = asio_http::http::verb::delete_, .url = "http://127.0.0.1:3000/api/v1/kv/123"};
-    sResponse = asio_http::async(sAsio, std::move(sRequest)).get();
-    BOOST_CHECK_EQUAL(sResponse.result(), asio_http::http::status::ok);
-
-    sRequest  = {.method = asio_http::http::verb::delete_, .url = "http://127.0.0.1:3000/api/v1/kv/123"};
-    sResponse = asio_http::async(sAsio, std::move(sRequest)).get();
-    BOOST_CHECK_EQUAL(sResponse.result(), asio_http::http::status::not_found);
-
     // call with cbor:
     {
         asio_http::ClientRequest sRequest{.method  = asio_http::http::verb::get,
@@ -198,18 +217,39 @@ BOOST_AUTO_TEST_CASE(simple)
     {
         api::common_1_0::client sClient(sAsio, "http://127.0.0.1:3000");
 
-        auto        sResponse = sClient.get_enum({});
+        auto                           sResponse = sClient.get_enum({});
         const std::vector<std::string> sExpected = {{"one"}, {"two"}};
         BOOST_CHECK_EQUAL_COLLECTIONS(sExpected.begin(), sExpected.end(), sResponse.body.begin(), sResponse.body.end());
     }
+
+    // keyValue with generated client
     {
         api::keyValue_1_0::client sClient(sAsio, "http://127.0.0.1:3000");
 
         auto R1 = sClient.put_kv_key({.key = "abc", .body = "abc_data"});
         std::get<api::keyValue_1_0::put_kv_key_response_201>(R1);
 
-        auto R2 = sClient.get_kv_key({.key = "abc"});
+        // get
+        int16_t sVersion = 0;
+        auto    R2       = sClient.get_kv_key({.key = "abc"});
         BOOST_CHECK_EQUAL(R2.body, "abc_data");
+        sVersion = R2.etag.value();
+
+        // atomic update
+        auto R3 = sClient.put_kv_key({.key = "abc", .if_match = sVersion, .body="abc_update1"});
+        std::get<api::keyValue_1_0::put_kv_key_response_200>(R3);
+
+        // atomic update with bad version
+        try {
+            sClient.put_kv_key({.key = "abc", .if_match = sVersion, .body="abc_update2"});
+            BOOST_TEST(false); // must not happen
+        } catch (api::keyValue_1_0::put_kv_key_response_412& e) {
+            BOOST_TEST(true, "http error 412 occured as expected");
+        }
+
+        // atomic delete with proper version
+        sVersion++;
+        sClient.delete_kv_key({.key = "abc", .if_match = sVersion});
 
         // call not implemented method
         BOOST_CHECK_THROW(sClient.get_kx_multi({}), Exception::HttpError);
@@ -219,7 +259,7 @@ BOOST_AUTO_TEST_CASE(simple)
     {
         api::jsonParam_1_0::client sClient(sAsio, "http://127.0.0.1:3000");
 
-        auto        R1 = sClient.get_test1({.param = {{"one", true}, {"two", false}}});
+        auto R1 = sClient.get_test1({.param = {{"one", true}, {"two", false}}});
         BOOST_TEST_MESSAGE("json response: " << R1.body);
     }
 }

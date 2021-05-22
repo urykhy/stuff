@@ -344,8 +344,9 @@ namespace api {
 
                 void __format(const asio_http::Request& aRequest, asio_http::Response& aResponse) {
                     {#  format response body #}
+                    namespace http = boost::beast::http;
                     {%- if binary > 0 %}
-                        aResponse.set(boost::beast::http::field::content_type, "application/octet-stream");
+                        aResponse.set(http::field::content_type, "application/octet-stream");
                         aResponse.body() = std::move(body);
                     {%- elif json > 0 %}
                         const auto sAccept = aRequest["Accept"];
@@ -353,11 +354,11 @@ namespace api {
                         if (sAccept == "application/cbor" or (sAccept.empty() and sContentType == "application/cbor")) {
                             cbor::omemstream sOut;
                             cbor::write(sOut, body);
-                            aResponse.set(boost::beast::http::field::content_type, "application/cbor");
+                            aResponse.set(http::field::content_type, "application/cbor");
                             aResponse.body() = std::move(sOut.str());
                         } else {
                             ::Json::Value sValue = Format::Json::to_value(body);
-                            aResponse.set(boost::beast::http::field::content_type, "application/json");
+                            aResponse.set(http::field::content_type, "application/json");
                             aResponse.body() = Format::Json::to_string(sValue);
                         }
                     {%- endif %}
@@ -365,7 +366,7 @@ namespace api {
                     {#  push response headers #}
                     {%- for k,v in headers | dictsort %}
                         if ( swagger::is_specified({{ _name(k) }}) )
-                            aResponse.set("{{ k }}", Format::url_encode(swagger::format({{ _name(k) }})));
+                            aResponse.set(http::string_to_field("{{ k }}"), Format::url_encode(swagger::format({{ _name(k) }})));
                     {%- endfor -%}
 
                     aResponse.result({{ k }});
