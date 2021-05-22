@@ -29,7 +29,8 @@ namespace asio_http {
                 break;
 
             sResponse.prepare_payload();
-            sResponse.set(http::field::server, "Beast/cxx");
+            if (0 == sResponse.count(http::field::server))
+                sResponse.set(http::field::server, "Beast/cxx");
 
             http::async_write(aStream, sResponse, yield[ec]);
             if (ec)

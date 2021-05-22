@@ -462,6 +462,8 @@ namespace api {
                                     {%- endfor -%}
                                     default: aResponse.result(http::status::method_not_allowed);
                                     }
+                                    if (0 == aResponse.count(http::field::server))
+                                        aResponse.set(http::field::server, "Swagger/cxx");
                                 });
                 {% endfor %}
             }
