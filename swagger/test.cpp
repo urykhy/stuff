@@ -262,5 +262,12 @@ BOOST_AUTO_TEST_CASE(simple)
         auto R1 = sClient.get_test1({.param = {{"one", true}, {"two", false}}});
         BOOST_TEST_MESSAGE("json response: " << R1.body);
     }
+
+    // prometheus metrics
+    {
+        Prometheus::Manager::instance().onTimer();
+        for (auto& x : Prometheus::Manager::instance().toPrometheus())
+            BOOST_TEST_MESSAGE(x);
+    }
 }
 BOOST_AUTO_TEST_SUITE_END()

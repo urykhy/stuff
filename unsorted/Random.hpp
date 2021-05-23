@@ -4,15 +4,16 @@
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <unistd.h>
 
 #include <exception/Error.hpp>
 
 namespace Util {
 
     // return number in range [0 ... aMax);
-    inline unsigned randomInt(uint64_t aMax)
+    inline uint64_t randomInt(uint64_t aMax)
     {
-        return drand48() * aMax;
+        return std::min(uint64_t(std::floor(drand48() * aMax)), aMax - 1);
     }
 
     inline std::string randomStr(int size = 8)

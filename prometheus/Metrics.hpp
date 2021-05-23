@@ -44,77 +44,66 @@ namespace Prometheus {
         }
     };
 
+    inline std::string appendTag(const std::string& aName, const std::string& aTag)
+    {
+        if (aName.empty())
+            throw std::invalid_argument("Prometheus::appendTag");
+        if (aName.back() != '}')
+            return aName + "{" + aTag + "}";
+
+        // alreay have tags
+        auto sName = aName;
+        sName.pop_back();
+        return sName + ", " + aTag + "}";
+    }
+
     class Time : public ComplexFace
     {
         using Lock = std::unique_lock<std::mutex>;
         mutable std::mutex m_Mutex;
 
-        using H = Histogramm<10000>; // 10K buckets with 10 second max. 1ms accuracy
-        H    m_Data1;
-        H    m_Data2;
-        bool m_Actual1 = true;
+        Histogramm m_Data1;
+        Histogramm m_Data2;
+        bool       m_Actual1 = true;
 
-        Counter<float> m_50;
-        Counter<float> m_90;
-        Counter<float> m_99;
-        Counter<float> m_00;
-
-        std::string appendTag(const std::string& aName, const std::string& aTag) const
-        {
-            if (aName.empty())
-                throw std::invalid_argument("Prometheus::Time::Name");
-            if (aName.back() != '}')
-                return aName + "{" + aTag + "}";
-
-            // alreay have tags
-            auto sName = aName;
-            sName.pop_back();
-            return sName + ", " + aTag + "}";
-        }
+        Counter<double> m_50;
+        Counter<double> m_90;
+        Counter<double> m_99;
+        Counter<double> m_00;
 
     public:
-        Time(const std::string& aName, float aMax = 10)
-        : m_Data1(aMax)
-        , m_Data2(aMax)
-        , m_50(appendTag(aName, "quantile=\"0.5\""))
+        Time(const std::string& aName)
+        : m_50(appendTag(aName, "quantile=\"0.5\""))
         , m_90(appendTag(aName, "quantile=\"0.9\""))
         , m_99(appendTag(aName, "quantile=\"0.99\""))
         , m_00(appendTag(aName, "quantile=\"1.0\""))
         {}
 
-        void account(float v)
+        void account(double v)
         {
-            auto sBucket = m_Data1.bucket(v);
             Lock lk(m_Mutex);
-            m_Data1.tick(sBucket);
-            m_Data2.tick(sBucket);
+            m_Data1.tick(v);
+            m_Data2.tick(v);
         }
 
         void update() override
         {
-            constexpr std::array<float, 4> m_Prob{0.5, 0.9, 0.99, 1.0}; // 1.0 must be last one
+            constexpr std::array<double, 4> m_Prob{0.5, 0.9, 0.99, 1.0};
 
-            Lock lk(m_Mutex);
+            Histogramm sTmp;
+            {
+                Lock  lk(m_Mutex);
+                auto& sActual = m_Actual1 ? m_Data1 : m_Data2;
+                sTmp          = std::move(sActual);
+                sActual.clear();
+                m_Actual1 = !m_Actual1;
+            }
 
-            H& sActual = m_Actual1 ? m_Data1 : m_Data2;
-            sActual.quantile(m_Prob, [this](unsigned aIndex, float aValue) {
-                switch (aIndex) {
-                case 0:
-                    m_50.set(aValue);
-                    break;
-                case 1:
-                    m_90.set(aValue);
-                    break;
-                case 2:
-                    m_99.set(aValue);
-                    break;
-                case 3:
-                    m_00.set(aValue);
-                    break;
-                }
-            });
-            sActual.clear();
-            m_Actual1 = !m_Actual1;
+            const auto sResult = sTmp.quantile(m_Prob);
+            m_50.set(sResult[0]);
+            m_90.set(sResult[1]);
+            m_99.set(sResult[2]);
+            m_00.set(sResult[3]);
         }
     };
 } // namespace Prometheus

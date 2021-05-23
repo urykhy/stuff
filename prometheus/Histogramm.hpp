@@ -3,64 +3,70 @@
 #include <array>
 #include <cmath>
 
+#include <unsorted/Random.hpp>
+
 namespace Prometheus {
-    template <unsigned SIZE = 1000>
     class Histogramm
     {
-        using A = std::array<uint64_t, SIZE>;
-        A           m_Storage{};
-        const float m_Max;
+        size_t              m_Size;
+        std::vector<double> m_Storage;
+        double              m_Min{};
+        double              m_Max{};
+        bool                m_HasMin{false};
 
     public:
-        Histogramm(const float aMax = 10)
-        : m_Max(aMax)
-        {}
-
-        unsigned bucket(float v) const
+        Histogramm(const size_t aSize = 1000)
+        : m_Size(aSize)
         {
-            unsigned sV = std::round(v * SIZE / m_Max);
-            return std::clamp(sV, 0u, SIZE - 1);
+            m_Storage.reserve(aSize);
         }
 
-        void tick(unsigned aBucket)
+        void tick(double aValue)
         {
-            m_Storage[aBucket]++;
+            if (m_HasMin)
+                m_Min = std::min(m_Min, aValue);
+            else {
+                m_Min    = aValue;
+                m_HasMin = true;
+            }
+            m_Max = std::max(m_Max, aValue);
+
+            if (m_Storage.size() < m_Size)
+                m_Storage.push_back(aValue);
+            else
+                m_Storage[Util::randomInt(m_Size)] = aValue;
         }
 
-        size_t total() const
+        template <class P>
+        auto quantile(const P& aParam) -> P
         {
-            size_t sCount = 0;
-            for (auto& x : m_Storage)
-                sCount += x;
-            return sCount;
-        }
+            P    sResult{};
+            std::sort(m_Storage.begin(), m_Storage.end());
 
-        template <class P, class T>
-        void quantile(const P& aProb, T aHandler) const
-        {
-            const float sTotal         = total();
-            size_t      sIndex         = 0;
-            float       sCount         = 0;
-            unsigned    sMaxUsedBucket = 0;
-
-            for (unsigned i = 0; i < SIZE; i++) {
-                sCount += m_Storage[i];
-                if (m_Storage[i] > 0)
-                    sMaxUsedBucket = i;
-
-                if (sCount / sTotal > aProb[sIndex]) {
-                    if (sIndex >= aProb.size())
-                        continue;
-                    aHandler(sIndex, m_Max * i / SIZE);
-                    sIndex++;
+            if (m_Storage.size() == 0)
+                return sResult;
+            const auto sSize = m_Storage.size() - 1;
+            for (unsigned i = 0; i < aParam.size(); i++) {
+                auto sPhi = aParam[i];
+                if (sPhi <= 0)
+                    sResult[i] = m_Min;
+                else if (sPhi >= 1)
+                    sResult[i] = m_Max;
+                else {
+                    auto sIdx  = std::min(size_t(std::round(sPhi * sSize)), sSize);
+                    sResult[i] = m_Storage[sIdx];
                 }
             }
-            aHandler(sIndex, m_Max * sMaxUsedBucket / SIZE); // max value
+            return sResult;
         }
 
         void clear()
         {
-            m_Storage = {};
+            m_Storage.clear();
+            m_Storage.reserve(m_Size);
+            m_Min     = 0;
+            m_Max     = 0;
+            m_HasMin  = false;
         }
     };
 } // namespace Prometheus

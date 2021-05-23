@@ -12,6 +12,12 @@
 #include <container/Algorithm.hpp>
 #include <exception/Error.hpp>
 
+{% set x_prometheus = doc['info'].get('x-prometheus', false) %}
+{% if x_prometheus %}
+    #include <time/Meter.hpp>
+    #include <prometheus/Metrics.hpp>
+{% endif %}
+
 {% macro complex_schema(schema, name='body', opt=False) -%}
     {%- for s in schema | swagger_decode(name) %}
         {%- if 'fields' in s %}
@@ -402,6 +408,24 @@ namespace api {
 
         struct server
         {
+        {% set x_prometheus = doc['info'].get('x-prometheus', false) %}
+        {% if x_prometheus %}
+            struct __metrics_t
+            {
+            {%- call(doc, path, method, name) _for_every_method(doc) -%}
+                {% set tag = 'api="' + doc['info']['title'] + '", version="' + doc['info']['version'] + '", service="' + name + '"' %}
+                {% set _open = '{' %}
+                {% set _close = '}' %}
+                Prometheus::Counter<> requests_{{ name }}      {R"(swagger_requests{{ _open }}{{ tag }}{{ _close }})"};
+                Prometheus::Time      time_{{ name }}          {R"(swagger_time{{ _open }}{{ tag }}{{ _close }})"};
+                Prometheus::Counter<> responses_{{ name }}_2xx {R"(swagger_responses{{ _open }}{{ tag }}, status="2xx"{{ _close }})"};
+                Prometheus::Counter<> responses_{{ name }}_4xx {R"(swagger_responses{{ _open }}{{ tag }}, status="4xx"{{ _close }})"};
+                Prometheus::Counter<> responses_{{ name }}_5xx {R"(swagger_responses{{ _open }}{{ tag }}, status="5xx"{{ _close }})"};
+            {%- endcall -%}
+            };
+            __metrics_t __metrics;
+        {% endif %}
+
         {% call(doc, path, method, name) _for_every_method(doc) %}
             using {{ name }}_parameters = {{ Aname }}::{{ name }}_parameters;
             {% call(name, k, response) _for_every_response(doc, path, method, name) %}
@@ -410,6 +434,17 @@ namespace api {
             void {{ name }}(asio_http::asio::io_service& aService, const asio_http::Request& aRequest, asio_http::Response& aResponse, asio_http::asio::yield_context yield)
             {
                 namespace http = boost::beast::http;
+
+                {% if x_prometheus %}
+                    __metrics.requests_{{ name }}.tick();
+                    Time::Meter __meter;
+                    Util::Raii __account([&](){
+                        __metrics.time_{{ name }}.account(__meter.get().to_double());
+                        if (aResponse.result() >= http::status::ok and aResponse.result() < http::status::multiple_choices) __metrics.responses_{{ name }}_2xx.tick();
+                        else if (aResponse.result() >= http::status::bad_request and aResponse.result() < http::status::internal_server_error) __metrics.responses_{{ name }}_4xx.tick();
+                        else if (aResponse.result() >= http::status::internal_server_error) __metrics.responses_{{ name }}_5xx.tick();
+                    });
+                {% endif %}
 
                 {{ name }}_parameters sParameters;
 

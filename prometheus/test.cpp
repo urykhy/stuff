@@ -29,13 +29,13 @@ BOOST_AUTO_TEST_CASE(ago)
 BOOST_AUTO_TEST_CASE(time)
 {
     Prometheus::Time sTime("time");
-    for (float i = 0; i <= 10; i += 0.001)
-        sTime.account(i);
+    for (unsigned i = 1; i <= 100; i++)
+        sTime.account(i * 0.1);
     sTime.update();
 
     const auto                     sActual   = Prometheus::Manager::instance().toPrometheus();
     const Prometheus::Manager::Set sExpected = {
-        {"time{quantile=\"0.5\"} 5.000000"}, {"time{quantile=\"0.9\"} 9.000000"}, {"time{quantile=\"0.99\"} 9.900000"}, {"time{quantile=\"1.0\"} 9.999000"}};
+        {"time{quantile=\"0.5\"} 5.100000"}, {"time{quantile=\"0.9\"} 9.000000"}, {"time{quantile=\"0.99\"} 9.900000"}, {"time{quantile=\"1.0\"} 10.000000"}};
     BOOST_CHECK_EQUAL_COLLECTIONS(sActual.begin(), sActual.end(), sExpected.begin(), sExpected.end());
 }
 BOOST_AUTO_TEST_CASE(router)
