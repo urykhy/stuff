@@ -11,9 +11,17 @@
 
 namespace asio_http {
 
+    namespace Headers
+    {
+        static const std::string Accept = "Accept";
+        static const std::string ContentType = "Content-Type";
+        static const std::string Host = "Host";
+        static const std::string UserAgent = "User-Agent";
+    }
+
     struct ClientRequest
     {
-        using Headers = std::map<http::field, std::string>;
+        using Headers = std::map<std::string, std::string>;
 
         http::verb  method = http::verb::get;
         std::string url;

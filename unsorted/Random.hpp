@@ -6,6 +6,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <cmath>
+
 #include <exception/Error.hpp>
 
 namespace Util {

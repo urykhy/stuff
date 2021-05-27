@@ -7,9 +7,9 @@
 #include <unsorted/Log4cxx.hpp>
 using namespace std::chrono_literals;
 
-#include <threads/SafeQueue.hpp>
-
 #include "Message.hpp"
+
+#include <threads/SafeQueue.hpp>
 
 namespace Sentry {
     struct Client
@@ -58,6 +58,7 @@ namespace Sentry {
         Threads::SafeQueueThread<std::string> m_Queue;
         Threads::Group                        m_Group;
         static thread_local bool              m_Disabled;
+        const unsigned                        m_Limit;  // max notifications in queue
 
         void process(const std::string& aMsg)
         {
@@ -73,9 +74,10 @@ namespace Sentry {
         }
 
     public:
-        Queue(const Client::Params& aSentry)
+        Queue(const Client::Params& aSentry, unsigned aLimit = 20)
         : m_Client(aSentry)
-        , m_Queue([this](const std::string& aMsg) { process(aMsg); })
+        , m_Queue([this](const std::string& aMsg) { process(aMsg); }, {.retry = true})
+        , m_Limit(aLimit)
         {}
         void start()
         {
@@ -86,7 +88,13 @@ namespace Sentry {
                     std::this_thread::sleep_for(100ms);
             });
         }
-        void send(const Message& aMsg) { m_Queue.insert(aMsg.to_string()); }
+        bool send(const Message& aMsg)
+        {
+            if (m_Queue.size() >= m_Limit)
+                return false;
+            m_Queue.insert(aMsg.to_string());
+            return true;
+        }
         bool is_disabled() const { return m_Disabled; }
     };
 

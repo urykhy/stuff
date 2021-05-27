@@ -32,7 +32,7 @@ BOOST_AUTO_TEST_CASE(simple)
             BOOST_CHECK_EQUAL(aRequest["User-Agent"], "Beast/cxx");
 
         aResponse.result(http::status::ok);
-        aResponse.set(http::field::content_type, "text/html");
+        aResponse.set(asio_http::Headers::ContentType, "text/html");
         aResponse.body() = "hello world";
     });
 
@@ -55,7 +55,7 @@ BOOST_AUTO_TEST_CASE(simple)
     BOOST_CHECK_EQUAL(sResult.status, 404);
 
     // beast client
-    asio_http::ClientRequest sRequest{.method = http::verb::get, .url = "http://127.0.0.1:2081/hello", .headers = {{http::field::host, "127.0.0.1"}, {http::field::user_agent, "Beast/cxx"}}};
+    asio_http::ClientRequest sRequest{.method = http::verb::get, .url = "http://127.0.0.1:2081/hello", .headers = {{asio_http::Headers::Host, "127.0.0.1"}, {asio_http::Headers::UserAgent, "Beast/cxx"}}};
 
     auto sResponse = asio_http::async(sAsio, std::move(sRequest)).get();
     BOOST_CHECK_EQUAL(sResponse.result(), http::status::ok);
@@ -74,7 +74,7 @@ BOOST_AUTO_TEST_CASE(alive)
         }
         sSerial++;
         aResponse.result(http::status::ok);
-        aResponse.set(http::field::content_type, "text/html");
+        aResponse.set(asio_http::Headers::ContentType, "text/html");
         aResponse.body() = std::to_string(sSerial);
     });
     sRouter->insert("/slow", [&sSerial](asio_http::asio::io_service&, const asio_http::Request& aRequest, asio_http::Response& aResponse, asio_http::asio::yield_context yield) {
@@ -87,7 +87,7 @@ BOOST_AUTO_TEST_CASE(alive)
     asio_http::startServer(sAsio, 2081, sRouter);
     sAsio.start(sGroup, 2);
 
-    asio_http::ClientRequest sRequest{.method = http::verb::get, .url = "http://127.0.0.1:2081/hello", .headers = {{http::field::host, "127.0.0.1"}}};
+    asio_http::ClientRequest sRequest{.method = http::verb::get, .url = "http://127.0.0.1:2081/hello", .headers = {{asio_http::Headers::Host, "127.0.0.1"}}};
 
     asio_http::Alive::Params sParams;
     auto sManager  = std::make_shared<asio_http::Alive::Manager>(sAsio.service(), sParams);
@@ -98,7 +98,7 @@ BOOST_AUTO_TEST_CASE(alive)
 
     sleep(1);
 
-    sRequest  = {.method = http::verb::get, .url = "http://127.0.0.1:2081/hello", .headers = {{http::field::host, "127.0.0.1"}}};
+    sRequest  = {.method = http::verb::get, .url = "http://127.0.0.1:2081/hello", .headers = {{asio_http::Headers::Host, "127.0.0.1"}}};
     sResponse = sManager->async(std::move(sRequest)).get();
     BOOST_CHECK_EQUAL(sResponse.result(), http::status::ok);
     BOOST_CHECK_EQUAL(sResponse.body(), "2");
@@ -107,7 +107,7 @@ BOOST_AUTO_TEST_CASE(alive)
     // request timeout over keep alive connection
     // set 500ms timeout and server will reply after 1s.
     Time::Meter sMeter;
-    sRequest     = {.method = http::verb::get, .url = "http://127.0.0.1:2081/slow", .headers = {{http::field::host, "127.0.0.1"}}, .total = 500};
+    sRequest     = {.method = http::verb::get, .url = "http://127.0.0.1:2081/slow", .headers = {{asio_http::Headers::Host, "127.0.0.1"}}, .total = 500};
     auto sFuture = sManager->async(std::move(sRequest));
     BOOST_CHECK_THROW(sFuture.get(), std::runtime_error);
     BOOST_CHECK_CLOSE(sMeter.get().to_double(), 0.5, 1);

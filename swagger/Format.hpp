@@ -1,5 +1,7 @@
 #pragma once
 
+#include <boost/beast/http/field.hpp>
+
 #include <format/Json.hpp>
 #include <format/List.hpp>
 #include <format/Url.hpp>
@@ -75,7 +77,17 @@ namespace swagger {
     template <class T>
     bool is_specified(const std::optional<T>& v) { return v.has_value(); }
 
-    template<class T>
+    template <class T>
     bool is_specified(const std::vector<T>& v) { return !v.empty(); }
+
+    // make header name
+    boost::beast::string_view header(const char* aName)
+    {
+        namespace http = boost::beast::http;
+        auto sFieldName = http::string_to_field(aName);
+        if (sFieldName != http::field::unknown)
+            return http::to_string(sFieldName);
+        return boost::beast::string_view(aName);
+    }
 
 } // namespace swagger

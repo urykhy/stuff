@@ -12,6 +12,7 @@
 #include <format/Hex.hpp>
 #include <resource/Get.hpp>
 #include <resource/Server.hpp>
+#include <sentry/Client.hpp>
 
 DECLARE_RESOURCE(swagger_ui_tar)
 
@@ -87,8 +88,7 @@ struct KeyValue : api::keyValue_1_0::server
         }
 
         // atomic insert
-        if (aRequest.if_none_match.has_value())
-        {
+        if (aRequest.if_none_match.has_value()) {
             if (aRequest.if_none_match.value() != "*")
                 return put_kv_key_response_412{};
             auto sIt = m_Store.find(aRequest.key.value());
@@ -99,9 +99,9 @@ struct KeyValue : api::keyValue_1_0::server
         }
 
         // unconditional update or insert
-        auto& sValue = m_Store[aRequest.key.value()];
+        auto&      sValue  = m_Store[aRequest.key.value()];
         const bool sInsert = sValue.version == 0;
-        sValue.value = aRequest.body;
+        sValue.value       = aRequest.body;
         sValue.version++;
 
         if (sInsert)
@@ -179,17 +179,28 @@ BOOST_AUTO_TEST_CASE(simple)
     jsonParam sJsonParam;
     sJsonParam.configure(sRouter);
 
+    Sentry::Client::Params sParams;
+    sParams.url    = "web.sentry.docker:9000/api/2/store/";
+    sParams.key    = "626d891753d6489ba426baa41d7c79fc";
+    sParams.secret = "350776c0cfba4013a93275e9de63ba5d";
+    Sentry::Queue sQueue(sParams);
+    sQueue.start();
+
+    api::tutorial_1_0::server sTutorialServer;
+    sTutorialServer.with_sentry([&sQueue](Sentry::Message& aMessage) { sQueue.send(aMessage); }, 1);
+    sTutorialServer.configure(sRouter);
+
     Threads::Asio sAsio;
     asio_http::startServer(sAsio, 3000, sRouter); // using same port as in seagger schema
     Threads::Group sGroup;
     sAsio.start(sGroup);
 
-    asio_http::ClientRequest sRequest{.method = asio_http::http::verb::get, .url = "http://127.0.0.1:3000/api/v1/enum", .headers = {{asio_http::http::field::host, "127.0.0.1"}}};
+    asio_http::ClientRequest sRequest{.method = asio_http::http::verb::get, .url = "http://127.0.0.1:3000/api/v1/enum", .headers = {{asio_http::Headers::Host, "127.0.0.1"}}};
     auto                     sResponse = asio_http::async(sAsio, std::move(sRequest)).get();
     BOOST_CHECK_EQUAL(sResponse.result(), asio_http::http::status::ok);
     BOOST_CHECK_EQUAL(sResponse.body(), "[\n\t\"one\",\n\t\"two\"\n]");
 
-    sRequest  = {.method = asio_http::http::verb::get, .url = "http://127.0.0.1:3000/api/v1/status", .headers = {{asio_http::http::field::host, "127.0.0.1"}}};
+    sRequest  = {.method = asio_http::http::verb::get, .url = "http://127.0.0.1:3000/api/v1/status", .headers = {{asio_http::Headers::Host, "127.0.0.1"}}};
     sResponse = asio_http::async(sAsio, std::move(sRequest)).get();
     BOOST_CHECK_EQUAL(sResponse.result(), asio_http::http::status::ok);
     BOOST_CHECK_EQUAL(sResponse.body(), "{\n\t\"load\" : 1.5,\n\t\"status\" : \"ready\"\n}");
@@ -198,7 +209,7 @@ BOOST_AUTO_TEST_CASE(simple)
     {
         asio_http::ClientRequest sRequest{.method  = asio_http::http::verb::get,
                                           .url     = "http://127.0.0.1:3000/api/v1/enum",
-                                          .headers = {{asio_http::http::field::host, "127.0.0.1"}, {asio_http::http::field::accept, "application/cbor"}}};
+                                          .headers = {{asio_http::Headers::Host, "127.0.0.1"}, {asio_http::Headers::Accept, "application/cbor"}}};
         auto                     sResponse = asio_http::async(sAsio, std::move(sRequest)).get();
         BOOST_CHECK_EQUAL(sResponse.result(), asio_http::http::status::ok);
         std::vector<std::string> sResult;
@@ -236,12 +247,12 @@ BOOST_AUTO_TEST_CASE(simple)
         sVersion = R2.etag.value();
 
         // atomic update
-        auto R3 = sClient.put_kv_key({.key = "abc", .if_match = sVersion, .body="abc_update1"});
+        auto R3 = sClient.put_kv_key({.key = "abc", .if_match = sVersion, .body = "abc_update1"});
         std::get<api::keyValue_1_0::put_kv_key_response_200>(R3);
 
         // atomic update with bad version
         try {
-            sClient.put_kv_key({.key = "abc", .if_match = sVersion, .body="abc_update2"});
+            sClient.put_kv_key({.key = "abc", .if_match = sVersion, .body = "abc_update2"});
             BOOST_TEST(false); // must not happen
         } catch (api::keyValue_1_0::put_kv_key_response_412& e) {
             BOOST_TEST(true, "http error 412 occured as expected");
@@ -268,6 +279,16 @@ BOOST_AUTO_TEST_CASE(simple)
         Prometheus::Manager::instance().onTimer();
         for (auto& x : Prometheus::Manager::instance().toPrometheus())
             BOOST_TEST_MESSAGE(x);
+    }
+
+    // sentry (emit bad request)
+    {
+        api::tutorial_1_0::client sClient(sAsio, "http://127.0.0.1:3000");
+        try {
+            sClient.get_parameters({.id = "test-id", .x_header_int = 92});
+        } catch (const std::exception& e) {
+            BOOST_TEST_MESSAGE("catch: " << e.what());
+        }
     }
 }
 BOOST_AUTO_TEST_SUITE_END()

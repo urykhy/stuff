@@ -58,8 +58,8 @@ namespace MQ {
                                 .url     = m_Params.etcd.url + "/v3/" + aAPI,
                                 .body    = std::move(aBody),
                                 .headers = {
-                                    {asio_http::http::field::accept, "application/json"},
-                                    {asio_http::http::field::content_type, "application/json"}}},
+                                    {asio_http::Headers::Accept, "application/json"},
+                                    {asio_http::Headers::ContentType, "application/json"}}},
                                yield)
                                .get();
             return Etcd::Protocol::parseResponse(static_cast<unsigned>(sResult.result()), sResult.body());

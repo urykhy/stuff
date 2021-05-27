@@ -5,9 +5,10 @@
 
 #include <boost/asio/spawn.hpp>
 
-#include <threads/Asio.hpp>
-
 #include "Router.hpp"
+
+#include <container/Session.hpp>
+#include <threads/Asio.hpp>
 
 namespace asio_http {
 
@@ -23,6 +24,7 @@ namespace asio_http {
             if (ec)
                 break;
 
+            Container::Session::Set sPeer("peer", aStream.socket().remote_endpoint().address().to_string());
             Response sResponse;
             aRouter->call(aService, sRequest, sResponse, yield[ec]);
             if (ec)

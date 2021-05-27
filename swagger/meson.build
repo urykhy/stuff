@@ -5,6 +5,11 @@ boost     = dependency('boost', modules : ['unit_test_framework', 'system', 'cor
 threads   = dependency('threads')
 json      = dependency('jsoncpp')
 
+# for sentry
+log4cxx   = dependency('liblog4cxx')
+curl      = dependency('libcurl')
+uuid      = dependency('uuid')
+
 api_prog  = find_program('swagger.sh', required : true)
 api_gen   = generator(api_prog, output : ['@BASENAME@.hpp'], arguments : ['@INPUT@','@OUTPUT@'])
 api_src   = api_gen.process('common.v1.yaml', 'keyValue.v1.yaml', 'mq.v1.yaml', 'tutorial.v1.yaml', 'jsonParam.v1.yaml')
@@ -18,5 +23,5 @@ objcopy        = find_program('objcopy', required : true)
 swagger_ui_o   = custom_target('swagger_ui_o', output: 'swagger_ui.o', input: swagger_ui_tar,
                  command: [objcopy, '--input', 'binary', '--output', 'elf64-x86-64', '--binary-architecture', 'i386:x86-64', '--rename-section', '.data=.rodata', 'swagger_ui.tar', 'swagger_ui.o'])
 
-a = executable('a.out', 'test.cpp', swagger_ui_o, dependencies : [boost, threads, json, api_dep], include_directories : includes)
+a = executable('a.out', 'test.cpp', swagger_ui_o, dependencies : [boost, threads, json, api_dep, log4cxx, curl, uuid], include_directories : includes)
 test('basic test', a, args : ['-l', 'all'])

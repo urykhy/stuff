@@ -95,7 +95,8 @@ namespace Sentry
         struct Request {
             std::string method = "GET";
             std::string url;
-            std::map<std::string, std::string> aux;
+            std::map<std::string, std::string> headers;
+            std::string data;
         };
 
         Message& set_request(const Request& aRequest)
@@ -103,8 +104,10 @@ namespace Sentry
             auto& sJson = m_Root["request"];
             sJson["method"] = aRequest.method;
             sJson["url"] = aRequest.url;
-            for (auto& [x,y] : aRequest.aux)
-                sJson["data"][x] = y;
+            for (auto& [x,y] : aRequest.headers)
+                sJson["headers"][x] = y;
+            if (!aRequest.data.empty())
+                sJson["data"] = aRequest.data;
             return *this;
         }
 

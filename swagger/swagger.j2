@@ -18,6 +18,12 @@
     #include <prometheus/Metrics.hpp>
 {% endif %}
 
+{% set x_sentry = doc['info'].get('x-sentry', false) %}
+{% if x_sentry %}
+    #include <container/Session.hpp>
+    #include <sentry/Message.hpp>
+{% endif %}
+
 {% macro complex_schema(schema, name='body', opt=False) -%}
     {%- for s in schema | swagger_decode(name) %}
         {%- if 'fields' in s %}
@@ -87,6 +93,12 @@
         {%- set response = v | swagger_expand_ref %}
         {{ caller(name, k, response) }}
     {%- endfor %}
+{% endmacro %}
+
+{% macro _parameters(doc, path, method) %}
+    {%- set p1 = doc['paths'][path].get('parameters', []) | swagger_expand_refs %}
+    {%- set p2 = doc['paths'][path][method].get('parameters', []) | swagger_expand_refs %}
+    {%- set params = p1 + p2 | sort(attribute='name') %}
 {% endmacro %}
 
 namespace api {
@@ -271,7 +283,7 @@ namespace api {
                     asio_http::ClientRequest sRequest={
                         .method = http::verb::{{ method | swagger_method }},
                         .url = "{{ doc['servers'][0]['url'] | join('') | swagger_prefix }}",
-                        .headers = { {asio_http::http::field::accept, "application/cbor"} }
+                        .headers = { {asio_http::Headers::Accept, "application/cbor"} }
                     };
 
                     std::string sPath;
@@ -313,16 +325,16 @@ namespace api {
 
                     {%- for param in params if param['in'] == 'header' %}
                         if (swagger::is_specified({{ _name(param) }}) )
-                            sRequest.headers[http::string_to_field("{{ param.name }}")] = Format::url_encode(swagger::format({{ _name(param) }}));
+                            sRequest.headers[swagger::header("{{ param.name }}").to_string()] = Format::url_encode(swagger::format({{ _name(param) }}));
                     {%- endfor %}
 
                     {%- if binary > 0 %}
-                        sRequest.headers[http::field::content_type] = "application/octet-stream";
+                        sRequest.headers[asio_http::Headers::ContentType] = "application/octet-stream";
                         sRequest.body = body;
                     {%- elif json > 0 %}
                         cbor::omemstream sOut;
                         cbor::write(sOut, body);
-                        sRequest.headers[http::field::content_type] = "application/cbor";
+                        sRequest.headers[asio_http::Headers::ContentType] = "application/cbor";
                         sRequest.body = sOut.str();
                     {%- endif %}
 
@@ -372,7 +384,7 @@ namespace api {
                     {#  push response headers #}
                     {%- for k,v in headers | dictsort %}
                         if ( swagger::is_specified({{ _name(k) }}) )
-                            aResponse.set(http::string_to_field("{{ k }}"), Format::url_encode(swagger::format({{ _name(k) }})));
+                            aResponse.set(swagger::header("{{ k }}"), Format::url_encode(swagger::format({{ _name(k) }})));
                     {%- endfor -%}
 
                     aResponse.result({{ k }});
@@ -408,9 +420,8 @@ namespace api {
 
         struct server
         {
-        {% set x_prometheus = doc['info'].get('x-prometheus', false) %}
         {% if x_prometheus %}
-            struct __metrics_t
+            struct Metrics
             {
             {%- call(doc, path, method, name) _for_every_method(doc) -%}
                 {% set tag = 'api="' + doc['info']['title'] + '", version="' + doc['info']['version'] + '", service="' + name + '"' %}
@@ -423,7 +434,21 @@ namespace api {
                 Prometheus::Counter<> responses_{{ name }}_5xx {R"(swagger_responses{{ _open }}{{ tag }}, status="5xx"{{ _close }})"};
             {%- endcall -%}
             };
-            __metrics_t __metrics;
+            Metrics m_Metrics;
+        {% endif %}
+
+        {% if x_sentry %}
+            std::mutex m_SentryLock;
+            time_t m_SentryRateLimit = 0;
+            time_t m_SentryLastCall = 0;
+            using SentryHandler = std::function<void(Sentry::Message& aMessage)>;
+            SentryHandler m_SentryHandler;
+
+            void with_sentry(SentryHandler aHandler, time_t aRate = 60)
+            {
+                m_SentryRateLimit = aRate;
+                m_SentryHandler = aHandler;
+            }
         {% endif %}
 
         {% call(doc, path, method, name) _for_every_method(doc) %}
@@ -436,13 +461,13 @@ namespace api {
                 namespace http = boost::beast::http;
 
                 {% if x_prometheus %}
-                    __metrics.requests_{{ name }}.tick();
+                    m_Metrics.requests_{{ name }}.tick();
                     Time::Meter __meter;
                     Util::Raii __account([&](){
-                        __metrics.time_{{ name }}.account(__meter.get().to_double());
-                        if (aResponse.result() >= http::status::ok and aResponse.result() < http::status::multiple_choices) __metrics.responses_{{ name }}_2xx.tick();
-                        else if (aResponse.result() >= http::status::bad_request and aResponse.result() < http::status::internal_server_error) __metrics.responses_{{ name }}_4xx.tick();
-                        else if (aResponse.result() >= http::status::internal_server_error) __metrics.responses_{{ name }}_5xx.tick();
+                        m_Metrics.time_{{ name }}.account(__meter.get().to_double());
+                        if (aResponse.result() >= http::status::ok and aResponse.result() < http::status::multiple_choices) m_Metrics.responses_{{ name }}_2xx.tick();
+                        else if (aResponse.result() >= http::status::bad_request and aResponse.result() < http::status::internal_server_error) m_Metrics.responses_{{ name }}_4xx.tick();
+                        else if (aResponse.result() >= http::status::internal_server_error) m_Metrics.responses_{{ name }}_5xx.tick();
                     });
                 {% endif %}
 
@@ -455,6 +480,30 @@ namespace api {
                     aResponse.result(http::status::bad_request);
                     aResponse.set("X-From-Swagger", "1");
                     aResponse.body() = e.what();
+                    {% if x_sentry %}
+                        std::unique_lock sLock(m_SentryLock, std::defer_lock);
+                        if (sLock.try_lock() and m_SentryHandler and time(nullptr) > m_SentryLastCall + m_SentryRateLimit)
+                        {
+                            Sentry::Message::Request sRequest;
+                            sRequest.method = "{{ method }}";
+                            sRequest.url = aRequest.target().to_string();
+                            sRequest.data = aRequest.body().substr(0, 10240); {# up to 10Kb body #}
+                            {%- set p1 = doc['paths'][path].get('parameters', []) | swagger_expand_refs %}
+                            {%- set p2 = doc['paths'][path][method].get('parameters', []) | swagger_expand_refs %}
+                            {%- set params = p1 + p2 | sort(attribute='name') %}
+                            {%- for param in params if param['in'] == 'header' %}
+                                if (const auto& x = aRequest["{{ param.name }}"]; !x.empty())
+                                    sRequest.headers["{{ param.name }}"] = x.to_string();
+                            {%- endfor %}
+                            Sentry::Message sMessage("swagger");
+                            sMessage.set_request(sRequest).set_exception("bad request", e.what());
+                            sMessage.set_version("{{ doc['info']['title'] }}", "{{ doc['info']['version'] }}");
+                            if (auto x = Container::Session::get<std::string>("peer"); x.has_value())
+                                sMessage.set_user("", *x);
+                            m_SentryLastCall = time(nullptr);
+                            m_SentryHandler(sMessage);
+                        }
+                    {% endif %}
                     return;
                 }
 

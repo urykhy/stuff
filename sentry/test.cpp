@@ -20,7 +20,7 @@ BOOST_AUTO_TEST_CASE(simple)
 
     Sentry::Message::Request sRequest;
     sRequest.url="https://docs.sentry.io/development/sdk-dev/event-payloads/request/";
-    sRequest.aux["data"]="Submitted data in a format that makes the most sense";
+    sRequest.data="Submitted data in a format that makes the most sense";
 
     auto sCurlVersion = curl_version_info(CURLVERSION_NOW);
 
