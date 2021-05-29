@@ -148,6 +148,19 @@ paths:
       parameters: []
       description: test 3
     parameters: []
+  /test_4/image_in_body:
+    get:
+      summary: Accept svg in body
+      tags: []
+      responses:
+        '200':
+          description: OK
+      operationId: get-test_4-image_in_body
+      requestBody:
+        content:
+          image/svg+xml:
+            schema:
+              type: string
 components:
   schemas: {}
   parameters:

@@ -45,6 +45,36 @@ paths:
                 example-1:
                   value: {}
       operationId: get-status
+  /profile:
+    get:
+      summary: Create flamegraph profile
+      tags:
+        - Common
+      responses:
+        '200':
+          description: OK
+          content:
+            image/svg+xml:
+              schema:
+                type: string
+      operationId: get-profile
+      parameters:
+        - schema:
+            type: string
+            default: cpu
+            enum:
+              - cpu
+              - 'off'
+          in: query
+          name: type
+        - schema:
+            type: integer
+            minimum: 1
+            maximum: 20
+            default: 5
+          in: query
+          name: duration
+      description: ''
 components:
   schemas: {}
 tags:

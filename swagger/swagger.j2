@@ -118,9 +118,10 @@ namespace api {
 
                 {# body #}
                 {%- set body = doc['paths'][path][method].get('requestBody',{}).get('content',{}) %}
-                {%- set binary = body.get('application/octet-stream',{}) | length %}
                 {%- set json = body.get('application/json',{}) | length %}
+                {%- set binary = (json == 0 and body | length == 1) %}
                 {%- if binary > 0 %}
+                    {%- set content_type = body | first %}
                     std::string body;
                 {%- elif json > 0 %}
                     {%- set schema = body.get('application/json').get('schema') %}
@@ -277,13 +278,26 @@ namespace api {
                     {%- endif %}
                 }
 
+                bool __test_content_type(const asio_http::Request& aRequest) const
+                {
+                    const auto sContentType = aRequest["Content-Type"];
+                    if (sContentType.empty())
+                        return true;
+                    {%- if binary > 0 %}
+                        return sContentType == "{{ content_type }}";
+                    {%- elif json > 0 %}
+                        return (sContentType == "application/cbor") || (sContentType == "application/json");
+                    {%- else %}
+                        return false;
+                    {%- endif %}
+                }
+
                 asio_http::ClientRequest __format() const
                 {
                     namespace http = boost::beast::http;
                     asio_http::ClientRequest sRequest={
                         .method = http::verb::{{ method | swagger_method }},
-                        .url = "{{ doc['servers'][0]['url'] | join('') | swagger_prefix }}",
-                        .headers = { {asio_http::Headers::Accept, "application/cbor"} }
+                        .url = "{{ doc['servers'][0]['url'] | join('') | swagger_prefix }}"
                     };
 
                     std::string sPath;
@@ -329,7 +343,7 @@ namespace api {
                     {%- endfor %}
 
                     {%- if binary > 0 %}
-                        sRequest.headers[asio_http::Headers::ContentType] = "application/octet-stream";
+                        sRequest.headers[asio_http::Headers::ContentType] = "{{ content_type }}";
                         sRequest.body = body;
                     {%- elif json > 0 %}
                         cbor::omemstream sOut;
@@ -346,9 +360,10 @@ namespace api {
             struct {{ name }}_response_{{ k }}
                 {%- if k | int >= 300 %} : public {{ _err_class(k) }}{%- endif %}
             {
-                {%- set binary = response.get('content',{}).get('application/octet-stream',{}) | length %}
                 {%- set json = response.get('content',{}).get('application/json',{}) | length %}
+                {%- set binary = (json == 0 and response.get('content',{}) | length == 1) %}
                 {%- if binary > 0 %}
+                    {%- set content_type = response.get('content') | first %}
                     std::string body;
                 {%- elif json > 0 %}
                     {%- set schema = response.get('content',{}).get('application/json').get('schema') %}
@@ -364,7 +379,7 @@ namespace api {
                     {#  format response body #}
                     namespace http = boost::beast::http;
                     {%- if binary > 0 %}
-                        aResponse.set(http::field::content_type, "application/octet-stream");
+                        aResponse.set(http::field::content_type, "{{ content_type }}");
                         aResponse.body() = std::move(body);
                     {%- elif json > 0 %}
                         const auto sAccept = aRequest["Accept"];
@@ -392,15 +407,21 @@ namespace api {
 
                 void __parse(asio_http::Response& aResponse)
                 {
+                    [[maybe_unused]] const auto sContentType = aResponse["Content-Type"];
                     {%- if binary > 0 %}
+                        if (!sContentType.empty() and sContentType != "{{ content_type }}") {
+                            throw std::runtime_error("unexpected content-type: `" + sContentType.to_string() + "`");
+                        }
                         body = aResponse.body();
                     {%- elif json > 0 %}
-                        if (aResponse["Content-Type"] == "application/cbor") {
+                        if (sContentType == "application/cbor") {
                             cbor::imemstream sIn(aResponse.body());
                             cbor::read(sIn, body);
-                        } else {
+                        } if (sContentType == "application/json" or sContentType.empty()) {
                             const auto sJson = Parser::Json::parse(aResponse.body());
                             Parser::Json::from_value(sJson, body);
+                        } else {
+                            throw std::runtime_error("unexpected content-type: `" + sContentType.to_string() + "`");
                         }
                     {%- endif %}
 
@@ -462,9 +483,9 @@ namespace api {
 
                 {% if x_prometheus %}
                     m_Metrics.requests_{{ name }}.tick();
-                    Time::Meter __meter;
-                    Util::Raii __account([&](){
-                        m_Metrics.time_{{ name }}.account(__meter.get().to_double());
+                    Time::Meter sTimeMeter;
+                    Util::Raii sAccount([&](){
+                        m_Metrics.time_{{ name }}.account(sTimeMeter.get().to_double());
                         if (aResponse.result() >= http::status::ok and aResponse.result() < http::status::multiple_choices) m_Metrics.responses_{{ name }}_2xx.tick();
                         else if (aResponse.result() >= http::status::bad_request and aResponse.result() < http::status::internal_server_error) m_Metrics.responses_{{ name }}_4xx.tick();
                         else if (aResponse.result() >= http::status::internal_server_error) m_Metrics.responses_{{ name }}_5xx.tick();
@@ -472,7 +493,12 @@ namespace api {
                 {% endif %}
 
                 {{ name }}_parameters sParameters;
-
+                if (!sParameters.__test_content_type(aRequest))
+                {
+                    aResponse.result(http::status::unsupported_media_type);
+                    aResponse.set("X-From-Swagger", "1");
+                    return;
+                }
                 try {
                     sParameters.__parse(aRequest);
                 }
@@ -610,7 +636,7 @@ namespace api {
                     auto sResponse = asio_http::async(m_Asio, std::move(sRequest)).get();
                     const auto sFromSwagger = !sResponse["X-From-Swagger"].empty();
 
-                    {# default error codes (w/o without content-type) #}
+                    {# error codes from swagger #}
                     if (sFromSwagger)
                     {
                         if (sResponse.result() == asio_http::http::status::bad_request)
