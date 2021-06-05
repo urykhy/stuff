@@ -21,24 +21,15 @@ namespace MySQL::Upload {
     class Consumer
     {
         Threads::DiskQueue::Consumer m_Consumer;
-        const std::string            m_LogTable;
         const MySQL::Config          m_Config;
 
         void upload(const std::string& sName)
         {
             INFO("start uploading " << sName);
-            bool              sAlready  = false;
             const std::string sFileName = File::getFilename(sName);
             MySQL::Connection sClient(m_Config);
 
             sClient.Query("BEGIN");
-            sClient.Query("SELECT 1 FROM " + m_LogTable + " WHERE name = '" + sFileName + "'");
-            sClient.Use([&sAlready](MySQL::Row&&) { sAlready = true; });
-            if (sAlready) {
-                INFO("already uploaded");
-                return;
-            }
-            sClient.Query("INSERT INTO " + m_LogTable + "(name) VALUES('" + sFileName + "')");
             File::by_string(sName, [&sClient](auto sView) {
                 sClient.Query(std::string(sView));
             });
@@ -47,9 +38,8 @@ namespace MySQL::Upload {
         }
 
     public:
-        Consumer(const std::string& aBase, const std::string& aLogTable, const Config& aConfig)
+        Consumer(const std::string& aBase, const Config& aConfig)
         : m_Consumer({.base = aBase, .ext = ".upload.sql"}, [this](const std::string& aName) { upload(aName); })
-        , m_LogTable(aLogTable)
         , m_Config(aConfig)
         {}
 

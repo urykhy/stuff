@@ -103,9 +103,8 @@ BOOST_AUTO_TEST_CASE(upload)
     MySQL::Connection c(cfg);
     c.Query("USE test");
     c.Query("TRUNCATE TABLE test_data");
-    c.Query("TRUNCATE TABLE upload_log");
 
-    MySQL::Upload::Consumer sWorker("/tmp", "test.upload_log", cfg);
+    MySQL::Upload::Consumer sWorker("/tmp", cfg);
     MySQL::Upload::Producer sQueue("/tmp");
     Threads::Group          tg; // create last one. automagical `wait` in Threads::Group d-tor
     sWorker.start(tg);
