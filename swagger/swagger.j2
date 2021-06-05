@@ -101,6 +101,92 @@
     {%- set params = p1 + p2 | sort(attribute='name') %}
 {% endmacro %}
 
+{% macro _limit(param) %}
+    {%- if param['schema'].get('enum', none) is not none %}
+        static const std::set<{{ param.schema.type | swagger_type }}> sAllowed ={ {{ param | swagger_enum }} };
+        if (sAllowed.find({{ _name(param) }}.value()) == sAllowed.end())
+            throw std::invalid_argument("param `{{ param.name }}` has not allowed value");
+    {%- endif -%}
+
+    {# number limits #}
+    {%- if param['schema'].get('type', none) in ('integer','number') %}
+        {% with %}
+        {%- set xname = _name(param) %}
+        {%- set schema = param['schema'] %}
+        {%- set have_limit = ('minimum' in schema) or ('maximum' in schema) or ('multipleOf' in schema) %}
+        {%- if have_limit %}
+            {%- if 'minimum' in schema %}
+                if ({{ xname }}.value() < {%- if schema.get('exclusiveMinimum', false) is false %}={%- endif %} {{ schema['minimum'] }})
+                    throw std::invalid_argument("param `{{ param.name }}` violates minimum limit");
+            {%- endif %}
+            {%- if 'maximum' in schema %}
+                if ({{ xname }}.value() > {%- if schema.get('exclusiveMaximum', false) is false %}={%- endif %} {{ schema['maximum'] }})
+                    throw std::invalid_argument("param `{{ param.name }}` violates maximum limit");
+            {%- endif %}
+            {%- if 'multipleOf' in schema %}
+                if ({{ xname }}.value() % {{ schema['multipleOf'] }} != 0)
+                    throw std::invalid_argument("param `{{ param.name }}` violates multipleOf limit");
+            {%- endif %}
+        {%- endif %}
+        {%- endwith %}
+    {%- endif -%}
+
+    {# string limits #}
+    {%- if param['schema'].get('type', none) == 'string' %}
+        {% with %}
+        {%- set xname = _name(param) %}
+        {%- set schema = param['schema'] %}
+        {%- set have_limit = ('minLength' in schema) or ('maxLength' in schema) or ('pattern' in schema) %}
+        {%- if have_limit %}
+            {%- if 'minLength' in schema %}
+                if ({{ xname }}.value().size() < {{ schema['minLength'] }})
+                    throw std::invalid_argument("param `{{ param.name }}` violates minimum string length");
+            {%- endif %}
+            {%- if 'maxLength' in schema %}
+                if ({{ xname }}.value().size() > {{ schema['maxLength'] }})
+                    throw std::invalid_argument("param `{{ param.name }}` violates maximum string length");
+            {%- endif %}
+            {%- if 'pattern' in schema %}
+                if (std::regex_match({{ xname }}.value(), std::regex("{{ schema['pattern'] }}")))
+                    throw std::invalid_argument("param `{{ param.name }}` violates pattern");
+            {%- endif %}
+        {%- endif %}
+        {%- endwith %}
+    {%- endif -%}
+
+    {# array limits #}
+    {%- if param['schema'].get('type', none) == 'array' %}
+    {% with %}
+        {%- set xname = _name(param) %}
+        {%- set schema = param['schema'] %}
+        {%- set have_limit = ('minItems' in schema) or ('maxItems' in schema) or ('uniqueItems' in schema) %}
+        {%- if have_limit %}
+            {%- if 'minItems' in schema %}
+                if ({{ xname }}.size() < {{ schema['minItems'] }})
+                    throw std::invalid_argument("param `{{ param.name }}` violates minimum array length");
+            {%- endif %}
+            {%- if 'maxItems' in schema %}
+                if ({{ xname }}.size() > {{ schema['maxItems'] }})
+                    throw std::invalid_argument("param `{{ param.name }}` violates maximum array length");
+            {%- endif %}
+            {%- if 'uniqueItems' in schema %}
+                if (!Container::is_unique({{ xname }}))
+                    throw std::invalid_argument("param `{{ param.name }}` contain duplicates");
+            {%- endif %}
+        {%- endif %}
+        {%- if param.in == 'query' %}
+            {%- if param.get('style','form') != 'form' or param.get('explode', true) != false %}
+                {{ swagger_raise('only [style=form, explode=false] arrays are supported in query') }}
+            {%- endif %}
+        {%- elif param.in in ('path', 'header') %}
+            {%- if param.get('style','simple') != 'simple' %}
+                {{ swagger_raise('only [style=simple] arrays are supported in path') }}
+            {%- endif %}
+        {%- endif %}
+    {%- endwith %}
+    {%- endif -%}
+{% endmacro %}
+
 namespace api {
     {% set Aname = (doc['info']['title'], doc['info']['version']) | join('_') | replace('.', '_') %}
     namespace {{ Aname }}
@@ -135,7 +221,7 @@ namespace api {
                     {% if params | selectattr('in', 'equalto', 'path') | list | length > 0 %}
                     Parser::http_path_params(sQueryView, "{{ (doc['servers'][0]['url'], path) | join('') | swagger_path }}", [this](auto aName, auto aValue) {
                         {%- for param in params if param['in'] == 'path' %}
-                            if (aName == "{{ param.name }}") { swagger::parse(aValue, {{ _name(param) }}); return; }
+                            if (aName == "{{ param.name }}") { swagger::parse(aValue, {{ _name(param) }}); {{ _limit(param) }} return; }
                         {%- endfor %}
                         throw std::invalid_argument("unexpected param `" + std::string(aName) + '`');
                     });
@@ -143,105 +229,17 @@ namespace api {
 
                     Parser::http_query(sQueryView, [this](auto aName, auto aValue) {
                         {%- for param in params if param['in'] == 'query' %}
-                            if (aName == "{{ param.name }}") { swagger::parse(std::string(aValue), {{ _name(param) }}); return; }
+                            if (aName == "{{ param.name }}") { swagger::parse(std::string(aValue), {{ _name(param) }}); {{ _limit(param) }} return; }
                         {%- endfor %}
                         throw std::invalid_argument("unexpected param `" + std::string(aName) + '`');
                     });
 
                     {%- for param in params if param['in'] == 'header' %}
                         if (auto sValue = Parser::url_decode(aRequest["{{ param.name }}"].to_string()); !sValue.empty())
+                        {
                             swagger::parse(sValue, {{ _name(param) }});
-                    {%- endfor %}
-
-                    {# limits #}
-                    {%- for param in params if param['schema'].get('enum', none) is not none %}
-                        if ( swagger::is_specified({{ _name(param) }}) ) {
-                            static const std::set<{{ param.schema.type | swagger_type }}> sAllowed ={ {{ param | swagger_enum }} };
-                            if (sAllowed.find({{ _name(param) }}.value()) == sAllowed.end())
-                                throw std::invalid_argument("param `{{ param.name }}` has not allowed value");
+                            {{ _limit(param) }}
                         }
-                    {%- endfor %}
-
-                    {# number limits #}
-                    {%- for param in params if param['schema'].get('type', none) in ('integer','number') %}
-                        {% with %}
-                        {%- set xname = _name(param) %}
-                        {%- set schema = param['schema'] %}
-                        {%- set have_limit = ('minimum' in schema) or ('maximum' in schema) or ('multipleOf' in schema) %}
-                        {%- if have_limit %}
-                        if ( swagger::is_specified({{ xname }}) ) {
-                            {%- if 'minimum' in schema %}
-                                if ({{ xname }}.value() < {%- if schema.get('exclusiveMinimum', false) is false %}={%- endif %} {{ schema['minimum'] }})
-                                    throw std::invalid_argument("param `{{ param.name }}` violates minimum limit");
-                            {%- endif %}
-                            {%- if 'maximum' in schema %}
-                                if ({{ xname }}.value() > {%- if schema.get('exclusiveMaximum', false) is false %}={%- endif %} {{ schema['maximum'] }})
-                                    throw std::invalid_argument("param `{{ param.name }}` violates maximum limit");
-                            {%- endif %}
-                            {%- if 'multipleOf' in schema %}
-                                if ({{ xname }}.value() % {{ schema['multipleOf'] }} != 0)
-                                    throw std::invalid_argument("param `{{ param.name }}` violates multipleOf limit");
-                            {%- endif %}
-                        }
-                        {%- endif %}
-                        {%- endwith %}
-                    {%- endfor %}
-
-                    {# string limits #}
-                    {%- for param in params if param['schema'].get('type', none) == 'string' %}
-                        {% with %}
-                        {%- set xname = _name(param) %}
-                        {%- set schema = param['schema'] %}
-                        {%- set have_limit = ('minLength' in schema) or ('maxLength' in schema) or ('pattern' in schema) %}
-                        {%- if have_limit %}
-                        if ( swagger::is_specified({{ xname }}) ) {
-                            {%- if 'minLength' in schema %}
-                                if ({{ xname }}.value().size() < {{ schema['minLength'] }})
-                                    throw std::invalid_argument("param `{{ param.name }}` violates minimum string length");
-                            {%- endif %}
-                            {%- if 'maxLength' in schema %}
-                                if ({{ xname }}.value().size() > {{ schema['maxLength'] }})
-                                    throw std::invalid_argument("param `{{ param.name }}` violates maximum string length");
-                            {%- endif %}
-                            {%- if 'pattern' in schema %}
-                                if (std::regex_match({{ xname }}.value(), std::regex("{{ schema['pattern'] }}")))
-                                    throw std::invalid_argument("param `{{ param.name }}` violates pattern");
-                            {%- endif %}
-                        }
-                        {%- endif %}
-                        {%- endwith %}
-                    {%- endfor %}
-
-                    {# array limits #}
-                    {%- for param in params if param['schema'].get('type', none) == 'array' %}
-                    {% with %}
-                        {%- set xname = _name(param) %}
-                        {%- set schema = param['schema'] %}
-                        {%- set have_limit = ('minItems' in schema) or ('maxItems' in schema) or ('uniqueItems' in schema) %}
-                        {%- if have_limit %}
-                            {%- if 'minItems' in schema %}
-                                if ({{ xname }}.size() < {{ schema['minItems'] }})
-                                    throw std::invalid_argument("param `{{ param.name }}` violates minimum array length");
-                            {%- endif %}
-                            {%- if 'maxItems' in schema %}
-                                if ({{ xname }}.size() > {{ schema['maxItems'] }})
-                                    throw std::invalid_argument("param `{{ param.name }}` violates maximum array length");
-                            {%- endif %}
-                            {%- if 'uniqueItems' in schema %}
-                                if (!Container::is_unique({{ xname }}))
-                                    throw std::invalid_argument("param `{{ param.name }}` contain duplicates");
-                            {%- endif %}
-                        {%- endif %}
-                        {%- if param.in == 'query' %}
-                            {%- if param.get('style','form') != 'form' or param.get('explode', true) != false %}
-                                {{ swagger_raise('only [style=form, explode=false] arrays are supported in query') }}
-                            {%- endif %}
-                        {%- elif param.in in ('path', 'header') %}
-                            {%- if param.get('style','simple') != 'simple' %}
-                                {{ swagger_raise('only [style=simple] arrays are supported in path') }}
-                            {%- endif %}
-                        {%- endif %}
-                    {%- endwith %}
                     {%- endfor %}
 
                     {# default value #}
