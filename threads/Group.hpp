@@ -1,22 +1,24 @@
 #pragma once
 #include <cmath>
+#include <functional>
 #include <list>
 #include <thread>
-#include <functional>
 
-namespace Threads
-{
+#include <time/Meter.hpp>
+
+namespace Threads {
     struct Group
     {
         typedef std::function<void()> Handler;
-    public:
 
+    public:
         void start(Handler aHandler, size_t aCount = 1)
         {
             for (size_t i = 0; i < aCount; i++)
                 m_Threads.push_back(std::thread(aHandler));
         }
-        template<class F> void at_stop(F aStop) { m_Stoppers.push_back(aStop);  }
+        template <class F>
+        void at_stop(F aStop) { m_Stoppers.push_back(aStop); }
 
         void wait()
         {
@@ -29,17 +31,15 @@ namespace Threads
         }
 
         ~Group() throw() { wait(); }
+
     private:
-        std::list<std::thread> m_Threads;
+        std::list<std::thread>               m_Threads;
         std::list<std::function<void(void)>> m_Stoppers;
     };
 
-    inline void sleep(float f)
+    inline void sleep(double aTime)
     {
-        const struct timespec sleep_time{
-            time_t(std::floor(f)),
-            long((f - std::floor(f)) * 1000000000)
-        };
-        nanosleep(&sleep_time, nullptr);
+        const Time::time_spec sTime(aTime);
+        nanosleep(&sTime, nullptr);
     }
-}
+} // namespace Threads

@@ -43,8 +43,8 @@ namespace Prometheus {
 
             struct rusage sUsage;
             if (getrusage(RUSAGE_SELF, &sUsage) == 0) {
-                m_User.set(::Time::time_val(sUsage.ru_utime).to_double());
-                m_System.set(::Time::time_val(sUsage.ru_stime).to_double());
+                m_User.set(::Time::time_spec(sUsage.ru_utime).to_double());
+                m_System.set(::Time::time_spec(sUsage.ru_stime).to_double());
             }
         }
     };
