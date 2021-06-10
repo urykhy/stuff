@@ -39,17 +39,7 @@ namespace Archive {
     class WriteLZ4 : public IFilter
     {
         LZ4F_compressionContext_t m_State;
-
-        enum
-        {
-            BUFFER_SIZE = 64 * 1024
-        };
-
-        std::string m_InputBuffer; // plain input data
-        size_t      m_InputEnd = 0;
-        std::string m_Buffer; // compressed data
-        size_t      m_Pos = 0;
-        size_t      m_End = 0;
+        bool                      m_Started{false};
 
         void check(const char* aMsg, size_t aCode)
         {
@@ -57,112 +47,73 @@ namespace Archive {
                 throw std::runtime_error("WriteLZ4: fail to " + std::string(aMsg) + ": " + std::string(LZ4F_getErrorName(aCode)));
         }
 
-        void start_i()
-        {
-            size_t sRC = LZ4F_compressBegin(m_State, &m_Buffer[0], m_Buffer.size(), nullptr);
-            check("LZ4F_compressBegin", sRC);
-            m_End   = sRC;
-            m_Stage = STARTED;
-        }
-
-        void finish_i()
-        {
-            size_t sRC = LZ4F_compressEnd(m_State, &m_Buffer[0], m_Buffer.size(), nullptr);
-            check("LZ4F_compressEnd", sRC);
-            m_End   = sRC;
-            m_Stage = FINISHED;
-        }
-
-        enum State
-        {
-            IDLE,
-            STARTED,
-            FINISHED
-        };
-        unsigned m_Stage = IDLE;
-
-        Pair flushBuffer(char* aDst, size_t aDstLen)
-        {
-            // flush previous data
-            size_t sMin = std::min(m_End - m_Pos, aDstLen);
-            memcpy(aDst, &m_Buffer[m_Pos], sMin);
-            m_Pos += sMin;
-            if (m_Pos == m_End) {
-                m_Pos = 0;
-                m_End = 0;
-            }
-            return {0, sMin};
-        }
-
-        size_t collectInput(const char* aSrc, size_t aSrcLen)
-        {
-            size_t sMin = std::min(BUFFER_SIZE - m_InputEnd, aSrcLen);
-            memcpy(&m_InputBuffer[m_InputEnd], aSrc, sMin);
-            m_InputEnd += sMin;
-            return sMin;
-        }
-
-        void compressBuffer()
-        {
-            size_t sRC = LZ4F_compressUpdate(m_State, &m_Buffer[0], m_Buffer.size(), &m_InputBuffer[0], m_InputEnd, nullptr);
-            check("LZ4F_compressUpdate", sRC);
-            m_InputEnd = 0;
-            m_End      = sRC;
-        }
-
     public:
         WriteLZ4()
-        : m_InputBuffer(BUFFER_SIZE, ' ')
-        , m_Buffer(LZ4F_compressBound(BUFFER_SIZE, nullptr), ' ')
         {
             check("LZ4F_createCompressionContext", LZ4F_createCompressionContext(&m_State, LZ4F_VERSION));
         }
 
+        size_t estimate(size_t aSize) override
+        {
+            if (!m_Started)
+                return LZ4F_HEADER_SIZE_MAX;
+            return LZ4F_compressBound(aSize, nullptr);
+        }
+
         Pair filter(const char* aSrc, size_t aSrcLen, char* aDst, size_t aDstLen) override
         {
-            if (m_End > 0)
-                return flushBuffer(aDst, aDstLen);
+            if (!m_Started) {
+                if (aDstLen < LZ4F_HEADER_SIZE_MAX)
+                    throw std::runtime_error("WriteLZ4: small output buffer");
 
-            if (m_Stage == IDLE) {
-                start_i();
-                return flushBuffer(aDst, aDstLen);
+                size_t sUsed = LZ4F_compressBegin(m_State, aDst, aDstLen, nullptr);
+                check("LZ4F_compressBegin", sUsed);
+                m_Started = true;
+                return {0, sUsed};
+            } else {
+                aSrcLen = limitSrcLen(aSrcLen, aDstLen);
             }
 
-            Pair sResult;
-            // collect full 64kb block
-            if (m_InputEnd < BUFFER_SIZE)
-                sResult.usedSrc = collectInput(aSrc, aSrcLen);
+            size_t sUsed = LZ4F_compressUpdate(m_State, aDst, aDstLen, aSrc, aSrcLen, nullptr);
+            check("LZ4F_compressUpdate", sUsed);
 
-            if (m_InputEnd == BUFFER_SIZE) {
-                compressBuffer();
-                sResult += flushBuffer(aDst, aDstLen);
-            }
-
-            return sResult;
+            return Pair{aSrcLen, sUsed};
         }
 
         Finish finish(char* aDst, size_t aDstLen) override
         {
-            if (m_End > 0)
-                return {flushBuffer(aDst, aDstLen).usedDst, false};
+            if (aDstLen < estimate(0))
+                throw std::runtime_error("WriteLZ4: small output buffer");
 
-            if (m_InputEnd != 0) {
-                compressBuffer();
-                if (m_End > 0)
-                    return {flushBuffer(aDst, aDstLen).usedDst, false};
-            }
-
-            if (m_Stage == STARTED) {
-                finish_i();
-                return {flushBuffer(aDst, aDstLen).usedDst, false};
-            }
-
-            return {0, true};
+            size_t sUsed = LZ4F_compressEnd(m_State, aDst, aDstLen, nullptr);
+            check("LZ4F_compressEnd", sUsed);
+            m_Started = false;
+            return Finish{sUsed, true};
         }
 
         virtual ~WriteLZ4()
         {
             LZ4F_freeCompressionContext(m_State);
+        }
+
+        size_t limitSrcLen(size_t aSrcLen, size_t aDstLen)
+        {
+            if (aDstLen >= estimate(aSrcLen))
+                return aSrcLen;
+
+            // ensure minimum size
+            size_t sDstMinimal = estimate(64 * 1024);
+            if (aDstLen < sDstMinimal)
+                throw std::runtime_error("WriteLZ4: small output buffer");
+
+            // reduce input size based on 64K block size
+            size_t sDstBlockCount = aDstLen / sDstMinimal;
+            aSrcLen = std::min(sDstBlockCount * 64 * 1024, aSrcLen);
+
+            // ensure reduced size is ok
+            if (aDstLen < estimate(aSrcLen))
+                throw std::runtime_error("WriteLZ4: small output buffer");
+            return aSrcLen;
         }
     };
 

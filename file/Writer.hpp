@@ -5,11 +5,11 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include "Interface.hpp"
+
 #include <archive/Interface.hpp>
 #include <exception/Error.hpp>
 #include <unsorted/Unwind.hpp>
-
-#include "Interface.hpp"
 
 namespace File {
 
@@ -77,6 +77,12 @@ namespace File {
         char*  ptr() { return &m_Buffer[m_End]; }
         size_t avail() const { return m_Buffer.size() - m_End; }
 
+        void ensure(size_t aRequired)
+        {
+            if (aRequired > 0 and avail() < aRequired)
+                m_Buffer.resize(aRequired + m_End);
+        }
+
     public:
         BufWriter(IWriter* aWriter, size_t aLen = DEFAULT_BUFFER_SIZE)
         : m_Writer(aWriter)
@@ -126,7 +132,7 @@ namespace File {
         Archive::IFilter* m_Filter;
 
     public:
-        FilterWriter(IWriter* aWriter, Archive::IFilter* aFilter, size_t aLen = 64 * 1024)
+        FilterWriter(IWriter* aWriter, Archive::IFilter* aFilter, size_t aLen = DEFAULT_BUFFER_SIZE)
         : BufWriter(aWriter, aLen)
         , m_Filter(aFilter)
         {}
@@ -136,10 +142,12 @@ namespace File {
             const char* sPtr  = (const char*)aPtr;
             size_t      sUsed = 0;
             while (sUsed < aSize) {
-                auto sInfo = m_Filter->filter(sPtr + sUsed, aSize - sUsed, ptr(), avail());
+                size_t sInputSize = std::min(DEFAULT_BUFFER_SIZE, aSize - sUsed);
+                ensure(m_Filter->estimate(sInputSize));
+                auto sInfo = m_Filter->filter(sPtr + sUsed, sInputSize, ptr(), avail());
                 m_End += sInfo.usedDst;
                 sUsed += sInfo.usedSrc;
-                if (m_End == m_Buffer.size()) {
+                if (m_End == m_Buffer.size() or m_End >= DEFAULT_BUFFER_SIZE) {
                     flush();
                 }
             }
@@ -149,6 +157,7 @@ namespace File {
             if (m_Filter == nullptr)
                 return;
             while (true) {
+                ensure(m_Filter->estimate(0));
                 auto sInfo = m_Filter->finish(ptr(), avail());
                 m_End += sInfo.usedDst;
                 flush();

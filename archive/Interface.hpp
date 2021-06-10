@@ -24,6 +24,10 @@ namespace Archive {
             size_t usedDst = 0;
             bool   done    = false;
         };
+
+        // size of dst space required, to make progress
+        virtual size_t estimate(size_t aSize) { return 0; }
+
         virtual Pair   filter(const char* aSrc, size_t aSrcLen, char* aDst, size_t aDstLen) = 0;
         virtual Finish finish(char* aDst, size_t aDstLen) { return {0, true}; }
         virtual ~IFilter(){};

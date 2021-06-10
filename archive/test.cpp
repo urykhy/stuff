@@ -3,16 +3,16 @@
 
 #include <boost/mpl/list.hpp>
 
-#include <file/File.hpp>
-#include <format/Float.hpp>
-#include <time/Meter.hpp>
-
 #include "Bzip2.hpp"
 #include "Gzip.hpp"
 #include "LZ4.hpp"
 #include "Util.hpp"
 #include "XZ.hpp"
 #include "Zstd.hpp"
+
+#include <file/File.hpp>
+#include <format/Float.hpp>
+#include <time/Meter.hpp>
 
 template <class T>
 std::string simpleFilter(const std::string& aStr)
@@ -24,7 +24,12 @@ std::string simpleFilter(const std::string& aStr)
     size_t sInputPos = 0;
     while (sInputPos < aStr.size()) {
         auto sInputSize = std::min(aStr.size() - sInputPos, 2ul); // input upto 2 bytes
-        auto sInfo      = sFilter.filter(aStr.data() + sInputPos, sInputSize, &sBuffer[0], sBuffer.size());
+
+        auto sDstSize = sFilter.estimate(sInputSize);
+        if (sDstSize > 0)
+            sBuffer.resize(sDstSize);
+
+        auto sInfo = sFilter.filter(aStr.data() + sInputPos, sInputSize, &sBuffer[0], sBuffer.size());
         sInputPos += sInfo.usedSrc;
         sResult.append(sBuffer.substr(0, sInfo.usedDst));
         if (sInfo.usedDst == 0 and sInfo.usedSrc == 0)
@@ -32,6 +37,10 @@ std::string simpleFilter(const std::string& aStr)
     }
 
     while (true) {
+        auto sDstSize = sFilter.estimate(0);
+        if (sDstSize > 0)
+            sBuffer.resize(sDstSize);
+
         auto sInfo = sFilter.finish(&sBuffer[0], sBuffer.size());
         sResult.append(sBuffer.substr(0, sInfo.usedDst));
         if (sInfo.done)
@@ -103,6 +112,17 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(concat, T, FilterTypes)
 
     const std::string sClear = simpleFilter<typename T::D>(sC1 + sC2);
     BOOST_CHECK_EQUAL(sClear, "hello world");
+}
+BOOST_AUTO_TEST_CASE(Lz4BufferSize)
+{
+    char sTmp[LZ4F_HEADER_SIZE_MAX];
+
+    Archive::WriteLZ4 sLZ;
+    sLZ.filter(0, 0, sTmp, LZ4F_HEADER_SIZE_MAX); // write header, so estimate will not be limited to LZ4F_HEADER_SIZE_MAX
+
+    BOOST_CHECK_THROW(sLZ.limitSrcLen(100 * 1024, 64 * 1024), std::runtime_error); // 64Kb buffer is less than minimal
+    BOOST_CHECK_EQUAL(sLZ.limitSrcLen(100 * 1024, 100 * 1024), 65536);             // process upto 64Kb if dst buffer is 100Kb
+    BOOST_CHECK_EQUAL(sLZ.limitSrcLen(100 * 1024, 200 * 1024), 102400);            // process all input if output buffer is large enough
 }
 BOOST_AUTO_TEST_CASE(ZstdThreads)
 {

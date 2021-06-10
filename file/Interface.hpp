@@ -8,7 +8,7 @@
 
 namespace File {
 
-    constexpr unsigned DEFAULT_BUFFER_SIZE = 128 * 1024;
+    constexpr size_t DEFAULT_BUFFER_SIZE = 128 * 1024;
 
     struct IReader : public boost::noncopyable
     {

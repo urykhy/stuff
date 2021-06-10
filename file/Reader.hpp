@@ -138,7 +138,7 @@ namespace File {
         }
 
     public:
-        FilterReader(IReader* aReader, Archive::IFilter* aFilter, size_t aLen = 64 * 1024)
+        FilterReader(IReader* aReader, Archive::IFilter* aFilter, size_t aLen = DEFAULT_BUFFER_SIZE)
         : BufReader(aReader, aLen)
         , m_Filter(aFilter)
         {}
