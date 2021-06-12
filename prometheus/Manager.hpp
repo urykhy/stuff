@@ -5,36 +5,30 @@
 #include <set>
 #include <string>
 
+#include <boost/core/noncopyable.hpp>
+
 namespace Prometheus {
 
     // normal metric
-    struct MetricFace
+    struct MetricFace : public boost::noncopyable
     {
         const std::string m_Name;
 
         MetricFace(const std::string& aName);
         virtual std::string format() const = 0;
         virtual ~MetricFace();
-
-    private:
-        MetricFace(const MetricFace&) = delete;
-        MetricFace& operator=(const MetricFace&) = delete;
     };
 
     // complex metric. update called to refresh child state
-    struct ComplexFace
+    struct ComplexFace : public boost::noncopyable
     {
         ComplexFace();
         virtual void update() = 0;
         virtual ~ComplexFace();
-
-    private:
-        ComplexFace(const ComplexFace&) = delete;
-        ComplexFace& operator=(const ComplexFace&) = delete;
     };
 
     // metrics storage
-    class Manager
+    class Manager : public boost::noncopyable
     {
         using Lock = std::unique_lock<std::mutex>;
         mutable std::mutex     m_Mutex;

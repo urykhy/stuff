@@ -3,6 +3,7 @@
 
 #include "API.hpp"
 #include "Common.hpp"
+#include "GetOrCreate.hpp"
 #include "Metrics.hpp"
 
 #include <asio_http/Client.hpp>
@@ -55,5 +56,13 @@ BOOST_AUTO_TEST_CASE(router)
     BOOST_CHECK_EQUAL(sResponse.result(), asio_http::http::status::ok);
     BOOST_TEST_MESSAGE("metrics: \n"
                        << sResponse.body());
+}
+BOOST_AUTO_TEST_CASE(get_or_create)
+{
+    using T = Prometheus::Counter<>;
+    Prometheus::GetOrCreate sStore;
+    sStore.get<T>("rps")->set(10);
+    sStore.get<T>("rps")->tick();
+    BOOST_CHECK_EQUAL(sStore.get<T>("rps")->format(), "11");
 }
 BOOST_AUTO_TEST_SUITE_END()
