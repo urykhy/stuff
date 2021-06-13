@@ -1,9 +1,13 @@
 #define BOOST_TEST_MODULE Suites
 #include <boost/test/unit_test.hpp>
 
-#include <Expiration.hpp>
-#include <LRU.hpp>
-#include <S_LRU.hpp>
+#include <boost/mpl/list.hpp>
+
+#include "Expiration.hpp"
+#include "LRU.hpp"
+#include "S_LRU.hpp"
+
+#include <unsorted/Random.hpp>
 
 BOOST_AUTO_TEST_SUITE(Cache)
 BOOST_AUTO_TEST_CASE(lru)
@@ -84,5 +88,29 @@ BOOST_AUTO_TEST_CASE(expiration)
     }
     sleep(2);
     BOOST_CHECK(e.Get(9) == nullptr);
+}
+BOOST_AUTO_TEST_SUITE_END()
+BOOST_AUTO_TEST_SUITE(Bench)
+using CacheTypes = boost::mpl::list<Cache::LRU<int, int>, Cache::S_LRU<int, int>>;
+BOOST_AUTO_TEST_CASE_TEMPLATE(zipf, T, CacheTypes)
+{
+    Util::seed();
+
+    const unsigned KEY_COUNT  = 10000;
+    const unsigned CACHE_SIZE = KEY_COUNT * 0.1; // 10%
+    const unsigned CALLS      = KEY_COUNT * 10;  // x10
+    const double   ALPHA      = 0.8;
+
+    Util::Zipf sDist(KEY_COUNT, ALPHA);
+    T          sCache(CACHE_SIZE);
+    unsigned   sHits = 0;
+    for (unsigned i = 0; i < CALLS; i++) {
+        auto sVal = sDist();
+        if (sCache.Get(sVal))
+            sHits++;
+        else
+            sCache.Put(sVal, 0);
+    }
+    BOOST_TEST_MESSAGE("Got " << sHits << " hits from " << CALLS << " requests, hit rate: " << sHits * 100 / double(CALLS) << '%');
 }
 BOOST_AUTO_TEST_SUITE_END()

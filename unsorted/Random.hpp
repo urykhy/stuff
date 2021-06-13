@@ -12,6 +12,11 @@
 
 namespace Util {
 
+    inline void seed(unsigned aSeed = 123)
+    {
+        srand(aSeed);
+    }
+
     // return number in range [0 ... aMax);
     inline uint64_t randomInt(uint64_t aMax)
     {
@@ -29,6 +34,35 @@ namespace Util {
             sResult.push_back(gAlNum[randomInt(sizeof(gAlNum))]);
         return sResult;
     }
+
+    // based on https://github.com/chinuy/zipf/blob/master/zipf.go
+    class Zipf
+    {
+        std::vector<double> m_Dist;
+
+    public:
+        Zipf(unsigned aMax, double aAlpha = 1.0)
+        {
+            std::vector<double> sTmp(aMax, 0);
+            for (unsigned i = 1; i < aMax + 1; i++)
+                sTmp[i - 1] = 1.0 / std::pow(double(i), aAlpha);
+
+            std::vector<double> sZeta(aMax + 1, 0);
+            m_Dist.resize(aMax+1);
+
+            for (unsigned i = 1; i < aMax + 1; i++)
+                sZeta[i] += sZeta[i - 1] + sTmp[i - 1];
+
+            for (unsigned i = 0; i < aMax + 1; i++)
+                m_Dist[i] = sZeta[i] / sZeta[aMax];
+        }
+
+        unsigned operator()() const
+        {
+            auto sIt = std::upper_bound(m_Dist.begin(), m_Dist.end(), drand48());
+            return std::distance(m_Dist.begin(), sIt) - 1;
+        }
+    };
 
     class Random
     {
