@@ -4,6 +4,7 @@
 #include <boost/mpl/list.hpp>
 
 #include "Expiration.hpp"
+#include "LFU.hpp"
 #include "LRU.hpp"
 #include "S_LRU.hpp"
 
@@ -67,6 +68,25 @@ BOOST_AUTO_TEST_CASE(s_lru)
 
     cache.debug([](auto& x) { BOOST_TEST_MESSAGE("element: " << x->key << ' ' << (x->prot ? "prot" : "norm")); });
 }
+BOOST_AUTO_TEST_CASE(lfu)
+{
+    Cache::LFU<int, int> cache(10);
+
+    for (int i = 0; i < 20; i++)
+        cache.Put(i, i);
+
+    cache.Get(10);
+    cache.Get(10);
+    cache.Get(11);
+    cache.debug([](auto& x) { if (x.key == 10 ) BOOST_CHECK_EQUAL(x.freq, 41); });
+
+    for (int i = 20; i < 30; i++)
+        cache.Put(i, i);
+
+    cache.debug([](auto& x) { if (x.key == 11 ) BOOST_CHECK_EQUAL(x.freq, 22); });
+
+    cache.debug([](auto& x) { BOOST_TEST_MESSAGE(x.key << ' ' << x.freq); });
+}
 BOOST_AUTO_TEST_CASE(expiration)
 {
     Cache::Expiration<int, std::string> e(5, 2);
@@ -91,7 +111,7 @@ BOOST_AUTO_TEST_CASE(expiration)
 }
 BOOST_AUTO_TEST_SUITE_END()
 BOOST_AUTO_TEST_SUITE(Bench)
-using CacheTypes = boost::mpl::list<Cache::LRU<int, int>, Cache::S_LRU<int, int>>;
+using CacheTypes = boost::mpl::list<Cache::LRU<int, int>, Cache::S_LRU<int, int>, Cache::LFU<int, int>>;
 BOOST_AUTO_TEST_CASE_TEMPLATE(zipf, T, CacheTypes)
 {
     Util::seed();

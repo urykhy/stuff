@@ -43,8 +43,8 @@ namespace Cache {
         }
 
     public:
-        explicit LRU(size_t mSize)
-        : m_MaxSize(mSize)
+        explicit LRU(size_t aSize)
+        : m_MaxSize(aSize)
         {}
 
         const Value* Get(const Key& key)
