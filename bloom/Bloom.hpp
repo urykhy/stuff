@@ -5,10 +5,10 @@
 #include <cmath>
 #include <cstdint>
 #include <vector>
+
 #include <ssl/Digest.hpp>
 
-namespace Bloom
-{
+namespace Bloom {
     using SmallKey = std::array<uint32_t, 4>;
 
     // n - number of stored elements
@@ -16,22 +16,23 @@ namespace Bloom
     // k - number of bits per element (number hashes per element)
     inline double estimate(double n, double m, double k)
     {
-        const double x = k*n/m;
+        const double x = k * n / m;
         return std::pow(1 - std::exp(-x), k);
     }
 
-    inline SmallKey hash(const std::string& aStr)
+    template <class T>
+    inline SmallKey hash(const T& aVal)
     {
-        SmallKey sKey;
-        const std::string sHash = SSLxx::Digest(EVP_md5(), aStr);
-        assert (sizeof(sKey) == sHash.size());
+        SmallKey          sKey;
+        const std::string sHash = SSLxx::Digest(EVP_md5(), aVal);
+        assert(sizeof(sKey) == sHash.size());
         memcpy(&sKey, sHash.data(), sHash.size());
         return sKey;
     }
 
     class Set
     {
-        const unsigned m_Size;
+        const unsigned       m_Size;
         std::vector<uint8_t> m_Data;
 
         std::pair<unsigned, uint8_t> prepare(uint32_t aBit) const
@@ -52,7 +53,6 @@ namespace Bloom
         }
 
     public:
-
         Set(unsigned aBits)
         : m_Size(aBits)
         , m_Data(aBits / 8)
@@ -60,14 +60,14 @@ namespace Bloom
             assert(aBits % 8 == 0);
         }
 
-        template<class T, std::size_t N>
+        template <class T, std::size_t N>
         void insert(const std::array<T, N>& aSet)
         {
             for (auto& x : aSet)
                 set(x % m_Size);
         }
 
-        template<class T, std::size_t N>
+        template <class T, std::size_t N>
         bool test(const std::array<T, N>& aSet) const
         {
             for (auto& x : aSet)
@@ -82,4 +82,46 @@ namespace Bloom
         }
     };
 
+    class Filter
+    {
+        Set  m_Set1;
+        Set  m_Set2;
+        bool m_Actual1 = true;
+
+        unsigned       m_Counter = 0;
+        const unsigned m_Rotate;
+
+        void Rotate()
+        {
+            auto& sActual = m_Actual1 ? m_Set1 : m_Set2;
+            sActual.clear();
+            m_Actual1 = !m_Actual1;
+            m_Counter = 0;
+        }
+
+    public:
+        Filter(unsigned aBits = 8 * 20 * 1024, unsigned aRotate = 5 * 1024)
+        : m_Set1(aBits)
+        , m_Set2(aBits)
+        , m_Rotate(aRotate)
+        {}
+
+        template <class T>
+        void Put(const T& aKey)
+        {
+            m_Set1.insert(aKey);
+            m_Set2.insert(aKey);
+
+            m_Counter++;
+            if (m_Counter > m_Rotate)
+                Rotate();
+        }
+
+        template <class T>
+        bool Check(const T& aKey)
+        {
+            auto& sActual = m_Actual1 ? m_Set1 : m_Set2;
+            return sActual.test(aKey);
+        }
+    };
 } // namespace Bloom

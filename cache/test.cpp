@@ -8,6 +8,9 @@
 #include "LRU.hpp"
 #include "S_LRU.hpp"
 
+#define FILE_NO_ARCHIVE
+#include <file/File.hpp>
+#include <parser/Atoi.hpp>
 #include <unsorted/Random.hpp>
 
 BOOST_AUTO_TEST_SUITE(Cache)
@@ -111,7 +114,7 @@ BOOST_AUTO_TEST_CASE(expiration)
 }
 BOOST_AUTO_TEST_SUITE_END()
 BOOST_AUTO_TEST_SUITE(Bench)
-using CacheTypes = boost::mpl::list<Cache::LRU<int, int>, Cache::S_LRU<int, int>, Cache::LFU<int, int>>;
+using CacheTypes = boost::mpl::list<Cache::LRU<int, int>, Cache::S_LRU<int, int>, Cache::LFU<int, int>,  Cache::BF_LFU<int, int>>;
 BOOST_AUTO_TEST_CASE_TEMPLATE(zipf, T, CacheTypes)
 {
     Util::seed();
@@ -132,5 +135,40 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(zipf, T, CacheTypes)
             sCache.Put(sVal, 0);
     }
     BOOST_TEST_MESSAGE("Got " << sHits << " hits from " << CALLS << " requests, hit rate: " << sHits * 100 / double(CALLS) << '%');
+}
+BOOST_AUTO_TEST_CASE(s3_arc, *boost::unit_test::disabled())
+{
+    /*
+        s3.arc can be found in
+        https://github.com/dgraph-io/benchmarks/tree/master/cachebench/ristretto/trace
+
+        16M requests, 1.6M uniq keys
+
+        LRU      : 12%
+        S_LRU    : 24%
+        LFU      : 29%
+        BF_LFU   : 42%
+    */
+    const unsigned    CACHE_SIZE = 400000;
+    const std::string sFilename  = "/u03/crap/trace/s3.arc";
+
+    unsigned sHits = 0;
+    unsigned sRows = 0;
+
+    Cache::BF_LFU<int, int> sCache(CACHE_SIZE);
+    File::by_string(sFilename, [&](const std::string_view aStr) mutable {
+        auto sSpace = aStr.find(' ');
+        if (sSpace == std::string_view::npos)
+            return;
+        auto sVal = Parser::Atoi<uint64_t>(aStr.substr(0, sSpace));
+        sRows++;
+
+        if (sCache.Get(sVal))
+            sHits++;
+        else
+            sCache.Put(sVal, 0);
+    });
+
+    BOOST_TEST_MESSAGE("Got " << sHits << " hits from " << sRows << " requests, hit rate: " << sHits * 100 / double(sRows) << '%');
 }
 BOOST_AUTO_TEST_SUITE_END()

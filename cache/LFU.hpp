@@ -4,6 +4,8 @@
 #include <boost/multi_index/member.hpp>
 #include <boost/multi_index_container.hpp>
 
+#include <bloom/Bloom.hpp>
+
 namespace Cache {
 
     namespace {
@@ -13,7 +15,7 @@ namespace Cache {
     template <class Key, class Value>
     class LFU : public boost::noncopyable
     {
-    private:
+    protected:
         struct Entry
         {
             Key      key;
@@ -62,16 +64,21 @@ namespace Cache {
             return &i->value;
         }
 
-        void Put(const Key& aKey, const Value& aValue)
+        void Put(const Key& aKey, const Value& aValue, unsigned aCost = 1)
         {
             auto& ks = get<typename Entry::_key>(m_Store);
             auto  i  = ks.find(aKey);
             if (i != ks.end()) {
                 m_Store.modify(i, [&aValue, this](auto& x) { x.value = aValue; x.freq += m_Cost; });
             } else {
-                m_Store.insert(Entry{aKey, aValue, m_Clock + 1});
+                m_Store.insert(Entry{aKey, aValue, m_Clock + aCost});
                 Shrink();
             }
+        }
+
+        size_t Size() const
+        {
+            return m_Store.size();
         }
 
 #ifdef BOOST_TEST_MESSAGE
@@ -83,4 +90,33 @@ namespace Cache {
         }
 #endif
     };
+
+    // BloomFilter in front of LFU
+    template <class Key, class Value>
+    class BF_LFU : public LFU<Key, Value>
+    {
+        using Parent = LFU<Key, Value>;
+        Bloom::Filter m_Bloom;
+
+    public:
+        BF_LFU(size_t aSize, unsigned aCost = 20, unsigned aBloomBits = 8 * 512 * 1024, unsigned aRotate = 128 * 1024)
+        : Parent(aSize, aCost)
+        , m_Bloom(aBloomBits, aRotate)
+        {}
+
+        void Put(const Key& aKey, const Value& aValue)
+        {
+            unsigned   sCost = 1;
+            const auto sHash = Bloom::hash(aKey);
+            if (!m_Bloom.Check(sHash)) {
+                m_Bloom.Put(sHash);
+                if (Parent::Size() >= Parent::m_MaxSize)
+                    return;
+            } else {
+                sCost += Parent::m_Cost; // boost cost, since we already seen this key
+            }
+            Parent::Put(aKey, aValue, sCost);
+        }
+    };
+
 } // namespace Cache

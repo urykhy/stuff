@@ -5,6 +5,7 @@ some information about stuff
 ### libraries
 - asio_http - asio http server and client
 - asio_tnt - tarantool 1.7 client with asio
+- cache - LRU, Segmented-LRU, LFU, LFU with BloomFilter.
 - cbor - cbor format parser/encoder
 - curl - easy and multi handle c++ wrapper
 - etcd - etcd v3 client
