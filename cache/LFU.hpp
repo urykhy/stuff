@@ -1,92 +1,140 @@
 #pragma once
-#include <boost/core/noncopyable.hpp>
-#include <boost/multi_index/hashed_index.hpp>
-#include <boost/multi_index/member.hpp>
-#include <boost/multi_index_container.hpp>
+#include <array>
+#include <list>
 
 #include <bloom/Bloom.hpp>
 
 namespace Cache {
 
-    namespace {
-        using namespace boost::multi_index;
-    }
-
-    template <class Key, class Value>
-    class LFU : public boost::noncopyable
+    template <class Key, class Value, unsigned Size>
+    struct RingAge
     {
-    protected:
         struct Entry
         {
             Key      key;
             Value    value;
-            uint64_t freq;
-
-            struct _key
-            {};
-            struct _freq
-            {};
+            unsigned bucket = 0;
         };
+        using List = std::list<Entry>;
 
-        using Store = boost::multi_index_container<
-            Entry,
-            indexed_by<hashed_unique<
-                           tag<typename Entry::_key>, member<Entry, Key, &Entry::key>>,
-                       ordered_non_unique<
-                           tag<typename Entry::_freq>, member<Entry, uint64_t, &Entry::freq>>>>;
-        Store          m_Store;
-        uint64_t       m_Clock = 0;
+    private:
+        std::array<List, Size> m_Ring;
+        unsigned               m_Clock = 0;
+
+        unsigned boundInc(unsigned aPos, unsigned aW)
+        {
+            if (aPos < m_Clock)
+                aPos += Size;
+            unsigned sOffset = aPos - m_Clock;
+            sOffset = std::min(sOffset + aW, Size - 1);
+            return (m_Clock + sOffset) % Size;
+        }
+
+    public:
+        template <class T>
+        void Shrink(T&& aHandler)
+        {
+            while (true) {
+                auto& sList = m_Ring[m_Clock];
+                if (sList.empty()) {
+                    m_Clock = (m_Clock + 1) % Size;
+                    continue;
+                }
+                auto& sItem = sList.front();
+                aHandler(sItem);
+                sList.pop_front();
+                break;
+            }
+        }
+
+        void Refresh(typename List::iterator aIt, unsigned aCost)
+        {
+            unsigned sNewBucket = boundInc(aIt->bucket, aCost);
+            auto&    sNewList   = m_Ring[sNewBucket];
+            auto&    sOldList   = m_Ring[aIt->bucket];
+            sNewList.splice(sNewList.end(), sOldList, aIt);
+            aIt->bucket = sNewBucket;
+        }
+
+        typename List::iterator Insert(Entry&& aEntry, unsigned aCost)
+        {
+            unsigned sBucket = boundInc(m_Clock, aCost);
+            aEntry.bucket    = sBucket;
+            auto& sList      = m_Ring[sBucket];
+            return sList.insert(sList.end(), std::move(aEntry));
+        }
+
+#ifdef BOOST_TEST_MESSAGE
+        template <class T>
+        void Debug(T&& t) const
+        {
+            for (auto& x : m_Ring)
+                for (auto& y : x)
+                    t(y);
+        }
+#endif
+    };
+
+    // O(1) LFU
+    template <class Key, class Value>
+    class LFU : public boost::noncopyable
+    {
+    protected:
+        static constexpr unsigned BUCKET_COUNT = 1024;
+
+        using Age = RingAge<Key, Value, BUCKET_COUNT>;
+        Age m_Age;
+
+        std::unordered_map<Key, typename Age::List::iterator> m_Keys;
+
         const size_t   m_MaxSize;
         const unsigned m_Cost;
 
         void Shrink()
         {
-            if (m_Store.size() <= m_MaxSize)
+            if (m_Keys.size() <= m_MaxSize)
                 return;
-            auto& fs = get<typename Entry::_freq>(m_Store);
-            m_Clock  = fs.begin()->freq;
-            fs.erase(fs.begin());
+            m_Age.Shrink([this](auto& aItem) { m_Keys.erase(aItem.key); });
         }
 
     public:
         explicit LFU(size_t aSize, unsigned aCost = 20)
-        : m_MaxSize(aSize)
+        : m_Keys(aSize)
+        , m_MaxSize(aSize)
         , m_Cost(aCost)
         {}
 
         const Value* Get(const Key& aKey)
         {
-            auto& ks = get<typename Entry::_key>(m_Store);
-            auto  i  = ks.find(aKey);
-            if (i == ks.end())
+            auto sIt = m_Keys.find(aKey);
+            if (sIt == m_Keys.end())
                 return nullptr;
-            m_Store.modify(i, [this](auto& x) { x.freq += m_Cost; });
-            return &i->value;
+            m_Age.Refresh(sIt->second, m_Cost);
+            return &sIt->second->value;
         }
 
         void Put(const Key& aKey, const Value& aValue, unsigned aCost = 1)
         {
-            auto& ks = get<typename Entry::_key>(m_Store);
-            auto  i  = ks.find(aKey);
-            if (i != ks.end()) {
-                m_Store.modify(i, [&aValue, this](auto& x) { x.value = aValue; x.freq += m_Cost; });
+            auto sIt = m_Keys.find(aKey);
+            if (sIt != m_Keys.end()) {
+                sIt->second->value = aValue;
+                m_Age.Refresh(sIt->second, m_Cost);
             } else {
-                m_Store.insert(Entry{aKey, aValue, m_Clock + aCost});
+                m_Keys[aKey] = m_Age.Insert({aKey, aValue}, aCost);
                 Shrink();
             }
         }
 
         size_t Size() const
         {
-            return m_Store.size();
+            return m_Keys.size();
         }
 
 #ifdef BOOST_TEST_MESSAGE
         template <class T>
-        void debug(T&& t) const
+        void Debug(T&& t) const
         {
-            for (auto& x : m_Store)
-                t(x);
+            m_Age.Debug(std::forward<T>(t));
         }
 #endif
     };

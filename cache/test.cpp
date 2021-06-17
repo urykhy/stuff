@@ -81,14 +81,14 @@ BOOST_AUTO_TEST_CASE(lfu)
     cache.Get(10);
     cache.Get(10);
     cache.Get(11);
-    cache.debug([](auto& x) { if (x.key == 10 ) BOOST_CHECK_EQUAL(x.freq, 41); });
+    cache.Debug([](auto& x) { if (x.key == 10 ) BOOST_CHECK_EQUAL(x.bucket, 41); });
 
     for (int i = 20; i < 30; i++)
         cache.Put(i, i);
 
-    cache.debug([](auto& x) { if (x.key == 11 ) BOOST_CHECK_EQUAL(x.freq, 22); });
+    cache.Debug([](auto& x) { if (x.key == 11 ) BOOST_CHECK_EQUAL(x.bucket, 22); });
 
-    cache.debug([](auto& x) { BOOST_TEST_MESSAGE(x.key << ' ' << x.freq); });
+    cache.Debug([](auto& x) { BOOST_TEST_MESSAGE(x.key << ' ' << x.bucket); });
 }
 BOOST_AUTO_TEST_CASE(expiration)
 {
