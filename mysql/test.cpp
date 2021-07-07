@@ -75,9 +75,8 @@ BOOST_AUTO_TEST_CASE(updateable)
         using Timestamp = time_t;
 
         static void        parse(Container& aDest, const MySQL::Row& aRow) { aDest[aRow[0].as_string()] = aRow[1].as_string(); }
-        static Timestamp   now(Container& aInfo) { return 0; }
         static std::string query(Timestamp aTimestamp) { return "select dept_no, dept_name from departments"; }
-        static void        merge(Container& aSrc, Container& aDst) { std::swap(aSrc, aDst); }
+        static Timestamp   merge(Container& aSrc, Container& aDst) { std::swap(aSrc, aDst); return 0; }
     };
 
     MySQL::Connection              c(cfg);

@@ -41,15 +41,13 @@ namespace MySQL {
 
         void update(MySQL::Connection& aConnection)
         {
-            Lock       lk(m_Mutex);
-            const auto sTimestamp = Policy::now(m_Data); // `timestamp` can be derived from cached data
-            lk.unlock();
             typename Policy::Container sData;
             aConnection.Query(Policy::query(m_Timestamp));
             aConnection.Use([&sData](const MySQL::Row& aRow) { Policy::parse(sData, aRow); });
-            lk.lock();
-            Policy::merge(sData, m_Data);
-            m_Timestamp = sTimestamp;
+
+            Lock lk(m_Mutex);
+            m_Timestamp = Policy::merge(sData, m_Data);
+            lk.unlock();
         }
         std::optional<Value> find(const Key& k) const
         {
