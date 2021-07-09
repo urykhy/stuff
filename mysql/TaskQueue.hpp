@@ -54,8 +54,8 @@ namespace MySQL::TaskQueue {
         {   // resume task only after a hour
             const std::string_view sCond = "(status = 'started' AND updated < DATE_SUB(NOW(), INTERVAL 1 HOUR))";
             switch (m_Config.isolation) {
-            case Config::STRICT: return fmt::format("(status = 'new' OR {1}) AND worker = '{0}'", m_Config.worker, sCond);
-            case Config::RESUME: return fmt::format("status = 'new' OR ({1} AND worker = '{0}')", m_Config.worker, sCond);
+            case Config::STRICT: return fmt::format("(status = 'new' OR {0}) AND worker = '{1}'", sCond, m_Config.worker);
+            case Config::RESUME: return fmt::format("status = 'new' OR ({0} AND worker = '{1}')", sCond, m_Config.worker);
             case Config::NONE: return fmt::format("status = 'new' OR {0}", sCond);
             default: throw std::logic_error("TaskQueue::Manager::Resume");
             };
