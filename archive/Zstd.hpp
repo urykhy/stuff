@@ -2,9 +2,9 @@
 
 #include <zstd.h>
 
-#include <unsorted/Raii.hpp>
-
 #include "Interface.hpp"
+
+#include <unsorted/Raii.hpp>
 
 namespace Archive {
 
@@ -56,7 +56,15 @@ namespace Archive {
         }
 
     public:
-        WriteZstd(int aLevel = 3, int aThreads = 1)
+        struct Params
+        {
+            int  threads       = 1;
+            bool long_matching = false;
+
+            static Params get_default() { return {}; }
+        };
+
+        WriteZstd(int aLevel = 3, const Params& aParams = Params::get_default())
         {
             Util::Raii sGuard([this]() { ZSTD_freeCStream(m_State); });
             m_State = ZSTD_createCStream();
@@ -64,8 +72,10 @@ namespace Archive {
                 throw std::runtime_error("ReadZstd: fail to createCStream");
             check("initCStream", ZSTD_initCStream(m_State, aLevel));
             check("ZSTD_c_checksumFlag", ZSTD_CCtx_setParameter(m_State, ZSTD_c_checksumFlag, 1));
-            if (aThreads > 1)
-                check("set ZSTD_c_nbWorkers", ZSTD_CCtx_setParameter(m_State, ZSTD_c_nbWorkers, aThreads));
+            if (aParams.threads > 1)
+                check("set ZSTD_c_nbWorkers", ZSTD_CCtx_setParameter(m_State, ZSTD_c_nbWorkers, aParams.threads));
+            if (aParams.long_matching)
+                check("set ZSTD_c_enableLongDistanceMatching", ZSTD_CCtx_setParameter(m_State, ZSTD_c_enableLongDistanceMatching, aParams.long_matching));
             sGuard.dismiss();
         }
         Pair filter(const char* aSrc, size_t aSrcLen, char* aDst, size_t aDstLen) override

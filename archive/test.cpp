@@ -126,7 +126,7 @@ BOOST_AUTO_TEST_CASE(Lz4BufferSize)
 }
 BOOST_AUTO_TEST_CASE(ZstdThreads)
 {
-    const std::string sData = File::to_string("/bin/bash");
+    const std::string sData = File::to_string("/usr/bin/blender");
     BOOST_TEST_MESSAGE("source file size: " << sData.size());
 
     Zstd::C      sCompressor1(3);
@@ -134,7 +134,7 @@ BOOST_AUTO_TEST_CASE(ZstdThreads)
     const auto   sC1    = Archive::filter(&sCompressor1, sData);
     const double sTime1 = sMeter.get().to_double();
 
-    Zstd::C sCompressor2(3, 4); // use 4 threads
+    Zstd::C sCompressor2(3, Zstd::C::Params{.threads = 4}); // use 4 threads
     sMeter.reset();
     const auto   sC2    = Archive::filter(&sCompressor2, sData);
     const double sTime2 = sMeter.get().to_double();
@@ -142,5 +142,20 @@ BOOST_AUTO_TEST_CASE(ZstdThreads)
     BOOST_CHECK_CLOSE(float(sC1.size()), float(sC2.size()), 1);
     BOOST_TEST_MESSAGE("1 thread  time: " << sTime1);
     BOOST_TEST_MESSAGE("4 threads time: " << sTime2);
+}
+BOOST_AUTO_TEST_CASE(ZstdLong)
+{
+    const std::string sData = File::to_string("/usr/bin/blender");
+    BOOST_TEST_MESSAGE("source file size: " << sData.size());
+
+    Zstd::C      sCompressor1(3);
+    const auto   sC1    = Archive::filter(&sCompressor1, sData);
+
+    Zstd::C sCompressor2(3, Zstd::C::Params{.long_matching = true});
+    const auto   sC2    = Archive::filter(&sCompressor2, sData);
+
+    BOOST_TEST_MESSAGE("normal size: " << sC1.size());
+    BOOST_TEST_MESSAGE("long   size: " << sC2.size());
+    BOOST_TEST_MESSAGE("reduce     : " << (1 - sC2.size() / (float)sC1.size()) * 100 << '%');
 }
 BOOST_AUTO_TEST_SUITE_END()
