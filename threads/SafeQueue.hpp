@@ -175,4 +175,11 @@ namespace Threads
         bool idle() const           { return m_Done == m_Queue.count(); }
         size_t size() const         { return m_Queue.count() - m_Done; }
     };
+
+    struct QueueExecutor : public SafeQueueThread<std::function<void()>>
+    {
+        QueueExecutor()
+        : SafeQueueThread<std::function<void()>>([](auto& aTask){ aTask(); })
+        {}
+    };
 }

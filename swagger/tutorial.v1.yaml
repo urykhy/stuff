@@ -6,6 +6,7 @@ info:
     name: urykhy
     email: urykhy@gmail.com
   x-sentry: true
+  x-queue: true
 servers:
   - url: 'http://localhost:3000/api/v1'
 paths:

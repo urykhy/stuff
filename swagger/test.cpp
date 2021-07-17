@@ -163,6 +163,18 @@ struct jsonParam : api::jsonParam_1_0::server
     }
 };
 
+struct TutorialServer : api::tutorial_1_0::server
+{
+    virtual get_parameters_response_v
+    get_parameters_i(asio_http::asio::io_service&     aService,
+                     const get_parameters_parameters& aRequest,
+                     asio_http::asio::yield_context   yield)
+    {
+        sleep(1);
+        return get_parameters_response_200{.body = "success"};
+    }
+};
+
 BOOST_AUTO_TEST_SUITE(rpc)
 BOOST_AUTO_TEST_CASE(simple)
 {
@@ -186,13 +198,17 @@ BOOST_AUTO_TEST_CASE(simple)
     Sentry::Queue sQueue(sParams);
     sQueue.start();
 
-    api::tutorial_1_0::server sTutorialServer;
+    Threads::QueueExecutor sTaskQueue;
+    TutorialServer         sTutorialServer;
     sTutorialServer.with_sentry([&sQueue](Sentry::Message& aMessage) { sQueue.send(aMessage); }, 1);
+    sTutorialServer.with_queue(sTaskQueue);
     sTutorialServer.configure(sRouter);
 
     Threads::Asio sAsio;
-    asio_http::startServer(sAsio, 3000, sRouter); // using same port as in seagger schema
-    Threads::Group sGroup;
+    asio_http::startServer(sAsio, 3000, sRouter); // using same port as in swagger schema
+
+    Threads::Group sGroup;       // group must be created last, to ensure proper termination
+    sTaskQueue.start(sGroup, 4); // spawn 4 threads
     sAsio.start(sGroup);
 
     asio_http::ClientRequest sRequest{.method = asio_http::http::verb::get, .url = "http://127.0.0.1:3000/api/v1/enum", .headers = {{asio_http::Headers::Host, "127.0.0.1"}}};
@@ -289,6 +305,34 @@ BOOST_AUTO_TEST_CASE(simple)
         } catch (const std::exception& e) {
             BOOST_TEST_MESSAGE("catch: " << e.what());
         }
+    }
+
+    // call to service with threads
+    // sTaskQueue must have at least 2 threads
+    {
+        api::tutorial_1_0::client sClient(sAsio, "http://127.0.0.1:3000");
+
+        Time::Meter sMeter;
+        std::thread sR1([&sClient]() {
+            try {
+                auto sR = sClient.get_parameters({.id = "test-id", .string_required = "abcdefg"});
+                BOOST_TEST_MESSAGE("request1: " << sR.body);
+            } catch (const std::exception& e) {
+                BOOST_TEST_MESSAGE("got exception: " << e.what());
+            }
+        });
+        Threads::sleep(0.1);
+        std::thread sR2([&sClient]() {
+            try {
+                auto sR = sClient.get_parameters({.id = "test-id", .string_required = "abcdefg"});
+                BOOST_TEST_MESSAGE("request2: " << sR.body);
+            } catch (const std::exception& e) {
+                BOOST_TEST_MESSAGE("got exception: " << e.what());
+            }
+        });
+        sR1.join();
+        sR2.join();
+        BOOST_CHECK_CLOSE(sMeter.get().to_double(), 1.1, 5); // 5% difference is ok
     }
 }
 BOOST_AUTO_TEST_SUITE_END()

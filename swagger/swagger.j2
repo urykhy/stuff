@@ -24,6 +24,11 @@
     #include <sentry/Message.hpp>
 {% endif %}
 
+{% set x_queue = doc['info'].get('x-queue', false) %}
+{% if x_queue %}
+    #include <threads/SafeQueue.hpp>
+{% endif %}
+
 {% macro complex_schema(schema, name='body', opt=False) -%}
     {%- for s in schema | swagger_decode(name) %}
         {%- if 'fields' in s %}
@@ -147,7 +152,7 @@
                     throw std::invalid_argument("param `{{ param.name }}` violates maximum string length");
             {%- endif %}
             {%- if 'pattern' in schema %}
-                if (std::regex_match({{ xname }}.value(), std::regex("{{ schema['pattern'] }}")))
+                if (!std::regex_match({{ xname }}.value(), std::regex("{{ schema['pattern'] }}")))
                     throw std::invalid_argument("param `{{ param.name }}` violates pattern");
             {%- endif %}
         {%- endif %}
@@ -437,7 +442,7 @@ namespace api {
             {%- endcall %}
         {% endcall %}
 
-        struct server
+        class server
         {
         {% if x_prometheus %}
             struct Metrics
@@ -462,11 +467,24 @@ namespace api {
             time_t m_SentryLastCall = 0;
             using SentryHandler = std::function<void(Sentry::Message& aMessage)>;
             SentryHandler m_SentryHandler;
+        {% endif %}
+        {% if x_queue %}
+            Threads::QueueExecutor* m_Queue = nullptr;
+         {% endif %}
 
+        public:
+
+        {% if x_sentry %}
             void with_sentry(SentryHandler aHandler, time_t aRate = 60)
             {
                 m_SentryRateLimit = aRate;
                 m_SentryHandler = aHandler;
+            }
+        {% endif %}
+        {% if x_queue %}
+            void with_queue(Threads::QueueExecutor& aQueue)
+            {
+                m_Queue = &aQueue;
             }
         {% endif %}
 
@@ -531,6 +549,11 @@ namespace api {
                     return;
                 }
 
+                {% if x_queue %}
+                    using CT = boost::asio::async_completion<asio_http::asio::yield_context, void(void)>;
+                    CT sCompletion{ yield };
+                    auto sTask = [&, sHandler = sCompletion.completion_handler](){
+                {% endif %}
                 try {
                     auto sResponse = {{ name }}_i(aService, sParameters, yield);
                     std::visit([&](auto&& arg) {
@@ -548,6 +571,13 @@ namespace api {
                     aResponse.set("X-From-Swagger", "1");
                     aResponse.body() = e.what();
                 }
+                {% if x_queue %}
+                        using boost::asio::asio_handler_invoke;
+                        asio_handler_invoke(sHandler, &sHandler);
+                    }; // sTask
+                    m_Queue->insert(std::move(sTask));
+                    sCompletion.result.get();
+                {% endif %}
             }
         {% endcall %}
 
