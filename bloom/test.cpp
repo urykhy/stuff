@@ -29,7 +29,7 @@ BOOST_AUTO_TEST_CASE(basic)
 
     // 2nd filter
     // store only false-positives from 1st filter
-    Bloom::Set sSmall(2 * 1024 + 128);
+    Bloom::Set sSmall(2 * 1024 + 64);
     for (auto& x : sMiss)
         sSmall.insert(Bloom::hash(x));
 

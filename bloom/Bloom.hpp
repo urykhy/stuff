@@ -1,12 +1,12 @@
 #pragma once
 
+#include <xxhash.h>
+
 #include <array>
 #include <cassert>
 #include <cmath>
 #include <cstdint>
 #include <vector>
-
-#include <ssl/Digest.hpp>
 
 namespace Bloom {
     using SmallKey = std::array<uint32_t, 4>;
@@ -20,13 +20,26 @@ namespace Bloom {
         return std::pow(1 - std::exp(-x), k);
     }
 
+    namespace {
+        inline XXH128_hash_t xxh(std::string_view aInput)
+        {
+            return XXH3_128bits(aInput.data(), aInput.size());
+        }
+
+        template <class T>
+        typename std::enable_if<std::is_integral_v<T>, XXH128_hash_t>::type xxh(const T& aInput)
+        {
+            return XXH3_128bits(&aInput, sizeof(T));
+        }
+    } // namespace
+
     template <class T>
     inline SmallKey hash(const T& aVal)
     {
-        SmallKey          sKey;
-        const std::string sHash = SSLxx::Digest(EVP_md5(), aVal);
-        assert(sizeof(sKey) == sHash.size());
-        memcpy(&sKey, sHash.data(), sHash.size());
+        SmallKey      sKey;
+        XXH128_hash_t sHash = xxh(aVal);
+        static_assert(sizeof(sKey) == sizeof(sHash));
+        memcpy(&sKey, &sHash, sizeof(sHash));
         return sKey;
     }
 

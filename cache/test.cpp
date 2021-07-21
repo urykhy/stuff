@@ -10,7 +10,9 @@
 
 #define FILE_NO_ARCHIVE
 #include <file/File.hpp>
+#include <format/Float.hpp>
 #include <parser/Atoi.hpp>
+#include <time/Meter.hpp>
 #include <unsorted/Random.hpp>
 
 BOOST_AUTO_TEST_SUITE(Cache)
@@ -114,7 +116,7 @@ BOOST_AUTO_TEST_CASE(expiration)
 }
 BOOST_AUTO_TEST_SUITE_END()
 BOOST_AUTO_TEST_SUITE(Bench)
-using CacheTypes = boost::mpl::list<Cache::LRU<int, int>, Cache::S_LRU<int, int>, Cache::LFU<int, int>,  Cache::BF_LFU<int, int>>;
+using CacheTypes = boost::mpl::list<Cache::LRU<int, int>, Cache::S_LRU<int, int>, Cache::LFU<int, int>, Cache::BF_LFU<int, int>>;
 BOOST_AUTO_TEST_CASE_TEMPLATE(zipf, T, CacheTypes)
 {
     Util::seed();
@@ -152,8 +154,9 @@ BOOST_AUTO_TEST_CASE(s3_arc, *boost::unit_test::disabled())
     const unsigned    CACHE_SIZE = 400000;
     const std::string sFilename  = "/u03/crap/trace/s3.arc";
 
-    unsigned sHits = 0;
-    unsigned sRows = 0;
+    unsigned    sHits = 0;
+    unsigned    sRows = 0;
+    Time::Meter sMeter;
 
     Cache::BF_LFU<int, int> sCache(CACHE_SIZE);
     File::by_string(sFilename, [&](const std::string_view aStr) mutable {
@@ -168,7 +171,8 @@ BOOST_AUTO_TEST_CASE(s3_arc, *boost::unit_test::disabled())
         else
             sCache.Put(sVal, 0);
     });
+    double sELA = sMeter.get().to_double();
 
-    BOOST_TEST_MESSAGE("Got " << sHits << " hits from " << sRows << " requests, hit rate: " << sHits * 100 / double(sRows) << '%');
+    BOOST_TEST_MESSAGE("Got " << sHits << " hits from " << sRows << " requests, hit rate: " << sHits * 100 / double(sRows) << "%, RPS: " << Format::for_human(sRows / sELA));
 }
 BOOST_AUTO_TEST_SUITE_END()
