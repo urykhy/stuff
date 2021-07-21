@@ -1,6 +1,6 @@
 #pragma once
 #include <list>
-#include <map>
+#include <unordered_map>
 
 #include <boost/core/noncopyable.hpp>
 
@@ -11,7 +11,7 @@ namespace Cache {
     {
     private:
         using List = std::list<std::pair<Key, Value>>;
-        using Map  = std::map<Key, typename List::iterator>;
+        using Map  = std::unordered_map<Key, typename List::iterator>;
 
         List         m_Lru;
         Map          m_Index;

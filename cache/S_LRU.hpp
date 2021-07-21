@@ -1,6 +1,7 @@
 #pragma once
+#include <algorithm>
 #include <list>
-#include <map>
+#include <unordered_map>
 
 #include <boost/core/noncopyable.hpp>
 
@@ -18,7 +19,7 @@ namespace Cache {
         };
 
         using List = std::list<Entry>;
-        using Map  = std::map<Key, typename List::iterator>;
+        using Map  = std::unordered_map<Key, typename List::iterator>;
 
         List         m_Normal;
         List         m_Protected;
@@ -96,8 +97,16 @@ namespace Cache {
         template <class T>
         void debug(T&& t) const
         {
+            std::vector<Key> sKeys;
             for (auto& x : m_Index)
-                t(x.second);
+                sKeys.push_back(x.first);
+            std::sort(sKeys.begin(), sKeys.end());
+
+            for (auto& x : sKeys) {
+                auto sIt = m_Index.find(x);
+                assert(sIt != m_Index.end());
+                t(sIt->second);
+            }
         }
 #endif
     };

@@ -1,6 +1,7 @@
 #pragma once
 #include <array>
 #include <list>
+#include <unordered_map>
 
 #include <bloom/Bloom.hpp>
 
@@ -26,7 +27,7 @@ namespace Cache {
             if (aPos < m_Clock)
                 aPos += Size;
             unsigned sOffset = aPos - m_Clock;
-            sOffset = std::min(sOffset + aW, Size - 1);
+            sOffset          = std::min(sOffset + aW, Size - 1);
             return (m_Clock + sOffset) % Size;
         }
 
