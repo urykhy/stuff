@@ -7,10 +7,10 @@ import sys
 from urllib.parse import urlparse
 
 import yaml
-from jinja2 import Template, Environment
+from jinja2 import Template, Environment, FileSystemLoader
 
 script_path = str(pathlib.Path(__file__).parent.absolute())
-environment = Environment(extensions=['jinja2.ext.do'])
+environment = Environment(extensions=['jinja2.ext.do'], loader=FileSystemLoader(searchpath=script_path))
 
 
 def expand_ref(item):

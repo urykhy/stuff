@@ -1,0 +1,161 @@
+struct {{ name }}_parameters {
+    {# parameters #}
+    {%- set p1 = doc['paths'][path].get('parameters', []) | swagger_expand_refs %}
+    {%- set p2 = doc['paths'][path][method].get('parameters', []) | swagger_expand_refs %}
+    {%- set params = p1 + p2 | sort(attribute='name') %}
+
+    {%- for param in params %}
+        {{ complex_schema(param['schema'], _name(param), True) }}
+    {%- endfor %}
+
+    {# body #}
+    {%- set body = doc['paths'][path][method].get('requestBody',{}).get('content',{}) %}
+    {%- set json = body.get('application/json',{}) | length %}
+    {%- set binary = (json == 0 and body | length == 1) %}
+    {%- if binary > 0 %}
+        {%- set content_type = body | first %}
+        std::string body;
+    {%- elif json > 0 %}
+        {%- set schema = body.get('application/json').get('schema') %}
+        {{ complex_schema(schema) }}
+    {% endif %}
+
+    void __parse(const asio_http::Request& aRequest) {
+        auto sQuery = aRequest.target();
+        std::string_view sQueryView(sQuery.data(), sQuery.size());
+
+        {% if params | selectattr('in', 'equalto', 'path') | list | length > 0 %}
+        Parser::http_path_params(sQueryView, "{{ (doc['servers'][0]['url'], path) | join('') | swagger_path }}", [this](auto aName, auto aValue) {
+            {%- for param in params if param['in'] == 'path' %}
+                if (aName == "{{ param.name }}") { swagger::parse(aValue, {{ _name(param) }}); {{ _limit(param) }} return; }
+            {%- endfor %}
+            throw std::invalid_argument("unexpected param `" + std::string(aName) + '`');
+        });
+        {%- endif %}
+
+        Parser::http_query(sQueryView, [this](auto aName, auto aValue) {
+            {%- for param in params if param['in'] == 'query' %}
+                if (aName == "{{ param.name }}") { swagger::parse(std::string(aValue), {{ _name(param) }}); {{ _limit(param) }} return; }
+            {%- endfor %}
+            throw std::invalid_argument("unexpected param `" + std::string(aName) + '`');
+        });
+
+        {%- for param in params if param['in'] == 'header' %}
+            if (auto sValue = Parser::url_decode(aRequest["{{ param.name }}"].to_string()); !sValue.empty())
+            {
+                swagger::parse(sValue, {{ _name(param) }});
+                {{ _limit(param) }}
+            }
+        {%- endfor %}
+
+        {# default value #}
+        {%- for param in params if param['schema'].get('default', none) is not none %}
+            {%- set d = param['schema']['default'] %}
+            if ( !swagger::is_specified({{ _name(param) }}) )
+                {{ _name(param) }} =
+                {%- if d is string -%}
+                    "{{ d }}"
+                {%- elif d is boolean -%}
+                    {%- if d -%} true {%- else -%} false {%- endif -%}
+                {%- else -%}
+                    {{ d }}
+                {%- endif -%};
+        {%- endfor %}
+
+        {# required flag #}
+        {%- for param in params if param['required'] and param['schema'].get('default', none) is none %}
+            if ( !swagger::is_specified({{ _name(param) }}) )
+                throw std::invalid_argument("required param `{{ param.name }}` not specified");
+        {%- endfor %}
+
+        {# parse body #}
+        {%- if binary > 0 %}
+            body = aRequest.body();
+        {%- elif json > 0 %}
+            if (aRequest["Content-Type"] == "application/cbor") {
+                auto sIn = cbor::imemstream(aRequest.body());
+                cbor::read(sIn, body);
+            } else {
+                const auto sJson = Parser::Json::parse(aRequest.body());
+                Parser::Json::from_value(sJson, body);
+            }
+        {%- endif %}
+    }
+
+    bool __test_content_type(const asio_http::Request& aRequest) const
+    {
+        const auto sContentType = aRequest["Content-Type"];
+        if (sContentType.empty())
+            return true;
+        {%- if binary > 0 %}
+            return sContentType == "{{ content_type }}";
+        {%- elif json > 0 %}
+            return (sContentType == "application/cbor") || (sContentType == "application/json");
+        {%- else %}
+            return false;
+        {%- endif %}
+    }
+
+    asio_http::ClientRequest __format() const
+    {
+        namespace http = boost::beast::http;
+        asio_http::ClientRequest sRequest={
+            .method = http::verb::{{ method | swagger_method }},
+            .url = "{{ doc['servers'][0]['url'] | join('') | swagger_prefix }}"
+        };
+
+        std::string sPath;
+        {%- for x in path.split('/') %}
+        {%- if x | length() > 0 %}
+            {%- set fbegin = x.find('{') %}
+            {%- set rbegin = x.rfind('}') %}
+            {%- if fbegin > -1 and rbegin > -1 %}
+                {%- set xName = x[fbegin+1:rbegin] %}
+                {%- for param in params if param.in == 'path' and param.name == xName %}
+                    sPath += (std::string("/")
+                        + std::string("{{ x[0: fbegin] }}")
+                        + Format::url_encode(swagger::format({{ _name(param) }}))
+                        + std::string("{{ x[rbegin+1:] }}"));
+                {%- endfor %}
+            {%- else %}
+                sPath += "/{{ x }}";
+            {%- endif %}
+        {%- endif %}
+        {%- endfor %}
+
+        if (!sPath.empty())
+            sRequest.url += sPath;
+
+        {% if params | selectattr('in', 'equalto', 'query') | list | length > 0 %}
+            std::list<std::pair<std::string, std::string>> sParams;
+            {%- for param in params if param['in'] == 'query' %}
+                if (swagger::is_specified({{ _name(param) }}) )
+                    sParams.push_back({"{{param.name}}", swagger::format({{ _name(param) }})});
+            {%- endfor %}
+            std::stringstream sStream;
+            Format::List(sStream, sParams, [](const auto x){
+                return x.first + '=' + Format::url_encode(x.second);
+            }, "&");
+            auto sQuery = sStream.str();
+            if (!sQuery.empty())
+                sRequest.url += '?' + sQuery;
+        {%endif %}
+
+        {%- for param in params if param['in'] == 'header' %}
+            if (swagger::is_specified({{ _name(param) }}) )
+                sRequest.headers[swagger::header("{{ param.name }}").to_string()] = Format::url_encode(swagger::format({{ _name(param) }}));
+        {%- endfor %}
+
+        {%- if binary > 0 %}
+            sRequest.headers[asio_http::Headers::ContentType] = "{{ content_type }}";
+            sRequest.body = body;
+        {%- elif json > 0 %}
+            cbor::omemstream sOut;
+            cbor::write(sOut, body);
+            sRequest.headers[asio_http::Headers::ContentType] = "application/cbor";
+            sRequest.body = sOut.str();
+        {%- endif %}
+
+        return sRequest;
+    }
+};
