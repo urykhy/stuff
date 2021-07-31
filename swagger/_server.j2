@@ -1,5 +1,6 @@
 class server
 {
+    log4cxx::LoggerPtr sLogger = Logger::Get("http");
 {% if x_prometheus %}
     struct Metrics
     {
@@ -56,9 +57,21 @@ public:
     {
         namespace http = boost::beast::http;
 
+        auto sPeer = Container::Session::get<std::string>("peer");
+        Time::Meter sTimeMeter;
+
+        Util::Raii sLogging([&](){
+            DEBUG((sPeer.has_value() ? *sPeer : "<unknown>")
+              << ' ' << "{{method}}"
+              << ' ' << aRequest.target()
+              << ' ' << (unsigned)aResponse.result()
+              << ' ' << aResponse.body().size()
+              << ' ' << Format::for_human(sTimeMeter.get().to_double()) << 's'
+            );
+        });
+
         {% if x_prometheus %}
             m_Metrics.requests_{{ name }}.tick();
-            Time::Meter sTimeMeter;
             Util::Raii sAccount([&](){
                 m_Metrics.time_{{ name }}.account(sTimeMeter.get().to_double());
                 if (aResponse.result() >= http::status::ok and aResponse.result() < http::status::multiple_choices) m_Metrics.responses_{{ name }}_2xx.tick();
@@ -99,8 +112,8 @@ public:
                     Sentry::Message sMessage("swagger");
                     sMessage.set_request(sRequest).set_exception("bad request", e.what());
                     sMessage.set_version("{{ doc['info']['title'] }}", "{{ doc['info']['version'] }}");
-                    if (auto x = Container::Session::get<std::string>("peer"); x.has_value())
-                        sMessage.set_user("", *x);
+                    if (sPeer.has_value())
+                        sMessage.set_user("", *sPeer);
                     m_SentryLastCall = time(nullptr);
                     m_SentryHandler(sMessage);
                 }

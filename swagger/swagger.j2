@@ -10,7 +10,10 @@
 #include <asio_http/Router.hpp>
 #include <cbor/cbor.hpp>
 #include <container/Algorithm.hpp>
+#include <container/Session.hpp>
 #include <exception/Error.hpp>
+#include <format/Float.hpp>
+#include <unsorted/Log4cxx.hpp>
 
 {% set x_prometheus = doc['info'].get('x-prometheus', false) %}
 {% if x_prometheus %}
