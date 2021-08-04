@@ -31,32 +31,13 @@ namespace asio_http::Alive {
             }
         };
 
-        static inline std::atomic_uint64_t m_Serial{0};
-
         const Peer        peer;
-        const uint64_t    serial;
         beast::tcp_stream stream;
-        Promise           promise;
-        ManagerPtr        manager;
 
         Connection(asio::io_service& aService, Peer&& aPeer)
         : peer(std::move(aPeer))
-        , serial(m_Serial++)
         , stream(aService)
         {
-        }
-
-        void set(Response&& aResponse)
-        {
-            promise->set_value(std::move(aResponse));
-            promise.reset();
-        }
-
-        void report(const char* aMsg, beast::error_code aError)
-        {
-            promise->set_exception(std::make_exception_ptr(std::runtime_error(aMsg + aError.message())));
-            promise.reset();
-            close();
         }
 
         void close()
@@ -122,7 +103,7 @@ namespace asio_http::Alive {
         {
             auto sPromise = std::make_shared<std::promise<Response>>();
             m_Strand.post([aRequest = std::move(aRequest), sPromise, p = shared_from_this()]() mutable {
-                p->async_i(std::move(aRequest), sPromise);
+                p->async_i({std::move(aRequest), sPromise, {}});
             });
             return sPromise->get_future();
         }
@@ -139,58 +120,53 @@ namespace asio_http::Alive {
             };
 
             m_Strand.post([aRequest = std::move(aRequest), sPromise, sCB, p = shared_from_this()]() mutable {
-                p->async_i(std::move(aRequest), sPromise, std::move(sCB));
+                p->async_i({std::move(aRequest), sPromise, std::move(sCB)});
             });
 
             return sCompletion;
         }
 
     private:
-        void async_i(ClientRequest&& aRequest, Promise aPromise, Callback&& aCB = {})
+        void async_i(RQ&& aRQ)
         {
             if (m_Current < m_Params.max_connections and m_Waiting.empty()) {
-                start(std::move(aRequest), aPromise, std::move(aCB));
+                start(std::move(aRQ));
             } else {
-                m_Waiting.insert({std::move(aRequest), aPromise, std::move(aCB)}, m_Params.queue_timeout_ms);
+                m_Waiting.insert(std::move(aRQ), m_Params.queue_timeout_ms);
             }
         }
 
-        void start(ClientRequest&& aRequest, Promise aPromise, Callback&& aCB)
+        void start(RQ&& aRQ)
         {
-            auto             sParsed   = Parser::url(aRequest.url);
-            Request          sInternal = prepareRequest(aRequest, sParsed);
+            auto             sParsed   = Parser::url(aRQ.request.url);
+            Request          sInternal = prepareRequest(aRQ.request, sParsed);
             Connection::Peer sPeer{std::move(sParsed.host), std::move(sParsed.port)};
             auto             sAlive = m_Alive.get(sPeer);
             m_Current++;
 
             if (sAlive) {
-                auto sPtr     = *sAlive;
-                sPtr->promise = aPromise;
+                auto sPtr = *sAlive;
                 boost::asio::spawn(m_Strand,
-                                   [aRequest  = std::move(aRequest),
-                                    sInternal = std::move(sInternal),
-                                    sCB       = std::move(aCB),
+                                   [sInternal = std::move(sInternal),
+                                    sRQ       = std::move(aRQ),
                                     sPtr,
                                     p = shared_from_this()](boost::asio::yield_context yield) mutable {
-                                       perform(std::move(aRequest), sInternal, sPtr, yield);
+                                       p->perform(std::move(sRQ), sInternal, sPtr, yield);
                                        p->done();
-                                       if (sCB)
-                                           sCB();
+                                       if (sRQ.callback)
+                                           sRQ.callback();
                                    });
             } else {
-                auto sPtr     = std::make_shared<Connection>(m_Service, std::move(sPeer));
-                sPtr->promise = aPromise;
-                sPtr->manager = shared_from_this();
+                auto sPtr = std::make_shared<Connection>(m_Service, std::move(sPeer));
                 boost::asio::spawn(m_Strand,
-                                   [aRequest  = std::move(aRequest),
-                                    sInternal = std::move(sInternal),
-                                    sCB       = std::move(aCB),
+                                   [sInternal = std::move(sInternal),
+                                    sRQ       = std::move(aRQ),
                                     sPtr,
                                     p = shared_from_this()](boost::asio::yield_context yield) mutable {
-                                       create(std::move(aRequest), sInternal, sPtr, yield);
+                                       p->create(std::move(sRQ), sInternal, sPtr, yield);
                                        p->done();
-                                       if (sCB)
-                                           sCB();
+                                       if (sRQ.callback)
+                                           sRQ.callback();
                                    });
             }
         }
@@ -210,48 +186,54 @@ namespace asio_http::Alive {
             return sInternal;
         }
 
-        static void create(ClientRequest&& aRequest, Request& aInternal, ConnectionPtr aPtr, net::yield_context yield)
+        static void report(RQ& aRQ, ConnectionPtr aPtr, const char* aMsg, beast::error_code aError)
+        {
+            aRQ.promise->set_exception(std::make_exception_ptr(std::runtime_error(aMsg + aError.message())));
+            aPtr->close();
+        }
+
+        void create(RQ&& aRQ, Request& aInternal, ConnectionPtr aPtr, net::yield_context yield)
         {
             beast::error_code ec;
-            tcp::resolver     sResolver{aPtr->manager->m_Service};
+            tcp::resolver     sResolver{m_Service};
 
-            aPtr->stream.expires_after(std::chrono::milliseconds(aRequest.connect));
+            aPtr->stream.expires_after(std::chrono::milliseconds(aRQ.request.connect));
             auto const sAddr = sResolver.async_resolve(aPtr->peer.host, aPtr->peer.port, yield[ec]);
             if (ec) {
-                aPtr->report("resolve: ", ec);
+                report(aRQ, aPtr, "resolve: ", ec);
                 return;
             }
 
             aPtr->stream.async_connect(sAddr, yield[ec]);
             if (ec) {
-                aPtr->report("connect: ", ec);
+                report(aRQ, aPtr, "connect: ", ec);
                 return;
             }
 
-            perform(std::move(aRequest), aInternal, aPtr, yield);
+            perform(std::move(aRQ), aInternal, aPtr, yield);
         }
 
-        static void perform(ClientRequest&& aRequest, Request& aInternal, ConnectionPtr aPtr, net::yield_context yield)
+        void perform(RQ&& aRQ, Request& aInternal, ConnectionPtr aPtr, net::yield_context yield)
         {
             beast::error_code  ec;
             beast::flat_buffer sBuffer;
             Response           sResponse;
 
-            aPtr->stream.expires_after(std::chrono::milliseconds(aRequest.total));
+            aPtr->stream.expires_after(std::chrono::milliseconds(aRQ.request.total));
             http::async_write(aPtr->stream, aInternal, yield[ec]);
             if (ec) {
-                aPtr->report("write: ", ec);
+                report(aRQ, aPtr, "write: ", ec);
                 return;
             }
 
             http::async_read(aPtr->stream, sBuffer, sResponse, yield[ec]);
             if (ec) {
-                aPtr->report("read: ", ec);
+                report(aRQ, aPtr, "read: ", ec);
                 return;
             }
 
-            aPtr->set(std::move(sResponse));
-            aPtr->manager->m_Alive.insert(aPtr->peer, aPtr);
+            aRQ.promise->set_value(std::move(sResponse));
+            m_Alive.insert(aPtr->peer, aPtr);
         }
 
         void done()
@@ -269,7 +251,7 @@ namespace asio_http::Alive {
 
             auto sNew = m_Waiting.get();
             if (sNew)
-                start(std::move(sNew->request), sNew->promise, std::move(sNew->callback));
+                start(std::move(*sNew));
         }
 
         void expired(RQ& x)
