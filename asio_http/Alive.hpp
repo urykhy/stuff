@@ -2,15 +2,17 @@
 
 #include <set>
 
+#include "Client.hpp"
+
 #include <container/Pool.hpp>
 #include <container/RequestQueue.hpp>
-
-#include "Client.hpp"
 
 namespace asio_http::Alive {
 
     class Manager;
     using ManagerPtr = std::shared_ptr<Manager>;
+
+    using Callback = std::function<void()>;
 
     struct Connection
     {
@@ -42,6 +44,12 @@ namespace asio_http::Alive {
         , serial(m_Serial++)
         , stream(aService)
         {
+        }
+
+        void set(Response&& aResponse)
+        {
+            promise->set_value(std::move(aResponse));
+            promise.reset();
         }
 
         void report(const char* aMsg, beast::error_code aError)
@@ -81,6 +89,7 @@ namespace asio_http::Alive {
         {
             ClientRequest request;
             Promise       promise;
+            Callback      callback;
         };
 
         const Params                m_Params;
@@ -118,17 +127,35 @@ namespace asio_http::Alive {
             return sPromise->get_future();
         }
 
+        auto async(ClientRequest&& aRequest, net::yield_context yield)
+        {
+            auto sPromise    = std::make_shared<std::promise<Response>>();
+            using CT         = boost::asio::async_completion<asio_http::asio::yield_context, void(Promise)>;
+            auto sCompletion = std::make_shared<CT>(yield);
+
+            auto sCB = [sCompletion, sPromise, sHandler = sCompletion->completion_handler]() {
+                using boost::asio::asio_handler_invoke;
+                asio_handler_invoke(std::bind(sHandler, sPromise), &sHandler);
+            };
+
+            m_Strand.post([aRequest = std::move(aRequest), sPromise, sCB, p = shared_from_this()]() mutable {
+                p->async_i(std::move(aRequest), sPromise, std::move(sCB));
+            });
+
+            return sCompletion;
+        }
+
     private:
-        void async_i(ClientRequest&& aRequest, Promise aPromise)
+        void async_i(ClientRequest&& aRequest, Promise aPromise, Callback&& aCB = {})
         {
             if (m_Current < m_Params.max_connections and m_Waiting.empty()) {
-                start(std::move(aRequest), aPromise);
+                start(std::move(aRequest), aPromise, std::move(aCB));
             } else {
-                m_Waiting.insert({std::move(aRequest), aPromise}, m_Params.queue_timeout_ms);
+                m_Waiting.insert({std::move(aRequest), aPromise, std::move(aCB)}, m_Params.queue_timeout_ms);
             }
         }
 
-        void start(ClientRequest&& aRequest, Promise aPromise)
+        void start(ClientRequest&& aRequest, Promise aPromise, Callback&& aCB)
         {
             auto             sParsed   = Parser::url(aRequest.url);
             Request          sInternal = prepareRequest(aRequest, sParsed);
@@ -142,10 +169,13 @@ namespace asio_http::Alive {
                 boost::asio::spawn(m_Strand,
                                    [aRequest  = std::move(aRequest),
                                     sInternal = std::move(sInternal),
+                                    sCB       = std::move(aCB),
                                     sPtr,
                                     p = shared_from_this()](boost::asio::yield_context yield) mutable {
                                        perform(std::move(aRequest), sInternal, sPtr, yield);
                                        p->done();
+                                       if (sCB)
+                                           sCB();
                                    });
             } else {
                 auto sPtr     = std::make_shared<Connection>(m_Service, std::move(sPeer));
@@ -154,10 +184,13 @@ namespace asio_http::Alive {
                 boost::asio::spawn(m_Strand,
                                    [aRequest  = std::move(aRequest),
                                     sInternal = std::move(sInternal),
+                                    sCB       = std::move(aCB),
                                     sPtr,
                                     p = shared_from_this()](boost::asio::yield_context yield) mutable {
                                        create(std::move(aRequest), sInternal, sPtr, yield);
                                        p->done();
+                                       if (sCB)
+                                           sCB();
                                    });
             }
         }
@@ -217,8 +250,7 @@ namespace asio_http::Alive {
                 return;
             }
 
-            aPtr->promise->set_value(std::move(sResponse));
-            aPtr->promise.reset();
+            aPtr->set(std::move(sResponse));
             aPtr->manager->m_Alive.insert(aPtr->peer, aPtr);
         }
 
@@ -237,7 +269,7 @@ namespace asio_http::Alive {
 
             auto sNew = m_Waiting.get();
             if (sNew)
-                start(std::move(sNew->request), sNew->promise);
+                start(std::move(sNew->request), sNew->promise, std::move(sNew->callback));
         }
 
         void expired(RQ& x)

@@ -1,12 +1,12 @@
 #define BOOST_TEST_MODULE Suites
 #include <boost/test/unit_test.hpp>
 
-#include <curl/Curl.hpp>
-
 #include "Alive.hpp"
 #include "Client.hpp"
 #include "Router.hpp"
 #include "Server.hpp"
+
+#include <curl/Curl.hpp>
 using namespace std::chrono_literals;
 
 #include <time/Meter.hpp>
@@ -43,8 +43,8 @@ BOOST_AUTO_TEST_CASE(simple)
 
     std::this_thread::sleep_for(100ms);
 
-    Curl::Client         sClient;
-    auto                 sResult = sClient.GET("http://127.0.0.1:2081/hello");
+    Curl::Client sClient;
+    auto         sResult = sClient.GET("http://127.0.0.1:2081/hello");
     BOOST_CHECK_EQUAL(sResult.status, 200);
     BOOST_CHECK_EQUAL(sResult.body, "hello world");
 
@@ -90,7 +90,7 @@ BOOST_AUTO_TEST_CASE(alive)
     asio_http::ClientRequest sRequest{.method = http::verb::get, .url = "http://127.0.0.1:2081/hello", .headers = {{asio_http::Headers::Host, "127.0.0.1"}}};
 
     asio_http::Alive::Params sParams;
-    auto sManager  = std::make_shared<asio_http::Alive::Manager>(sAsio.service(), sParams);
+    auto                     sManager = std::make_shared<asio_http::Alive::Manager>(sAsio.service(), sParams);
     sManager->start_cleaner();
     auto sResponse = sManager->async(std::move(sRequest)).get();
     BOOST_CHECK_EQUAL(sResponse.result(), http::status::ok);
@@ -111,5 +111,20 @@ BOOST_AUTO_TEST_CASE(alive)
     auto sFuture = sManager->async(std::move(sRequest));
     BOOST_CHECK_THROW(sFuture.get(), std::runtime_error);
     BOOST_CHECK_CLOSE(sMeter.get().to_double(), 0.5, 1);
+
+    // async request from coro
+    sAsio.spawn([&sManager](boost::asio::yield_context yield) {
+        BOOST_TEST_MESSAGE("coro started");
+        asio_http::ClientRequest sRequest{.method  = http::verb::get,
+                                          .url     = "http://127.0.0.1:2081/hello",
+                                          .headers = {{asio_http::Headers::Host, "127.0.0.1"}}};
+        BOOST_TEST_MESSAGE("async started");
+        auto sCompletion = sManager->async(std::move(sRequest), yield);
+        BOOST_TEST_MESSAGE("wait ...");
+        auto sResponse = sCompletion->result.get()->get_future().get();
+        BOOST_TEST_MESSAGE("got result");
+        BOOST_CHECK_EQUAL(sResponse.result(), http::status::ok);
+    });
+    sleep(1);
 }
 BOOST_AUTO_TEST_SUITE_END()
