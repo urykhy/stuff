@@ -327,7 +327,7 @@ BOOST_AUTO_TEST_CASE(simple)
         Threads::sleep(0.1);
         std::thread sR2([&sClient]() {
             try {
-                auto sR = sClient.get_parameters({.id = "test-id", .string_required = "abcdefg"});
+                auto sR = sClient.get_parameters({.id = "test-id", .string_required = "abcdefh"});
                 BOOST_TEST_MESSAGE("request2: " << sR.body);
             } catch (const std::exception& e) {
                 BOOST_TEST_MESSAGE("got exception: " << e.what());

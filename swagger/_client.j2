@@ -2,6 +2,7 @@ class client
 {
     asio_http::Alive::ManagerPtr m_HttpClient;
     const std::string m_Base;
+    log4cxx::LoggerPtr sLogger = Logger::Get("http");
 
 public:
     client(asio_http::Alive::ManagerPtr aHttpClient, const std::string& aBase)
@@ -34,6 +35,7 @@ public:
             namespace http = boost::beast::http;
             asio_http::ClientRequest sRequest = aRequest.__format();
             sRequest.url = m_Base + sRequest.url;
+            INFO("{{ method }} " << sRequest.url);
             auto sResponse = m_HttpClient->async(std::move(sRequest)).get();
             const auto sFromSwagger = !sResponse["X-From-Swagger"].empty();
 

@@ -7,8 +7,11 @@
 
 #include <container/Pool.hpp>
 #include <container/RequestQueue.hpp>
+#include <unsorted/Log4cxx.hpp>
 
 namespace asio_http::Alive {
+
+    static log4cxx::LoggerPtr sLogger = Logger::Get("http");
 
     class Manager;
     using ManagerPtr = std::shared_ptr<Manager>;
@@ -45,6 +48,7 @@ namespace asio_http::Alive {
         {
             beast::error_code ec;
             stream.socket().shutdown(tcp::socket::shutdown_both, ec);
+            DEBUG("closed connection " << this << " to " << peer.host << ":" << peer.port);
         }
 
         ~Connection()
@@ -93,6 +97,7 @@ namespace asio_http::Alive {
             m_Timer.expires_from_now(boost::posix_time::milliseconds(m_Waiting.eta(1000)));
             m_Timer.async_wait(m_Strand.wrap([this, p = this->shared_from_this()](boost::system::error_code ec) {
                 if (!ec) {
+                    DEBUG("close idle connections ...");
                     m_Alive.cleanup();
                     m_Waiting.on_timer();
                     start_cleaner();
@@ -147,6 +152,7 @@ namespace asio_http::Alive {
 
             if (sAlive) {
                 auto sPtr = *sAlive;
+                DEBUG("reuse connection " << sPtr.get() << " to " << sParsed.host << ":" << sParsed.port);
                 boost::asio::spawn(m_Strand,
                                    [sInternal = std::move(sInternal),
                                     sRQ       = std::move(aRQ),
@@ -159,6 +165,7 @@ namespace asio_http::Alive {
                                    });
             } else {
                 auto sPtr = std::make_shared<Connection>(m_Service, std::move(sPeer));
+                DEBUG("new connection " << sPtr.get() << " to " << sParsed.host << ":" << sParsed.port);
                 boost::asio::spawn(m_Strand,
                                    [sInternal = std::move(sInternal),
                                     sRQ       = std::move(aRQ),
@@ -234,6 +241,8 @@ namespace asio_http::Alive {
             }
 
             aRQ.promise->set_value(std::move(sResponse));
+
+            DEBUG("keep alive connection " << aPtr.get() << " to " << aPtr->peer.host << ":" << aPtr->peer.port);
             m_Alive.insert(aPtr->peer, aPtr);
         }
 

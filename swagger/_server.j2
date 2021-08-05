@@ -1,6 +1,6 @@
 class server
 {
-    log4cxx::LoggerPtr sLogger = Logger::Get("http");
+    log4cxx::LoggerPtr sLogger = Logger::Get("access");
 {% if x_prometheus %}
     struct Metrics
     {
@@ -61,7 +61,7 @@ public:
         Time::Meter sTimeMeter;
 
         Util::Raii sLogging([&](){
-            DEBUG((sPeer.has_value() ? *sPeer : "<unknown>")
+            INFO((sPeer.has_value() ? *sPeer : "<unknown>")
               << ' ' << "{{method}}"
               << ' ' << aRequest.target()
               << ' ' << (unsigned)aResponse.result()
