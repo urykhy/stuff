@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include <set>
 
 #include "Client.hpp"
@@ -140,7 +141,7 @@ namespace asio_http::Alive {
         {
             auto             sParsed   = Parser::url(aRQ.request.url);
             Request          sInternal = prepareRequest(aRQ.request, sParsed);
-            Connection::Peer sPeer{std::move(sParsed.host), std::move(sParsed.port)};
+            Connection::Peer sPeer{sParsed.host, sParsed.port};
             auto             sAlive = m_Alive.get(sPeer);
             m_Current++;
 

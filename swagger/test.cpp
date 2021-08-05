@@ -207,6 +207,9 @@ BOOST_AUTO_TEST_CASE(simple)
     Threads::Asio sAsio;
     asio_http::startServer(sAsio, 3000, sRouter); // using same port as in swagger schema
 
+    auto sHttpClient = std::make_shared<asio_http::Alive::Manager>(sAsio.service(), asio_http::Alive::Params{});
+    sHttpClient->start_cleaner();
+
     Threads::Group sGroup;       // group must be created last, to ensure proper termination
     sTaskQueue.start(sGroup, 4); // spawn 4 threads
     sAsio.start(sGroup);
@@ -242,7 +245,7 @@ BOOST_AUTO_TEST_CASE(simple)
 
     // generated client
     {
-        api::common_1_0::client sClient(sAsio, "http://127.0.0.1:3000");
+        api::common_1_0::client sClient(sHttpClient, "http://127.0.0.1:3000");
 
         auto                           sResponse = sClient.get_enum({});
         const std::vector<std::string> sExpected = {{"one"}, {"two"}};
@@ -251,7 +254,7 @@ BOOST_AUTO_TEST_CASE(simple)
 
     // keyValue with generated client
     {
-        api::keyValue_1_0::client sClient(sAsio, "http://127.0.0.1:3000");
+        api::keyValue_1_0::client sClient(sHttpClient, "http://127.0.0.1:3000");
 
         auto R1 = sClient.put_kv_key({.key = "abc", .body = "abc_data"});
         std::get<api::keyValue_1_0::put_kv_key_response_201>(R1);
@@ -284,7 +287,7 @@ BOOST_AUTO_TEST_CASE(simple)
 
     // json param
     {
-        api::jsonParam_1_0::client sClient(sAsio, "http://127.0.0.1:3000");
+        api::jsonParam_1_0::client sClient(sHttpClient, "http://127.0.0.1:3000");
 
         auto R1 = sClient.get_test1({.param = {{"one", true}, {"two", false}}});
         BOOST_TEST_MESSAGE("json response: " << R1.body);
@@ -299,7 +302,7 @@ BOOST_AUTO_TEST_CASE(simple)
 
     // sentry (emit bad request)
     {
-        api::tutorial_1_0::client sClient(sAsio, "http://127.0.0.1:3000");
+        api::tutorial_1_0::client sClient(sHttpClient, "http://127.0.0.1:3000");
         try {
             sClient.get_parameters({.id = "test-id", .x_header_int = 92});
         } catch (const std::exception& e) {
@@ -310,7 +313,7 @@ BOOST_AUTO_TEST_CASE(simple)
     // call to service with threads
     // sTaskQueue must have at least 2 threads
     {
-        api::tutorial_1_0::client sClient(sAsio, "http://127.0.0.1:3000");
+        api::tutorial_1_0::client sClient(sHttpClient, "http://127.0.0.1:3000");
 
         Time::Meter sMeter;
         std::thread sR1([&sClient]() {
