@@ -6,11 +6,11 @@
 #include <cassert>
 #include <functional>
 #include <map>
+#include <sstream>
 #include <string>
 
-#include <string/String.hpp>
-
 #include <../unsorted/Raii.hpp>
+#include <string/String.hpp>
 
 namespace Curl {
     struct Multi;
@@ -158,9 +158,8 @@ namespace Curl {
         {
             curl_easy_reset(m_Curl);
             curl_slist_free_all(m_HeaderList);
-            m_HeaderList   = nullptr;
-            m_UploadOffset = 0;
-            m_UploadData   = {};
+            m_HeaderList = nullptr;
+            m_UploadData = {};
             m_Result.clear();
         }
 
@@ -171,8 +170,7 @@ namespace Curl {
         CURLM*       m_Multi      = nullptr;
         Result       m_Result;
 
-        std::string_view m_UploadData   = {};
-        size_t           m_UploadOffset = 0;
+        std::string_view m_UploadData = {};
 
         static size_t stream_handler(void* aPtr, size_t aSize, size_t aBlock, void* aUser)
         {
@@ -209,13 +207,11 @@ namespace Curl {
         static size_t put_handler(char* buffer, size_t size, size_t nitems, void* aUser)
         {
             Client* self = reinterpret_cast<Client*>(aUser);
-            if (self->m_UploadOffset == self->m_UploadData.size())
+            if (self->m_UploadData.empty())
                 return 0;
-            if (self->m_UploadOffset > self->m_UploadData.size())
-                return CURL_READFUNC_ABORT;
-            size_t sAvail = std::min(size * nitems, self->m_UploadData.size() - self->m_UploadOffset);
-            memcpy(buffer, self->m_UploadData.data() + self->m_UploadOffset, sAvail);
-            self->m_UploadOffset += sAvail;
+            size_t sAvail = std::min(size * nitems, self->m_UploadData.size());
+            memcpy(buffer, self->m_UploadData.data(), sAvail);
+            self->m_UploadData.remove_prefix(sAvail);
             return sAvail;
         }
 
@@ -324,7 +320,12 @@ namespace Curl {
         template <typename... Ts>
         void setopt(CURLoption aOption, Ts... aVal)
         {
-            curl_easy_setopt(m_Curl, aOption, aVal...);
+            auto sResult = curl_easy_setopt(m_Curl, aOption, aVal...);
+            if (sResult != CURLE_OK) {
+                std::stringstream tmp;
+                tmp << "Curl: fail to set option " << aOption << ": " << curl_easy_strerror(sResult);
+                throw Error(tmp.str());
+            }
         }
 
         // support multi handle, used from Multi

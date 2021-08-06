@@ -25,13 +25,14 @@ namespace Util {
 
     inline std::string randomStr(int size = 8)
     {
-        static const char gAlNum[] = "0123456789"
+        static const char sAlNum[] = "0123456789"
                                      "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
                                      "abcdefghijklmnopqrstuvwxyz";
         std::string sResult;
         sResult.reserve(size);
         for (int i = 0; i < size; i++)
-            sResult.push_back(gAlNum[randomInt(sizeof(gAlNum))]);
+            // off by one since sAlnum contains terminating zero
+            sResult.push_back(sAlNum[randomInt(sizeof(sAlNum) - 1)]);
         return sResult;
     }
 
