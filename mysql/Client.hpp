@@ -2,39 +2,43 @@
 
 #include <mysql.h>
 #include <mysqld_error.h>
-#include <string>
+
 #include <list>
 #include <stdexcept>
+#include <string>
 
-#include <parser/Atoi.hpp>
+#include <boost/noncopyable.hpp>
+
 #include <mpl/Mpl.hpp>
+#include <parser/Atoi.hpp>
+#include <unsorted/Env.hpp>
 
-namespace MySQL
-{
+namespace MySQL {
+
     struct Config
     {
-        std::string host;
-        unsigned port = 3306;
-        std::string username;
-        std::string password;
-        std::string database;
-        time_t timeout = 10;
+        std::string host         = Util::getEnv("MYSQL_HOST");
+        uint16_t    port         = Util::getEnv<uint16_t>("MYSQL_PORT", 3306);
+        std::string username     = Util::getEnv("MYSQL_USER");
+        std::string password     = Util::getEnv("MYSQL_PASS");
+        std::string database     = "";
+        time_t      timeout      = 10;
         std::string program_name = "";
     };
 
-    class Row
+    class Row : boost::noncopyable
     {
-        Row(const Row& ) = delete;
-        Row& operator=(const Row& ) = delete;
         const MYSQL_ROW& m_Row;
-        const unsigned m_Size;
+        const unsigned   m_Size;
 
         class Cell
         {
             const char* m_Ptr = nullptr;
 
         public:
-            Cell(const char* aPtr) : m_Ptr(aPtr) {}
+            Cell(const char* aPtr)
+            : m_Ptr(aPtr)
+            {}
 
             int64_t as_int64() const
             {
@@ -59,9 +63,12 @@ namespace MySQL
 
     public:
         Row(const MYSQL_ROW& aRow, const unsigned aSize)
-        : m_Row(aRow), m_Size(aSize) {}
+        : m_Row(aRow)
+        , m_Size(aSize)
+        {}
 
-        Cell operator[](unsigned index) const {
+        Cell operator[](unsigned index) const
+        {
             if (index >= m_Size)
                 throw std::out_of_range(std::string("MySQL::Row"));
             return Cell{m_Row[index]};
@@ -69,24 +76,27 @@ namespace MySQL
     };
 
     // get mysql enum from type
-    template <class T> constexpr enum_field_types GetEnum();
-    template <> constexpr enum_field_types GetEnum<char>()          { return MYSQL_TYPE_TINY; }
-    template <> constexpr enum_field_types GetEnum<short>()         { return MYSQL_TYPE_SHORT; }
-    template <> constexpr enum_field_types GetEnum<int>()           { return MYSQL_TYPE_LONG; }
-    template <> constexpr enum_field_types GetEnum<long long int>() { return MYSQL_TYPE_LONGLONG; }
-    template <> constexpr enum_field_types GetEnum<float>()         { return MYSQL_TYPE_FLOAT; }
-    template <> constexpr enum_field_types GetEnum<double>()        { return MYSQL_TYPE_DOUBLE; }
+    template <class T>
+    constexpr enum_field_types GetEnum();
+    template <>
+    constexpr enum_field_types GetEnum<char>() { return MYSQL_TYPE_TINY; }
+    template <>
+    constexpr enum_field_types GetEnum<short>() { return MYSQL_TYPE_SHORT; }
+    template <>
+    constexpr enum_field_types GetEnum<int>() { return MYSQL_TYPE_LONG; }
+    template <>
+    constexpr enum_field_types GetEnum<long long int>() { return MYSQL_TYPE_LONGLONG; }
+    template <>
+    constexpr enum_field_types GetEnum<float>() { return MYSQL_TYPE_FLOAT; }
+    template <>
+    constexpr enum_field_types GetEnum<double>() { return MYSQL_TYPE_DOUBLE; }
 
-    class Statment
+    class Statment : boost::noncopyable
     {
-        Statment(const Statment&) = delete;
-        Statment operator=(const Statment&) = delete;
-
         MYSQL_STMT* m_Stmt = nullptr;
-        void cleanup()
+        void        cleanup()
         {
-            if (m_Stmt != nullptr)
-            {
+            if (m_Stmt != nullptr) {
                 mysql_stmt_close(m_Stmt);
                 m_Stmt = nullptr;
             }
@@ -94,25 +104,24 @@ namespace MySQL
 
         void bind_one(MYSQL_BIND& aParam, const char* aValue)
         {
-            aParam.buffer_type = MYSQL_TYPE_STRING;
-            aParam.buffer = const_cast<char*>(aValue);
+            aParam.buffer_type   = MYSQL_TYPE_STRING;
+            aParam.buffer        = const_cast<char*>(aValue);
             aParam.buffer_length = strlen(aValue);
-            aParam.is_null=0;
-            aParam.length = &aParam.buffer_length;
+            aParam.is_null       = 0;
+            aParam.length        = &aParam.buffer_length;
         }
 
-        template<class T>
+        template <class T>
         typename std::enable_if<
-            std::is_arithmetic<T>::value, void
-        >::type
+            std::is_arithmetic<T>::value, void>::type
         bind_one(MYSQL_BIND& aParam, const T& aValue)
         {
-            aParam.buffer_type = GetEnum<typename std::make_signed<T>::type>();
-            aParam.buffer = const_cast<int*>(&aValue);
+            aParam.buffer_type   = GetEnum<typename std::make_signed<T>::type>();
+            aParam.buffer        = const_cast<int*>(&aValue);
             aParam.buffer_length = sizeof(aValue);
-            aParam.is_null=0;
-            aParam.length = &aParam.buffer_length;
-            aParam.is_unsigned = std::is_unsigned<T>::value;
+            aParam.is_null       = 0;
+            aParam.length        = &aParam.buffer_length;
+            aParam.is_unsigned   = std::is_unsigned<T>::value;
         }
 
         void report(const char* aMsg)
@@ -122,7 +131,7 @@ namespace MySQL
         }
 
         using ResultRow = std::vector<std::string_view>;
-        template<class T>
+        template <class T>
         ResultRow prepareRow(const T* aBind, size_t aCount)
         {
             ResultRow sRow;
@@ -139,8 +148,7 @@ namespace MySQL
             if (!m_Stmt)
                 throw std::runtime_error("mysql_stmt_init");
 
-            if (mysql_stmt_prepare(m_Stmt, aQuery.c_str(), aQuery.size()))
-            {
+            if (mysql_stmt_prepare(m_Stmt, aQuery.c_str(), aQuery.size())) {
                 const std::string sMsg = std::string("mysql_stmt_prepare: ") + mysql_stmt_error(m_Stmt);
                 cleanup();
                 throw std::runtime_error(sMsg);
@@ -149,7 +157,7 @@ namespace MySQL
         Statment(Statment&& aParent)
         {
             cleanup();
-            m_Stmt = aParent.m_Stmt;
+            m_Stmt         = aParent.m_Stmt;
             aParent.m_Stmt = nullptr;
         }
         ~Statment()
@@ -159,7 +167,7 @@ namespace MySQL
 
         unsigned count() const { return mysql_stmt_param_count(m_Stmt); }
 
-        template<class... T>
+        template <class... T>
         void Execute(const T&... t)
         {
             MYSQL_BIND sBind[sizeof...(t)];
@@ -167,34 +175,34 @@ namespace MySQL
 
             Mpl::for_each_argument([this, &sBind, index = 0](const auto& x) mutable {
                 this->bind_one(sBind[index++], x);
-            }, t...);
+            },
+                                   t...);
 
             if (mysql_stmt_bind_param(m_Stmt, sBind))
                 report("mysql_stmt_bind_param");
 
-            if(mysql_stmt_execute(m_Stmt))
+            if (mysql_stmt_execute(m_Stmt))
                 report("mysql_stmt_execute");
         }
 
         // can crash on large fields, since use alloca to allocate buffers
-        template<class T>
+        template <class T>
         void Use(T aHandler)
         {
-            auto sMeta = mysql_stmt_result_metadata(m_Stmt);
-            int sFields = mysql_num_fields(sMeta);
+            auto sMeta   = mysql_stmt_result_metadata(m_Stmt);
+            int  sFields = mysql_num_fields(sMeta);
             //std::cout << "column count: " << sFields << std::endl;
 
             MYSQL_BIND sResult[sFields];
             memset(sResult, 0, sizeof(sResult));
 
-            for (int i = 0; i < sFields; i++)
-            {
+            for (int i = 0; i < sFields; i++) {
                 MYSQL_FIELD* sField = &sMeta->fields[i];
                 //std::cout << "field length " << sField->length << ", name = " << sField->name << std::endl;
-                sResult[i].buffer = alloca(sField->length);
+                sResult[i].buffer        = alloca(sField->length);
                 sResult[i].buffer_length = sField->length;
-                sResult[i].length = (long unsigned int*)alloca(sizeof(unsigned long));
-                sResult[i].error  = (my_bool*)alloca(sizeof(my_bool));
+                sResult[i].length        = (long unsigned int*)alloca(sizeof(unsigned long));
+                sResult[i].error         = (my_bool*)alloca(sizeof(my_bool));
             }
             mysql_free_result(sMeta);
 
@@ -208,8 +216,7 @@ namespace MySQL
             //std::cout << "row count:    " << mysql_stmt_num_rows(m_Stmt) << std::endl;
 
             int sCode = 0;
-            while (sCode == 0)
-            {
+            while (sCode == 0) {
                 sCode = mysql_stmt_fetch(m_Stmt);
                 if (sCode == 1)
                     report("mysql_stmt_fetch");
@@ -219,7 +226,7 @@ namespace MySQL
         }
     };
 
-    struct ConnectionFace
+    struct ConnectionFace : boost::noncopyable
     {
         using UseCB = std::function<void(Row&&)>;
 
@@ -229,25 +236,23 @@ namespace MySQL
         virtual void ensure() = 0;
 
         virtual void Query(const std::string& aQuery) = 0;
-        virtual void Use(UseCB aHandler) = 0;
+        virtual void Use(UseCB aHandler)              = 0;
 
-        virtual ~ConnectionFace() {};
+        virtual ~ConnectionFace(){};
     };
 
     class Connection : public ConnectionFace
     {
         const Config m_Cfg;
-        MYSQL m_Handle;
-        bool m_Closed = true;
-        Connection(const Connection& ) = delete;
-        Connection& operator=(const Connection& ) = delete;
+        MYSQL        m_Handle;
+        bool         m_Closed = true;
 
         void report(const char* aMsg)
         {
             throw Error(std::string(aMsg) + ": " + mysql_error(&m_Handle), mysql_errno(&m_Handle));
         }
-    public:
 
+    public:
         struct Error : public std::runtime_error
         {
             const unsigned m_Errno = 0;
@@ -276,8 +281,7 @@ namespace MySQL
             mysql_options(&m_Handle, MYSQL_OPT_WRITE_TIMEOUT, &m_Cfg.timeout);
             if (!m_Cfg.program_name.empty())
                 mysql_options4(&m_Handle, MYSQL_OPT_CONNECT_ATTR_ADD, "program_name", m_Cfg.program_name.c_str());
-            if (!mysql_real_connect(&m_Handle, m_Cfg.host.data(), m_Cfg.username.data(), m_Cfg.password.data(), m_Cfg.database.data(), m_Cfg.port, NULL, 0))
-            {
+            if (!mysql_real_connect(&m_Handle, m_Cfg.host.data(), m_Cfg.username.data(), m_Cfg.password.data(), m_Cfg.database.data(), m_Cfg.port, NULL, 0)) {
                 mysql_close(&m_Handle);
                 report("mysql_real_connect");
             }
@@ -286,8 +290,7 @@ namespace MySQL
 
         void close() override
         {
-            if (!m_Closed)
-            {
+            if (!m_Closed) {
                 mysql_close(&m_Handle);
                 m_Closed = true;
             }
@@ -301,8 +304,7 @@ namespace MySQL
 
         void ensure() override
         {
-            if (!ping())
-            {
+            if (!ping()) {
                 close();
                 open();
             }
@@ -341,11 +343,11 @@ namespace MySQL
             if (sResult == NULL)
                 report("mysql_use_result");
 
-            int sFields = mysql_num_fields(sResult);
+            int       sFields = mysql_num_fields(sResult);
             MYSQL_ROW sRow;
             while ((sRow = mysql_fetch_row(sResult)))
                 aHandler(Row(sRow, sFields));
             mysql_free_result(sResult);
         }
     };
-}
+} // namespace MySQL

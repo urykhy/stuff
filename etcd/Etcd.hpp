@@ -1,25 +1,27 @@
 #pragma once
 
+#include <boost/noncopyable.hpp>
+
+#include "Protocol.hpp"
+
 #include <curl/Curl.hpp>
-#include <exception/Error.hpp>
 #include <format/Hex.hpp>
 #include <parser/Atoi.hpp>
 #include <parser/Base64.hpp>
 #include <parser/Json.hpp>
-
-#include "Protocol.hpp"
+#include <unsorted/Env.hpp>
 
 #ifndef BOOST_TEST_MESSAGE
 #define BOOST_TEST_MESSAGE(x)
 #endif
 
 namespace Etcd {
-    struct Client
+    struct Client : boost::noncopyable
     {
         struct Params
         {
-            std::string url    = "http://127.0.0.1:2379";
-            std::string prefix = "test:";
+            std::string url    = Util::getEnv("ETCD_HOST");
+            std::string prefix = Util::getEnv("ETCD_PREFIX");
         };
 
         struct Pair
@@ -31,7 +33,7 @@ namespace Etcd {
             {
                 if (!aValue.isObject())
                     throw Error("etcd: not object value");
-                key = Parser::Base64(aValue["key"].asString());
+                key   = Parser::Base64(aValue["key"].asString());
                 value = Parser::Base64(aValue["value"].asString());
             }
         };

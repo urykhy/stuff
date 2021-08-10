@@ -1,24 +1,24 @@
 #pragma once
 
 #include <chrono>
-
-#include <curl/Curl.hpp>
-#include <exception/Error.hpp>
-#include <unsorted/Log4cxx.hpp>
 using namespace std::chrono_literals;
 
 #include "Message.hpp"
 
+#include <curl/Curl.hpp>
+#include <exception/Error.hpp>
 #include <threads/SafeQueue.hpp>
+#include <unsorted/Env.hpp>
+#include <unsorted/Log4cxx.hpp>
 
 namespace Sentry {
-    struct Client
+    struct Client : boost::noncopyable
     {
         struct Params
         {
-            std::string url;
-            std::string key;
-            std::string secret;
+            std::string url    = Util::getEnv("SENTRY_URL");
+            std::string key    = Util::getEnv("SENTRY_KEY");
+            std::string secret = Util::getEnv("SENTRY_SECRET");
             std::string client = "sentry++/1";
         };
 
@@ -27,8 +27,7 @@ namespace Sentry {
         std::unique_ptr<Curl::Client> m_Client;
 
     public:
-        Client(const Params& aSentry)
-        : m_Sentry(aSentry)
+        Client()
         {
             Curl::Client::Params sParams;
 
@@ -52,13 +51,13 @@ namespace Sentry {
         }
     };
 
-    class Queue
+    class Queue : boost::noncopyable
     {
         Client                                m_Client;
         Threads::SafeQueueThread<std::string> m_Queue;
         Threads::Group                        m_Group;
         static thread_local bool              m_Disabled;
-        const unsigned                        m_Limit;  // max notifications in queue
+        const unsigned                        m_Limit; // max notifications in queue
 
         void process(const std::string& aMsg)
         {
@@ -74,9 +73,8 @@ namespace Sentry {
         }
 
     public:
-        Queue(const Client::Params& aSentry, unsigned aLimit = 20)
-        : m_Client(aSentry)
-        , m_Queue([this](const std::string& aMsg) { process(aMsg); }, {.retry = true})
+        Queue(unsigned aLimit = 20)
+        : m_Queue([this](const std::string& aMsg) { process(aMsg); }, {.retry = true})
         , m_Limit(aLimit)
         {}
         void start()

@@ -25,10 +25,10 @@ namespace Sentry
 
     static std::unique_ptr<Queue> gQueue;
     static Prepare gPrepare;
-    void InitCXA(const Client::Params& aParams, const Prepare& aPrepare)
+    void InitCXA(const Prepare& aPrepare)
     {
         gPrepare = aPrepare;
-        auto sQueue = std::make_unique<Queue>(aParams);
+        auto sQueue = std::make_unique<Queue>();
         sQueue->start();
         gQueue = std::move(sQueue);
     }

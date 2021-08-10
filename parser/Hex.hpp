@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <string_view>
 
 namespace Parser {
     namespace aux {
@@ -16,7 +17,7 @@ namespace Parser {
         }
     } // namespace aux
 
-    inline std::string from_hex(const std::string& x)
+    inline std::string from_hex(std::string_view x)
     {
         std::string sResult;
         if (x.size() % 2 != 0)
@@ -28,6 +29,17 @@ namespace Parser {
             sResult.push_back((aux::restore(a1) << 4) + aux::restore(a2));
         }
         return sResult;
+    }
+
+    template <class T>
+    typename std::enable_if<std::is_integral_v<T>, T>::type from_hex(const std::string_view x)
+    {
+        T sValue{};
+        const std::string sTmp = from_hex(x);
+        if (sTmp.size() != sizeof(T))
+            throw std::invalid_argument("Parser::from_hex");
+        memcpy(&sValue, sTmp.data(), sizeof(T));
+        return sValue;
     }
 
     inline std::string from_hex_mixed(const std::string& x)

@@ -18,6 +18,6 @@ namespace Util
         uuid_t sID;
         uuid_generate_random(sID);
         uint64_t* sPtr = (reinterpret_cast<uint64_t*>(&sID));
-        return std::make_tuple(htobe64(sPtr[0]), htobe64(sPtr[1]));
+        return std::make_tuple(sPtr[0], sPtr[1]);
     }
 } // namespace Util

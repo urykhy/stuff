@@ -2,6 +2,7 @@
 
 #include <json/json.h>
 
+#include <exception/Error.hpp>
 #include <format/Base64.hpp>
 #include <format/Json.hpp>
 

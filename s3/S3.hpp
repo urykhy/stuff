@@ -11,16 +11,17 @@
 #include <ssl/HMAC.hpp>
 #include <string/String.hpp>
 #include <time/Time.hpp>
+#include <unsorted/Env.hpp>
 #include <unsorted/Raii.hpp>
 
 namespace S3 {
     struct Params
     {
-        std::string host       = "127.0.0.1:9000";
-        std::string bucket     = "test";
-        std::string access_key = "minio";
-        std::string secret_key = "minio123";
-        std::string region     = "us-east-1";
+        std::string host       = Util::getEnv("S3_HOST");
+        std::string bucket     = Util::getEnv("S3_BUCKET");
+        std::string access_key = Util::getEnv("S3_ACCESS_KEY");
+        std::string secret_key = Util::getEnv("S3_SECRET_KEY");
+        std::string region     = Util::getEnv("S3_REGION");
 
         Curl::Client::Params curl;
     };

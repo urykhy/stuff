@@ -27,7 +27,7 @@ struct Entry
     std::string to_date;
 };
 
-MySQL::Config cfg{"mysql-master", 3306, "root", "root", "employees", 10, "mysql-test-simple"};
+MySQL::Config cfg{.database = "employees", .program_name = "mysql-test-simple"};
 
 BOOST_AUTO_TEST_SUITE(MySQL)
 BOOST_AUTO_TEST_CASE(simple)
@@ -76,7 +76,11 @@ BOOST_AUTO_TEST_CASE(updateable)
 
         static void        parse(Container& aDest, const MySQL::Row& aRow) { aDest[aRow[0].as_string()] = aRow[1].as_string(); }
         static std::string query(Timestamp aTimestamp) { return "select dept_no, dept_name from departments"; }
-        static Timestamp   merge(Container& aSrc, Container& aDst) { std::swap(aSrc, aDst); return 0; }
+        static Timestamp   merge(Container& aSrc, Container& aDst)
+        {
+            std::swap(aSrc, aDst);
+            return 0;
+        }
     };
 
     MySQL::Connection              c(cfg);
@@ -191,8 +195,6 @@ BOOST_AUTO_TEST_SUITE_END()
 BOOST_AUTO_TEST_SUITE(TaskQueue)
 BOOST_AUTO_TEST_CASE(simple)
 {
-    // insert tasks:  INSERT INTO task_queue(task) VALUES ('one'),('two'),('three');
-    // refresh tasks: UPDATE task_queue SET status='new' WHERE task IN ('one','two','three');
     size_t sCount = 0;
     using namespace std::chrono_literals;
     struct TestHandler : MySQL::TaskQueue::HandlerFace
@@ -217,8 +219,11 @@ BOOST_AUTO_TEST_CASE(simple)
     TestHandler sHandler(sCount);
 
     MySQL::TaskQueue::Config sQueueCfg;
-    MySQL::Config            sCfg = MySQL::Config{"mysql-master", 3306, "root", "root", "test"};
+    MySQL::Config            sCfg = MySQL::Config{.database = "test"};
     MySQL::Connection        sConnection(sCfg);
+
+    sConnection.Query("TRUNCATE TABLE task_queue");
+    sConnection.Query("INSERT INTO task_queue(task) VALUES ('one'),('two'),('three')");
 
     MySQL::TaskQueue::Manager sQueue(sQueueCfg, &sConnection, &sHandler);
     Threads::Group            sGroup;
@@ -282,7 +287,7 @@ BOOST_AUTO_TEST_CASE(simple)
 {
     MySQL::MessageQueue::Producer::Config sProducerCfg;
 
-    MySQL::Config     sCfg = MySQL::Config{"mysql-master", 3306, "root", "root", "test"};
+    MySQL::Config     sCfg = MySQL::Config{.database = "test"};
     MySQL::Connection sConnection(sCfg);
 
     sConnection.Query("TRUNCATE TABLE message_state");

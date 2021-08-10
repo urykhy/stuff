@@ -191,11 +191,7 @@ BOOST_AUTO_TEST_CASE(simple)
     jsonParam sJsonParam;
     sJsonParam.configure(sRouter);
 
-    Sentry::Client::Params sParams;
-    sParams.url    = "web.sentry.docker:9000/api/2/store/";
-    sParams.key    = "626d891753d6489ba426baa41d7c79fc";
-    sParams.secret = "350776c0cfba4013a93275e9de63ba5d";
-    Sentry::Queue sQueue(sParams);
+    Sentry::Queue sQueue;
     sQueue.start();
 
     Threads::QueueExecutor sTaskQueue;
