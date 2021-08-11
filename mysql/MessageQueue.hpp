@@ -24,6 +24,7 @@ namespace MySQL::MessageQueue {
         enum Status
         {
             OK,
+            ALREADY,
             CONFLICT
         };
 
@@ -48,13 +49,11 @@ namespace MySQL::MessageQueue {
             return sExists;
         }
 
-        // creates own transaction
-        Status insert(std::string_view aTask, std::string_view aHash={})
+        // user must start and commit transaction
+        Status insert(std::string_view aTask, std::string_view aHash = {})
         {
             m_Connection->ensure();
             try {
-                m_Connection->Query("BEGIN");
-
                 uint64_t sPosition = 0;
 
                 std::string sQuery = fmt::format(
@@ -67,8 +66,7 @@ namespace MySQL::MessageQueue {
                 m_Connection->Use([&sPosition](const MySQL::Row& aRow) { sPosition = aRow[0].as_uint64(); });
 
                 if (is_exists(aTask)) {
-                    m_Connection->Query("ROLLBACK");
-                    return OK;
+                    return ALREADY;
                 }
 
                 sPosition++;
@@ -89,17 +87,13 @@ namespace MySQL::MessageQueue {
                     m_Config.producer,
                     sPosition);
                 m_Connection->Query(sQuery);
-                m_Connection->Query("COMMIT");
                 return OK;
             } catch (const Connection::Error& aErr) {
                 if (aErr.m_Errno == ER_DUP_ENTRY or aErr.m_Errno == ER_LOCK_WAIT_TIMEOUT) {
-                    m_Connection->Query("ROLLBACK");
                     return Status::CONFLICT;
                 }
-                m_Connection->close();
                 throw;
             } catch (...) {
-                m_Connection->close();
                 throw;
             }
         }
@@ -177,7 +171,7 @@ namespace MySQL::MessageQueue {
             return sTasks;
         }
 
-        // transaction must be started and commited by user
+        // user must start and commit transaction
         void update()
         {
             const std::string sQuery = fmt::format(

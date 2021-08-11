@@ -289,9 +289,11 @@ BOOST_AUTO_TEST_CASE(simple)
     sConnection.Query("TRUNCATE TABLE message_queue");
 
     MySQL::MessageQueue::Producer sProducer(sProducerCfg, &sConnection);
+    sConnection.Query("BEGIN");
     BOOST_CHECK_EQUAL(sProducer.insert("task 1", "a"), MySQL::MessageQueue::Producer::OK);
-    BOOST_CHECK_EQUAL(sProducer.insert("task 1", "a"), MySQL::MessageQueue::Producer::OK);
+    BOOST_CHECK_EQUAL(sProducer.insert("task 1", "a"), MySQL::MessageQueue::Producer::ALREADY);
     BOOST_CHECK_EQUAL(sProducer.insert("task 2", "b"), MySQL::MessageQueue::Producer::OK);
+    sConnection.Query("COMMIT");
 
     MySQL::MessageQueue::Consumer::Config     sConsumerCfg;
     MySQL::MessageQueue::Consumer             sConsumer(sConsumerCfg, &sConnection);
