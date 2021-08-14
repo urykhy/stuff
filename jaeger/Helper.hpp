@@ -11,14 +11,15 @@ namespace Jaeger {
         Params m_Params;
         bool   m_Active = false;
 
-        std::unique_ptr<Metric>        m_Metric;
-        std::unique_ptr<Metric::Guard> m_Current;
+        std::unique_ptr<Metric>       m_Metric;
+        std::unique_ptr<Metric::Step> m_Current;
 
     public:
-        Helper(const std::string& aParent, const std::string& aState, std::string_view aService)
+        Helper(const std::string& aParent, int64_t aBaseId, std::string_view aService)
         {
-            if (!aParent.empty() and !aState.empty()) {
-                m_Params         = Params::parse(aParent, aState);
+            if (!aParent.empty()) {
+                m_Params         = Params::parse(aParent);
+                m_Params.baseId  = aBaseId;
                 m_Params.service = aService;
                 m_Metric         = std::make_unique<Metric>(m_Params);
                 m_Active         = true;
@@ -30,7 +31,7 @@ namespace Jaeger {
             if (!m_Active)
                 return;
             stop();
-            m_Current = std::make_unique<Metric::Guard>(*m_Metric, aStage);
+            m_Current = std::make_unique<Metric::Step>(*m_Metric, aStage);
         }
         void stop()
         {

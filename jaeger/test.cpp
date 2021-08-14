@@ -13,15 +13,14 @@ BOOST_AUTO_TEST_CASE(params)
 {
     const auto sParams = Jaeger::Params::uuid("test");
     BOOST_TEST_MESSAGE("parent: " << sParams.traceparent());
-    BOOST_TEST_MESSAGE("state:  " << sParams.tracestate());
 
-    const auto sParsed = Jaeger::Params::parse(sParams.traceparent(), sParams.tracestate());
+    const auto sParsed = Jaeger::Params::parse(sParams.traceparent());
 
-    BOOST_CHECK_EQUAL(sParams.traceIdHigh, sParsed.traceIdHigh);
-    BOOST_CHECK_EQUAL(sParams.traceIdLow, sParsed.traceIdLow);
-    BOOST_CHECK_EQUAL(sParams.parentId, sParsed.parentId);
-    BOOST_CHECK_EQUAL(sParams.baseId, sParsed.baseId);
-    BOOST_CHECK_EQUAL("", sParsed.service);
+    BOOST_CHECK_EQUAL(sParsed.traceIdHigh, sParams.traceIdHigh);
+    BOOST_CHECK_EQUAL(sParsed.traceIdLow, sParams.traceIdLow);
+    BOOST_CHECK_EQUAL(sParsed.parentId, sParams.parentId);
+    BOOST_CHECK_EQUAL(sParsed.baseId, 1);
+    BOOST_CHECK_EQUAL(sParsed.service, "");
 }
 BOOST_AUTO_TEST_CASE(simple)
 {
@@ -31,27 +30,27 @@ BOOST_AUTO_TEST_CASE(simple)
     sMetric.set_process_tag(Tag{"version", "0.1/test"});
 
     {
-        Jaeger::Metric::Guard sM(sMetric, "initialize");
+        Jaeger::Metric::Step sM(sMetric, "initialize");
         std::this_thread::sleep_for(100us);
     }
     {
-        Jaeger::Metric::Guard sM(sMetric, "download");
+        Jaeger::Metric::Step sM(sMetric, "download");
         std::this_thread::sleep_for(100us);
     }
 
-    Jaeger::Metric::Guard sProcess(sMetric, "process");
+    Jaeger::Metric::Step sProcess(sMetric, "process");
     {
         {
-            Jaeger::Metric::Guard sM(sProcess.child("fetch"));
+            Jaeger::Metric::Step sM(sProcess.child("fetch"));
             std::this_thread::sleep_for(200us);
         }
         {
-            Jaeger::Metric::Guard sM(sProcess.child("merge"));
+            Jaeger::Metric::Step sM(sProcess.child("merge"));
             std::this_thread::sleep_for(300us);
             sM.set_log(Tag{"factor", 42.2}, Tag{"duplicates", 50l}, Tag{"unique", 10l}, Tag{"truncated", 4l});
         }
         try {
-            Jaeger::Metric::Guard sM(sProcess.child("write"));
+            Jaeger::Metric::Step sM(sProcess.child("write"));
             std::this_thread::sleep_for(300us);
             throw 1;
         } catch (...) {
@@ -62,7 +61,7 @@ BOOST_AUTO_TEST_CASE(simple)
     sProcess.close();
 
     {
-        Jaeger::Metric::Guard sM(sMetric, "commit");
+        Jaeger::Metric::Step sM(sMetric, "commit");
         std::this_thread::sleep_for(10us);
     }
 
@@ -75,25 +74,25 @@ BOOST_AUTO_TEST_CASE(parts)
     Jaeger::Metric sMetric(Jaeger::Params::uuid("test.cpp"));
     sMetric.set_process_tag(Tag{"version", "0.1/test"});
 
-    Jaeger::Metric::Guard sRoot(sMetric, "root");
+    Jaeger::Metric::Step sRoot(sMetric, "root");
     {
-        Jaeger::Metric::Guard sCall = sRoot.child("call");
+        Jaeger::Metric::Step sCall = sRoot.child("call");
         std::this_thread::sleep_for(30ms);
 
         // 50 is starting id for new spans
-        auto sState = sCall.extract(50);
+        auto sState = sCall.extract();
         BOOST_TEST_MESSAGE("parent: " << sState.traceparent());
-        BOOST_TEST_MESSAGE("state:  " << sState.tracestate());
 
         // remote side
+        sState.baseId = 50;
         sState.service = "s3";
         Jaeger::Metric sMetric2(sState);
         {
-            Jaeger::Metric::Guard sPerform(sMetric2, "perform");
+            Jaeger::Metric::Step sPerform(sMetric2, "perform");
             sPerform.set_tag(Tag{"remote", true});
             std::this_thread::sleep_for(2ms);
             {
-                Jaeger::Metric::Guard sStore(sPerform.child("store"));
+                Jaeger::Metric::Step sStore(sPerform.child("store"));
                 std::this_thread::sleep_for(5ms);
             }
             std::this_thread::sleep_for(2ms);

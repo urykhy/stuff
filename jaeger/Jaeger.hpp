@@ -25,7 +25,7 @@ namespace Jaeger {
         int64_t     traceIdLow  = 0;
         int64_t     parentId    = 0;
         int64_t     baseId      = 1;
-        std::string service;
+        std::string service{};
 
         std::string traceparent() const
         {
@@ -35,12 +35,8 @@ namespace Jaeger {
                    Format::to_hex(parentId) + '-' +
                    "00"; // flags
         };
-        std::string tracestate() const
-        {
-            return "base=" + Format::to_hex(baseId);
-        };
 
-        static Params parse(std::string_view aParent, std::string_view aState)
+        static Params parse(std::string_view aParent)
         {
             Params sNew;
             Parser::simple(
@@ -64,17 +60,6 @@ namespace Jaeger {
                     }
                 },
                 '-');
-            {
-                const auto sPos = aState.find('=');
-                if (sPos == std::string_view::npos)
-                    throw std::invalid_argument("Jaeger::Params: bad state format");
-                const auto sName  = aState.substr(0, sPos);
-                const auto sValue = aState.substr(sPos + 1);
-                if (sName == "base")
-                    sNew.baseId = Parser::from_hex<int64_t>(sValue);
-                else
-                    throw std::invalid_argument("Jaeger::Params: bad state param");
-            }
             return sNew;
         }
 
@@ -157,7 +142,7 @@ namespace Jaeger {
             return sBuffer->getBufferAsString();
         }
 
-        class Guard : boost::noncopyable
+        class Step : boost::noncopyable
         {
             const int                   m_XCount;
             Metric&                     m_Metric;
@@ -165,7 +150,7 @@ namespace Jaeger {
             bool                        m_Alive = true;
 
         public:
-            Guard(Metric& aMetric, const std::string& aName, size_t aParentSpanId = 0)
+            Step(Metric& aMetric, const std::string& aName, size_t aParentSpanId = 0)
             : m_XCount(std::uncaught_exceptions())
             , m_Metric(aMetric)
             {
@@ -184,7 +169,7 @@ namespace Jaeger {
                 //BOOST_TEST_MESSAGE("new span " << aName << "(" << m_Span.spanId << ") with parent " << m_Span.parentSpanId);
             }
 
-            Guard(Guard&& aOld)
+            Step(Step&& aOld)
             : m_XCount(aOld.m_XCount)
             , m_Metric(aOld.m_Metric)
             , m_Span(std::move(aOld.m_Span))
@@ -193,7 +178,7 @@ namespace Jaeger {
                 aOld.m_Alive = false;
             }
 
-            ~Guard()
+            ~Step()
             {
                 try {
                     close();
@@ -214,9 +199,9 @@ namespace Jaeger {
 
             int64_t span_id() const { return m_Span.spanId; }
 
-            Guard child(const std::string& aName)
+            Step child(const std::string& aName)
             {
-                return Guard(m_Metric, aName, m_Span.spanId);
+                return Step(m_Metric, aName, m_Span.spanId);
             }
 
             void set_tag(const Tag& aTag)
@@ -240,16 +225,16 @@ namespace Jaeger {
                 m_Span.__isset.logs = true;
             }
 
-            Params extract(int64_t aBase) const
+            Params extract() const
             {
-                return {m_Span.traceIdHigh,
-                        m_Span.traceIdLow,
-                        m_Span.spanId,
-                        aBase,
-                        m_Metric.m_Batch.process.serviceName};
+                return {
+                    m_Span.traceIdHigh,
+                    m_Span.traceIdLow,
+                    m_Span.spanId,
+                };
             }
         };
-        friend class Guard;
+        friend class Step;
     };
 
     inline void send(const Metric& aMetric)
