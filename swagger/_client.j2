@@ -30,11 +30,19 @@ public:
         {%- endif %}
 
         {# client response with successful struct, or throw #}
-        {{ returnType }} {{ name }}(const {{ name }}_parameters& aRequest)
+        {{ returnType }} {{ name }}(const {{ name }}_parameters& aRequest {% if x_jaeger %}, std::optional<Jaeger::Metric::Step*> aTraceParent = std::nullopt{% endif %})
         {
             namespace http = boost::beast::http;
             asio_http::ClientRequest sRequest = aRequest.__format();
             sRequest.url = m_Base + sRequest.url;
+            {% if x_jaeger %}
+            std::unique_ptr<Jaeger::Metric::Step> sTraceCall;
+            if (aTraceParent)
+            {
+                sTraceCall = std::make_unique<Jaeger::Metric::Step>((*aTraceParent)->child("call {{ name }}"));
+                sRequest.headers["traceparent"] = sTraceCall->extract().traceparent();
+            }
+            {% endif %}
             INFO("{{ method }} " << sRequest.url);
             auto sResponse = m_HttpClient->async(std::move(sRequest)).get();
             const auto sFromSwagger = !sResponse["X-From-Swagger"].empty();

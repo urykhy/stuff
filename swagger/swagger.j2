@@ -32,6 +32,11 @@
     #include <threads/SafeQueue.hpp>
 {% endif %}
 
+{% set x_jaeger = doc['info'].get('x-jaeger', false) %}
+{% if x_jaeger %}
+    #include <jaeger/Helper.hpp>
+{% endif %}
+
 {% macro complex_schema(schema, name='body', opt=False) -%}
     {%- for s in schema | swagger_decode(name) %}
         {%- if 'fields' in s %}

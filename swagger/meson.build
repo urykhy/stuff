@@ -4,17 +4,23 @@ includes  = include_directories('..')
 boost     = dependency('boost', modules : ['unit_test_framework', 'system', 'coroutine'])
 threads   = dependency('threads')
 json      = dependency('jsoncpp')
-
-# for sentry
 log4cxx   = dependency('liblog4cxx')
 curl      = dependency('libcurl')
 uuid      = dependency('uuid')
+thrift    = dependency('thrift')
+subdir('jaeger_proto')
+import('python').find_installation('python3', modules : ['jinja2'])
 
-api_prog  = find_program('swagger.sh', required : true)
-api_gen   = generator(api_prog, output : ['@BASENAME@.hpp'], arguments : ['@INPUT@','@OUTPUT@'])
-api_src   = api_gen.process('common.v1.yaml', 'keyValue.v1.yaml', 'mq.v1.yaml', 'tutorial.v1.yaml', 'jsonParam.v1.yaml')
-api_lib   = static_library('api', api_src)
-api_dep   = declare_dependency(link_with : api_lib, include_directories: api_lib.private_dir_include())
+api_gen   = find_program('swagger.sh', required : true)
+api_src   = []
+foreach name : ['common.v1.yaml', 'jsonParam.v1.yaml', 'keyValue.v1.yaml', 'mq.v1.yaml', 'tutorial.v1.yaml']
+    hpp_name = name.replace('.yaml','.hpp')
+    api_src += custom_target(hpp_name,
+               depend_files : files('swagger.py', '_client.j2',  '_params.j2', '_response.j2', '_server.j2', 'swagger.j2'),
+               output       : hpp_name,
+               input        : name,
+               command      : [api_gen, '@INPUT@', '@OUTPUT@'])
+endforeach
 
 # swagger-ui in tarball
 swagger_ui_get = find_program('get_swagger_ui.sh', required : true)
@@ -23,5 +29,5 @@ objcopy        = find_program('objcopy', required : true)
 swagger_ui_o   = custom_target('swagger_ui_o', output: 'swagger_ui.o', input: swagger_ui_tar,
                  command: [objcopy, '--input', 'binary', '--output', 'elf64-x86-64', '--binary-architecture', 'i386:x86-64', '--rename-section', '.data=.rodata', 'swagger_ui.tar', 'swagger_ui.o'])
 
-a = executable('a.out', 'test.cpp', swagger_ui_o, dependencies : [boost, threads, json, api_dep, log4cxx, curl, uuid], include_directories : includes)
+a = executable('a.out', 'test.cpp', swagger_ui_o, api_src, dependencies : [boost, threads, json, log4cxx, curl, uuid, thrift, jaeger_proto], include_directories : includes)
 test('basic test', a, args : ['-l', 'all'])

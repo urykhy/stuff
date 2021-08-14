@@ -6,13 +6,17 @@
 
 namespace Jaeger {
 
-    class Helper : boost::noncopyable
+    struct Helper : boost::noncopyable
     {
+        using Step    = Metric::Step;
+        using StepPtr = std::unique_ptr<Step>;
+
+    private:
         Params m_Params;
         bool   m_Active = false;
 
-        std::unique_ptr<Metric>       m_Metric;
-        std::unique_ptr<Metric::Step> m_Current;
+        std::unique_ptr<Metric> m_Metric;
+        StepPtr                 m_Current;
 
     public:
         Helper(const std::string& aParent, int64_t aBaseId, std::string_view aService)
@@ -31,7 +35,7 @@ namespace Jaeger {
             if (!m_Active)
                 return;
             stop();
-            m_Current = std::make_unique<Metric::Step>(*m_Metric, aStage);
+            m_Current = std::make_unique<Step>(*m_Metric, aStage);
         }
         void stop()
         {
@@ -44,6 +48,24 @@ namespace Jaeger {
                 m_Current->set_error();
                 m_Current->set_log(Metric::Tag{"exception", aMessage});
             }
+        }
+
+        StepPtr child(const std::string& aName)
+        {
+            StepPtr sResult;
+            if (m_Current) {
+                sResult = std::make_unique<Step>(m_Current->child(aName));
+            }
+            return sResult;
+        }
+
+        static StepPtr child(StepPtr& aStep, const std::string& aName)
+        {
+            StepPtr sResult;
+            if (aStep) {
+                sResult = std::make_unique<Step>(aStep->child(aName));
+            }
+            return sResult;
         }
 
         ~Helper()

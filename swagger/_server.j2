@@ -80,6 +80,10 @@ public:
             });
         {% endif %}
 
+        {% if x_jaeger %}
+            Jaeger::Helper sTrace(aRequest["traceparent"].to_string(), {{ doc['paths'][path][method].get('x-jaeger-base-id', 50) }}, "{{ name }}");
+        {% endif %}
+
         {{ name }}_parameters sParameters;
         if (!sParameters.__test_content_type(aRequest))
         {
@@ -87,6 +91,8 @@ public:
             aResponse.set("X-From-Swagger", "1");
             return;
         }
+
+        {% if x_jaeger %} sTrace.start("parsing"); {% endif %}
         try {
             sParameters.__parse(aRequest);
         }
@@ -94,6 +100,7 @@ public:
             aResponse.result(http::status::bad_request);
             aResponse.set("X-From-Swagger", "1");
             aResponse.body() = e.what();
+            {% if x_jaeger %} sTrace.set_error(e.what()); {% endif %}
             {% if x_sentry %}
                 std::unique_lock sLock(m_SentryLock, std::defer_lock);
                 if (sLock.try_lock() and m_SentryHandler and time(nullptr) > m_SentryLastCall + m_SentryRateLimit)
@@ -120,14 +127,18 @@ public:
             {% endif %}
             return;
         }
+        {% if x_jaeger %} sTrace.stop(); {% endif %}
 
         {% if x_queue %}
             using CT = boost::asio::async_completion<asio_http::asio::yield_context, void(void)>;
             CT sCompletion{ yield };
+            {% if x_jaeger %} sTrace.start("queue"); {% endif %}
             auto sTask = [&, sHandler = sCompletion.completion_handler](){
+            {% if x_jaeger %} sTrace.stop(); {% endif %}
         {% endif %}
+        {% if x_jaeger %} sTrace.start("perform"); {% endif %}
         try {
-            auto sResponse = {{ name }}_i(aService, sParameters, yield);
+            auto sResponse = {{ name }}_i(aService, sParameters, yield {% if x_jaeger %}, sTrace{% endif %});
             std::visit([&](auto&& arg) {
                 using T = std::decay_t<decltype(arg)>;
                 if constexpr (std::is_same_v<T, boost::beast::http::status>)
@@ -142,7 +153,9 @@ public:
             aResponse.result(http::status::internal_server_error);
             aResponse.set("X-From-Swagger", "1");
             aResponse.body() = e.what();
+            {% if x_jaeger %} sTrace.set_error(e.what()); {% endif %}
         }
+        {% if x_jaeger %} sTrace.stop(); {% endif %}
         {% if x_queue %}
                 using boost::asio::asio_handler_invoke;
                 asio_handler_invoke(sHandler, &sHandler);
@@ -189,7 +202,7 @@ public:
     virtual {{ name }}_response_v
     {{ name }}_i(asio_http::asio::io_service& aService,
                  const {{ name }}_parameters& aRequest,
-                 asio_http::asio::yield_context yield)
+                 asio_http::asio::yield_context yield {% if x_jaeger %}, Jaeger::Helper& aTrace {% endif %})
     {
         return {boost::beast::http::status::not_implemented};
     }

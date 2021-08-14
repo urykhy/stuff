@@ -168,9 +168,32 @@ struct TutorialServer : api::tutorial_1_0::server
     virtual get_parameters_response_v
     get_parameters_i(asio_http::asio::io_service&     aService,
                      const get_parameters_parameters& aRequest,
-                     asio_http::asio::yield_context   yield)
+                     asio_http::asio::yield_context   yield,
+                     Jaeger::Helper&                  aTrace)
     {
-        sleep(1);
+        {
+            auto sStep1 = aTrace.child("prepare");
+            std::this_thread::sleep_for(100ms);
+        }
+        {
+            auto sStep1 = aTrace.child("fetch");
+            std::this_thread::sleep_for(200ms);
+        }
+        {
+            auto sStep1 = aTrace.child("merge");
+            std::this_thread::sleep_for(100ms);
+        }
+        {
+            auto sStep1 = aTrace.child("write");
+            {
+                auto sStep2 = Jaeger::Helper::child(sStep1, "mysql");
+                std::this_thread::sleep_for(300ms);
+            }
+            {
+                auto sStep2 = Jaeger::Helper::child(sStep1, "s3");
+                std::this_thread::sleep_for(300ms);
+            }
+        }
         return get_parameters_response_200{.body = "success"};
     }
 };
@@ -332,6 +355,20 @@ BOOST_AUTO_TEST_CASE(simple)
         sR1.join();
         sR2.join();
         BOOST_CHECK_CLOSE(sMeter.get().to_double(), 1.1, 5); // 5% difference is ok
+    }
+
+    // jaeger tracer
+    {
+        api::tutorial_1_0::client sClient(sHttpClient, "http://127.0.0.1:3000");
+
+        Jaeger::Metric sTrace(Jaeger::Params::uuid("swagger.cpp"));
+        {
+            Jaeger::Metric::Step sTraceStep(sTrace, "make test");
+
+            auto sR = sClient.get_parameters({.id = "test-id", .string_required = "abcdefg"}, &sTraceStep);
+            BOOST_TEST_MESSAGE("request: " << sR.body);
+        }
+        Jaeger::send(sTrace);
     }
 }
 BOOST_AUTO_TEST_SUITE_END()
