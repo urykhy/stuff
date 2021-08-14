@@ -5,8 +5,8 @@
 #include <thrift/protocol/TCompactProtocol.h>
 #include <thrift/transport/TBufferTransports.h>
 
-#include "Agent.h"
-#include "jaeger_types.h"
+#include "jaeger_proto/Agent.h"
+#include "jaeger_proto/jaeger_types.h"
 
 #include <format/Hex.hpp>
 #include <mpl/Mpl.hpp>
