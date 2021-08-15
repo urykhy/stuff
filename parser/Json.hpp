@@ -5,7 +5,7 @@
 namespace Parser::Json {
     using Value = ::Json::Value;
 
-    Value parse(const std::string& aStr)
+    inline Value parse(const std::string& aStr)
     {
         Value          sJson;
         ::Json::Reader sReader;

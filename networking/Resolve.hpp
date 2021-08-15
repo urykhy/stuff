@@ -40,9 +40,12 @@ namespace Util {
 
     inline uint32_t resolveName(const std::string& aName)
     {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
         struct addrinfo sHints = {
             .ai_family = AF_INET,
         };
+#pragma GCC diagnostic pop
         struct addrinfo* sInfo = nullptr;
         Util::Raii       sCleanup([&sInfo]() { freeaddrinfo(sInfo); });
 

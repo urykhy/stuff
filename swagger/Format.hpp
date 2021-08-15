@@ -19,10 +19,10 @@ namespace swagger {
         return Format::Json::to_string(t.to_json());
     }
 
-    std::string format(const bool v) { return (v ? "true" : "false"); }
-    std::string format(const std::string& v) { return v; }
-    std::string format(const int64_t v) { return std::to_string(v); }
-    std::string format(double v) { return std::to_string(v); }
+    inline std::string format(const bool v) { return (v ? "true" : "false"); }
+    inline std::string format(const std::string& v) { return v; }
+    inline std::string format(const int64_t v) { return std::to_string(v); }
+    inline std::string format(double v) { return std::to_string(v); }
 
     template <class T>
     std::string format(const std::optional<T>& t) { return format(t.value()); }
@@ -47,10 +47,10 @@ namespace swagger {
         v.from_json(Parser::Json::parse(s));
     }
 
-    void parse(const std::string& s, bool& v) { v = (s == "true" or s == "yes" or s == "1"); }
-    void parse(const std::string& s, std::string& v) { v = s; }
-    void parse(const std::string& s, int64_t& v) { v = Parser::Atoi<int64_t>(s); }
-    void parse(const std::string& s, double& v) { v = Parser::Atof<double>(s); }
+    inline void parse(const std::string& s, bool& v) { v = (s == "true" or s == "yes" or s == "1"); }
+    inline void parse(const std::string& s, std::string& v) { v = s; }
+    inline void parse(const std::string& s, int64_t& v) { v = Parser::Atoi<int64_t>(s); }
+    inline void parse(const std::string& s, double& v) { v = Parser::Atof<double>(s); }
 
     template <class T>
     void parse(const std::string& s, std::optional<T>& v)
@@ -81,7 +81,7 @@ namespace swagger {
     bool is_specified(const std::vector<T>& v) { return !v.empty(); }
 
     // make header name
-    boost::beast::string_view header(const char* aName)
+    inline boost::beast::string_view header(const char* aName)
     {
         namespace http = boost::beast::http;
         auto sFieldName = http::string_to_field(aName);

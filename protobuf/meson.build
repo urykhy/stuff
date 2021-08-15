@@ -9,6 +9,7 @@ threads   = dependency('threads')
 json      = dependency('jsoncpp')
 clangformat = find_program('clang-format', required : true)
 pmr_gen   = find_program('generator.sh', required : true)
+import('python').find_installation('python3', modules : ['lark'])
 
 protoc        = generator(protoc, output : ['@BASENAME@.pb.cc', '@BASENAME@.pb.h'], arguments : ['--proto_path=@CURRENT_SOURCE_DIR@', '--cpp_out=@BUILD_DIR@', '@INPUT@'])
 tutorial_src  = protoc.process('tutorial.proto')

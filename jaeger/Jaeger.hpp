@@ -5,8 +5,11 @@
 #include <thrift/protocol/TCompactProtocol.h>
 #include <thrift/transport/TBufferTransports.h>
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wfloat-equal"
 #include "jaeger_proto/Agent.h"
 #include "jaeger_proto/jaeger_types.h"
+#pragma GCC diagnostic pop
 
 #include <format/Hex.hpp>
 #include <mpl/Mpl.hpp>
