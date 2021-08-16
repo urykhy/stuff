@@ -6,9 +6,11 @@ namespace Format::Json {
 
     using Value = ::Json::Value;
 
-    inline std::string to_string(const Value& aJson)
+    inline std::string to_string(const Value& aJson, bool aIndent = true)
     {
         ::Json::StreamWriterBuilder sBuilder;
+        if (!aIndent)
+            sBuilder["indentation"] = "";
         return ::Json::writeString(sBuilder, aJson);
     }
 

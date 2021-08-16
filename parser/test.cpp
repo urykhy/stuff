@@ -247,10 +247,24 @@ BOOST_AUTO_TEST_CASE(autoindex)
 }
 BOOST_AUTO_TEST_CASE(base64)
 {
-    const std::string sStr    = Parser::from_hex("31ff");
-    const std::string sBase64 = Format::Base64(sStr);
-    BOOST_CHECK_EQUAL("Mf8=", sBase64);
-    BOOST_CHECK_EQUAL(Format::to_hex(sStr), Format::to_hex(Parser::Base64(sBase64)));
+    {
+        const std::string sStr    = Parser::from_hex("31ff");
+        const std::string sBase64 = Format::Base64(sStr);
+        BOOST_CHECK_EQUAL("Mf8=", sBase64);
+        BOOST_CHECK_EQUAL(Format::to_hex(sStr), Format::to_hex(Parser::Base64(sBase64)));
+    }
+    {
+        const std::string sStr    = Parser::from_hex("e799cb9d499ff7513a1322fda3d6e347");
+        const std::string sBase64 = Format::Base64(sStr, Format::BASE64_NO_PADDING);
+        BOOST_CHECK_EQUAL("55nLnUmf91E6EyL9o9bjRw", sBase64);
+        BOOST_CHECK_EQUAL(Format::to_hex(sStr), Format::to_hex(Parser::Base64(sBase64, Parser::BASE64_NO_PADDING)));
+    }
+    {
+        const std::string sStr    = Parser::from_hex("e799cb9d499ff7513a1322fda3d6e347");
+        const std::string sBase64 = Format::Base64(sStr, Format::BASE64_URL_SAFE);
+        BOOST_CHECK_EQUAL("55nLnUmf91E6EyL9o9bjRw..", sBase64);
+        BOOST_CHECK_EQUAL(Format::to_hex(sStr), Format::to_hex(Parser::Base64(sBase64, Format::BASE64_URL_SAFE)));
+    }
 }
 BOOST_AUTO_TEST_CASE(json)
 {
