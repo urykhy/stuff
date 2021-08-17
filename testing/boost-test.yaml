@@ -1,0 +1,11 @@
+---
+  labels:
+    MySQL:
+      simple:
+        feature: common
+        story: MySQL
+        tag: gate-1
+    TaskQueue:
+      mock:
+        issue: UC-78
+        testId: TEST-6

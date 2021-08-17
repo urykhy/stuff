@@ -26,8 +26,7 @@ some information about stuff
 - esalert - check logs in elasticsearch
 - samlib  - to make fb2 ebook from samlib
 - scripts - unsorted, iptables, qos, make deb packages, make certificates and so on.
-- testing/ctest-allure.py - generate xml to show ctest results in allure.
-- testing/coverage-allure.py - generate xml to show coverage results in allure.
+- testing - convert boost.test xml results to allure xml
 
 ### web api
 - flibusta/ - interface to search books over local flibusta library

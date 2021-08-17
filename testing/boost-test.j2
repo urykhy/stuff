@@ -1,0 +1,55 @@
+{%- for s in doc.iter('TestSuite') %}
+    {%- if s.findall('TestCase') | length > 0 %}
+        {%- set suite_name = s.attrib['name'] %}
+        {%- set parent = doc.find('.//TestSuite[@name="' + suite_name + '"]...').attrib['name'] %}
+        {% if parent != 'Suites' %}
+            {% set suite_name = parent + ':' + suite_name %}
+        {% endif %}
+--split--ZYuMROhO04II4h2elr6f7DryY7N1y3--{{ suite_name | escape }}
+<?xml version="1.0" ?>
+        <ns0:test-suite xmlns:ns0="urn:model.allure.qatools.yandex.ru" start="{{ meta.time }}" stop="{{ meta.time + 1}}">
+            <name>{{ suite_name | escape }}</name>
+            <labels>
+                <label name="language" value="C++"/>
+                <label name="framework" value="Boost.Test"/>
+            </labels>
+            <test-cases>
+                {%- for tcase in s.findall('TestCase') %}
+                    {%- set errors = tcase.iter() | selectattr('tag', 'in', ('Error', 'Exception', 'FatalError')) | list %}
+                    {%- set err_count = errors | length -%}
+                    {%- set time_used = tcase.find("TestingTime").text | int %}
+                    {%- set time_used = (time_used / 1000 + 1) | int %}
+                    <test-case start="{{ meta.time }}" stop="{{ meta.time + time_used }}" status="{% if err_count == 0 %}passed{% else %}failed{% endif %}">
+                        <name>{{ tcase.attrib["name"] | escape }}</name>
+                        {%- set labels = extra.labels.get(suite_name, {}).get(tcase.attrib["name"], {}) %}
+                        <labels>
+                            {%- for key, value in labels.items() %}
+                                <label name="{{ key }}" value="{{ value }}"/>
+                            {%- endfor %}
+                        </labels>
+                        <steps>
+                            {%- for tstep in tcase.iter() if tstep.tag in ('Info', 'Error', 'Exception', 'FatalError') %}
+                                <step start="{{ meta.time }}" stop="{{ meta.time + time_used }}" status="{% if tstep.tag == 'Info' %}passed{% else %}failed{% endif %}">
+                                    <title>{{ tstep.text | escape }}</title>
+                                </step>
+                            {%- endfor %}
+                        </steps>
+                        {%- if err_count > 0 %}
+                            <failure>
+                                {%- set err = errors | first %}
+                                <message>{{ err.text | escape }}</message>
+                                {%- if err.iter('LastCheckpoint') | list | length > 0 %}
+                                    {%- set err = err.iter('LastCheckpoint') | list | first %}
+                                    <stack-trace>{{ err.attrib['file'] }}:{{ err.attrib['line'] }}</stack-trace>
+                                {%- else %}
+                                    <stack-trace>{{ err.attrib['file'] }}:{{ err.attrib['line'] }}</stack-trace>
+                                {%- endif %}
+                            </failure>
+                        {%- endif %}
+                    </test-case>
+                    {%- if meta.update({'time': meta.time + time_used}) %}{% endif -%}
+                {% endfor %}
+            </test-cases>
+        </ns0:test-suite>
+    {%- endif %}
+{%- endfor %}

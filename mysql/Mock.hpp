@@ -49,7 +49,7 @@ namespace MySQL
                 verifyUse();
 
                 if (m_SQL[m_Serial].query == aQuery)
-                    BOOST_TEST_MESSAGE("MOCK: " << m_SQL[m_Serial].query);
+                    BOOST_CHECK_MESSAGE(true, "MOCK: " + m_SQL[m_Serial].query);
                 else
                     BOOST_REQUIRE_MESSAGE(false, "MOCK: Unexpected query: " << aQuery << ", while waiting for: " << m_SQL[m_Serial].query);
 

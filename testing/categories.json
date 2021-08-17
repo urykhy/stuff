@@ -1,0 +1,10 @@
+[
+  {
+    "name": "SQL Mock",
+    "messageRegex": "MOCK:.*"
+  },
+  {
+    "name": "Exceptions",
+    "messageRegex": "std::runtime_error.*"
+  }
+]
