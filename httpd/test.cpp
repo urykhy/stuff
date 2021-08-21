@@ -1,11 +1,11 @@
 #define BOOST_TEST_MODULE Suites
 #include <boost/test/unit_test.hpp>
 
+#include "Router.hpp"
+
 #include <curl/Curl.hpp>
 #include <networking/Resolve.hpp>
 #include <threads/WaitGroup.hpp>
-
-#include "Router.hpp"
 
 using namespace std::chrono_literals;
 
@@ -153,7 +153,7 @@ uint64_t WithServer::m_RequestCount = 0;
 BOOST_FIXTURE_TEST_SUITE(httpd, WithServer)
 BOOST_AUTO_TEST_CASE(curl)
 {
-    Curl::Client         sClient;
+    Curl::Client sClient;
 
     auto sResult = sClient.GET("http://127.0.0.1:2081/hello");
     BOOST_CHECK_EQUAL(sResult.status, 200);

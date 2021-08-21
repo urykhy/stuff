@@ -24,7 +24,7 @@ BOOST_AUTO_TEST_CASE(list)
 BOOST_AUTO_TEST_CASE(float_precision)
 {
     BOOST_CHECK_EQUAL("123.46", Format::with_precision(123.4567890, 2));
-    BOOST_CHECK_EQUAL("123.00", Format::with_precision(123, 2));
+    BOOST_CHECK_EQUAL("123", Format::with_precision(123, 2));
     BOOST_CHECK_EQUAL("0.12", Format::with_precision(0.123456, 2));
 }
 BOOST_AUTO_TEST_CASE(json)

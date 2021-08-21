@@ -16,7 +16,8 @@ namespace Etcd {
 
 namespace Etcd::Protocol {
 
-    inline const auto& to_string = Format::Json::to_string;
+    using namespace Format::Json;
+    //inline const auto& to_string = Format::Json::to_string;
 
     inline std::string get(const std::string& aKey)
     {

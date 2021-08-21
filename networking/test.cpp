@@ -33,7 +33,7 @@ BOOST_AUTO_TEST_CASE(resolve)
     BOOST_CHECK(sSet.size() > 0);
     for (auto& x : sSet)
         BOOST_TEST_MESSAGE("resolved to " << x.name << ":" << x.port << " with priority: " << x.prio << ", weight: " << x.weight);
-    bool rc = sSet[0].resolve() == Util::SRV::HostPort{0x0A0A670A, 88};
+    bool rc = sSet[0].resolve() == Util::SRV::HostPort{0x030A670A, 88};
     BOOST_CHECK(rc);
 }
 BOOST_AUTO_TEST_CASE(socket)
@@ -109,7 +109,7 @@ BOOST_AUTO_TEST_CASE(tcp)
     sGroup.start([]() {
         Tcp::Socket sServer;
         sServer.set_reuse_port();
-        sServer.bind(2090);
+        sServer.bind(2082);
         sServer.listen();
         int sFd = sServer.accept();
         BOOST_CHECK_GE(sFd, 0);
@@ -122,7 +122,7 @@ BOOST_AUTO_TEST_CASE(tcp)
     std::this_thread::sleep_for(10ms);
 
     Tcp::Socket sClient = Tcp::Socket();
-    sClient.connect(Util::resolveName("127.0.0.1"), 2090);
+    sClient.connect(Util::resolveName("127.0.0.1"), 2082);
     sClient.write("1234567890", 10);
     std::string sReply(10, ' ');
     sClient.read(sReply.data(), 10);

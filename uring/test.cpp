@@ -23,7 +23,7 @@ BOOST_AUTO_TEST_CASE(simple)
 
     Tcp::Socket sServer;
     sServer.set_reuse_port();
-    sServer.bind(2090);
+    sServer.bind(2083);
     sServer.listen();
     BOOST_TEST_MESSAGE("listen on " << sServer.get_fd());
 
@@ -50,7 +50,7 @@ BOOST_AUTO_TEST_CASE(simple)
     struct sockaddr_in sPeer;
     memset(&sPeer, 0, sizeof(sPeer));
     sPeer.sin_family      = AF_INET;
-    sPeer.sin_port        = htons(2090);
+    sPeer.sin_port        = htons(2083);
     sPeer.sin_addr.s_addr = Util::resolveName("127.0.0.1");
     BOOST_TEST_MESSAGE("connecting to " << sPeer.sin_addr.s_addr);
     socklen_t sPeerLen = sizeof(sPeer);
@@ -108,7 +108,7 @@ BOOST_AUTO_TEST_CASE(Httpd)
 
     Tcp::Socket sServer;
     sServer.set_reuse_port();
-    sServer.bind(2090);
+    sServer.bind(2083);
     sServer.listen();
     BOOST_TEST_MESSAGE("listen on " << sServer.get_fd());
 
