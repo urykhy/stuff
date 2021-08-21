@@ -160,6 +160,11 @@ paths:
       tags:
         - KeyValue
 components:
-  schemas: {}
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
 tags:
   - name: KeyValue
+security:
+  - BearerAuth: []

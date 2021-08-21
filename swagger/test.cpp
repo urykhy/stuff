@@ -10,6 +10,7 @@
 #include <asio_http/Router.hpp>
 #include <asio_http/Server.hpp>
 #include <format/Hex.hpp>
+#include <jwt/JWT.hpp>
 #include <resource/Get.hpp>
 #include <resource/Server.hpp>
 #include <sentry/Client.hpp>
@@ -68,6 +69,15 @@ struct KeyValue : api::keyValue_1_0::server
         return get_kv_key_response_200{sIt->second.value, sIt->second.version};
     }
 
+    bool
+    get_kv_key_auth(const Jwt::Claim&            aClaim,
+                    const get_kv_key_parameters& aRequest)
+        override
+    {
+        BOOST_TEST_MESSAGE("get auth " << aClaim.iss << "/" << aClaim.aud << " for " << aRequest.key.value());
+        return true;
+    }
+
     put_kv_key_response_v
     put_kv_key_i(
         asio_http::asio::io_service&   aService,
@@ -110,6 +120,15 @@ struct KeyValue : api::keyValue_1_0::server
             return put_kv_key_response_200{};
     }
 
+    bool
+    put_kv_key_auth(const Jwt::Claim&            aClaim,
+                    const put_kv_key_parameters& aRequest)
+        override
+    {
+        BOOST_TEST_MESSAGE("put auth " << aClaim.iss << "/" << aClaim.aud << " for " << aRequest.key.value());
+        return true;
+    }
+
     delete_kv_key_response_v
     delete_kv_key_i(
         asio_http::asio::io_service&    aService,
@@ -134,6 +153,15 @@ struct KeyValue : api::keyValue_1_0::server
             return boost::beast::http::status::not_found;
         m_Store.erase(sIt);
         return boost::beast::http::status::ok;
+    }
+
+    bool
+    delete_kv_key_auth(const Jwt::Claim&               aClaim,
+                       const delete_kv_key_parameters& aRequest)
+        override
+    {
+        BOOST_TEST_MESSAGE("del auth " << aClaim.iss << "/" << aClaim.aud << " for " << aRequest.key.value());
+        return true;
     }
 
     head_kv_key_response_v
@@ -201,6 +229,8 @@ struct TutorialServer : api::tutorial_1_0::server
 BOOST_AUTO_TEST_SUITE(rpc)
 BOOST_AUTO_TEST_CASE(simple)
 {
+    const Jwt::HS256 sTokenManager("secret");
+
     auto   sRouter = std::make_shared<asio_http::Router>();
     Common sCommon;
     sCommon.configure(sRouter);
@@ -210,6 +240,7 @@ BOOST_AUTO_TEST_CASE(simple)
 
     KeyValue sKeyValue;
     sKeyValue.configure(sRouter);
+    sKeyValue.with_authorization(&sTokenManager);
 
     jsonParam sJsonParam;
     sJsonParam.configure(sRouter);
@@ -274,6 +305,12 @@ BOOST_AUTO_TEST_CASE(simple)
     // keyValue with generated client
     {
         api::keyValue_1_0::client sClient(sHttpClient, "http://127.0.0.1:3000");
+
+        Jwt::Claim sClaim{.exp = time(nullptr) + 10,
+                          .nbf = time(nullptr) - 10,
+                          .iss = "test",
+                          .aud = "kv"};
+        sClient.__with_token(sTokenManager.Sign(sClaim));
 
         auto R1 = sClient.put_kv_key({.key = "abc", .body = "abc_data"});
         std::get<api::keyValue_1_0::put_kv_key_response_201>(R1);

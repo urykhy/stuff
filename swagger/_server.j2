@@ -27,7 +27,32 @@ class server
 {% endif %}
 {% if x_queue %}
     Threads::QueueExecutor* m_Queue = nullptr;
-    {% endif %}
+{% endif %}
+{% if x_bearer %}
+    const Jwt::IFace* m_Jwt = nullptr;
+
+    Jwt::Claim __auth_helper(const asio_http::Request& aRequest)
+    {
+        if (nullptr == m_Jwt)
+            throw std::runtime_error("authorization not configured on server");
+        const auto sBeastHeader = aRequest["Authorization"];
+        std::string_view sHeader(sBeastHeader.data(), sBeastHeader.size());
+        if (sHeader.empty())
+            throw std::invalid_argument("authorization required");
+        const size_t sSpace = sHeader.find(' ');
+        if (sSpace == std::string_view::npos)
+            throw std::invalid_argument("authorization format error");
+        if ("Bearer" != sHeader.substr(0, sSpace))
+            throw std::invalid_argument("authorization method error");
+        Jwt::Claim sClaim;
+        try {
+            sClaim = m_Jwt->Validate(sHeader.substr(sSpace + 1));
+        } catch (const std::exception& e) {
+            throw std::invalid_argument("authorization token: " + std::string(e.what()));
+        }
+        return sClaim;
+    }
+{% endif %}
 
 public:
 
@@ -43,6 +68,13 @@ public:
     {
         m_Queue = &aQueue;
     }
+{% endif %}
+{% if x_bearer %}
+    void with_authorization(const Jwt::IFace* aManager)
+    {
+        m_Jwt = aManager;
+    }
+
 {% endif %}
 
 {% call(doc, path, method, name) _for_every_method(doc) %}
@@ -93,11 +125,18 @@ public:
         }
 
         {% if x_jaeger %} sTrace.start("parsing"); {% endif %}
+        auto sResponseStatus = http::status::bad_request;
         try {
             sParameters.__parse(aRequest);
+
+            {% if x_bearer %}
+            sResponseStatus = http::status::unauthorized;
+            if (!{{ name }}_auth(__auth_helper(aRequest), sParameters))
+                throw std::invalid_argument("authorization token rejected");
+            {% endif %}
         }
         catch (const std::exception& e) {
-            aResponse.result(http::status::bad_request);
+            aResponse.result(sResponseStatus);
             aResponse.set("X-From-Swagger", "1");
             aResponse.body() = e.what();
             {% if x_jaeger %} sTrace.set_error(e.what()); {% endif %}
@@ -117,7 +156,10 @@ public:
                             sRequest.headers["{{ param.name }}"] = x.to_string();
                     {%- endfor %}
                     Sentry::Message sMessage("swagger");
-                    sMessage.set_request(sRequest).set_exception("bad request", e.what());
+                    if (sResponseStatus == http::status::unauthorized)
+                        sMessage.set_request(sRequest).set_exception("unauthorized", e.what());
+                    else
+                        sMessage.set_request(sRequest).set_exception("bad request", e.what());
                     sMessage.set_version("{{ doc['info']['title'] }}", "{{ doc['info']['version'] }}");
                     if (sPeer.has_value())
                         sMessage.set_user("", *sPeer);
@@ -206,6 +248,13 @@ public:
     {
         return {boost::beast::http::status::not_implemented};
     }
+    {% if x_bearer %}
+        virtual bool
+        {{ name }}_auth(const Jwt::Claim& aClaim, const {{ name }}_parameters& aRequest)
+        {
+            return false;
+        }
+    {% endif %}
 {% endcall %}
     virtual ~server() {}
 };

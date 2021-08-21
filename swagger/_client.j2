@@ -3,12 +3,22 @@ class client
     asio_http::Alive::ManagerPtr m_HttpClient;
     const std::string m_Base;
     log4cxx::LoggerPtr sLogger = Logger::Get("http");
+    {% if x_bearer %}
+    std::string m_Token;
+    {% endif %}
 
 public:
     client(asio_http::Alive::ManagerPtr aHttpClient, const std::string& aBase)
     : m_HttpClient(aHttpClient)
     , m_Base(aBase)
     {}
+
+    {% if x_bearer %}
+    void __with_token(const std::string& aToken)
+    {
+        m_Token = aToken;
+    }
+    {% endif %}
 
     {% call(doc, path, method, name) _for_every_method(doc) %}
         using {{ name }}_parameters = {{ Aname }}::{{ name }}_parameters;
@@ -42,6 +52,10 @@ public:
                 sTraceCall = std::make_unique<Jaeger::Metric::Step>((*aTraceParent)->child("call {{ name }}"));
                 sRequest.headers["traceparent"] = sTraceCall->extract().traceparent();
             }
+            {% endif %}
+            {% if x_bearer %}
+            if (!m_Token.empty())
+                sRequest.headers["Authorization"] = "Bearer " + m_Token;
             {% endif %}
             INFO("{{ method }} " << sRequest.url);
             auto sResponse = m_HttpClient->async(std::move(sRequest)).get();

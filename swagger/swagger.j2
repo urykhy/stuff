@@ -13,6 +13,7 @@
 #include <container/Session.hpp>
 #include <exception/Error.hpp>
 #include <format/Float.hpp>
+#include <jwt/JWT.hpp>
 #include <unsorted/Log4cxx.hpp>
 
 {% set x_prometheus = doc['info'].get('x-prometheus', false) %}
@@ -36,6 +37,16 @@
 {% if x_jaeger %}
     #include <jaeger/Helper.hpp>
 {% endif %}
+
+{% set bearer_schemas = [] %}
+{% for sc, val in doc.get('components',{}).get('securitySchemes',{}).items() if val['scheme'] == 'bearer' %}
+    {% do bearer_schemas.append(sc) %}
+{% endfor %}
+{% if bearer_schemas | length > 1 %}
+    {{ swagger_raise('only one bearer scheme supported') }}
+{% endif %}
+{% set bearer_scheme = bearer_schemas | first | default('') %}
+{% set x_bearer = doc.get('security',[]) | selectattr(bearer_scheme, 'defined') | list | length %}
 
 {% macro complex_schema(schema, name='body', opt=False) -%}
     {%- for s in schema | swagger_decode(name) %}

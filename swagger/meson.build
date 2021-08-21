@@ -8,6 +8,7 @@ log4cxx   = dependency('liblog4cxx')
 curl      = dependency('libcurl')
 uuid      = dependency('uuid')
 thrift    = dependency('thrift')
+ssl       = dependency('openssl')
 subdir('jaeger_proto')
 import('python').find_installation('python3', modules : ['jinja2'])
 
@@ -29,5 +30,5 @@ objcopy        = find_program('objcopy', required : true)
 swagger_ui_o   = custom_target('swagger_ui_o', output: 'swagger_ui.o', input: swagger_ui_tar,
                  command: [objcopy, '--input', 'binary', '--output', 'elf64-x86-64', '--binary-architecture', 'i386:x86-64', '--rename-section', '.data=.rodata', 'swagger_ui.tar', 'swagger_ui.o'])
 
-a = executable('a.out', 'test.cpp', swagger_ui_o, api_src, dependencies : [boost, threads, json, log4cxx, curl, uuid, thrift, jaeger_proto], include_directories : includes)
+a = executable('a.out', 'test.cpp', swagger_ui_o, api_src, dependencies : [boost, threads, json, log4cxx, curl, uuid, thrift, jaeger_proto, ssl], include_directories : includes)
 test('basic test', a, args : ['-l', 'all'])
