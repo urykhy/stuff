@@ -2,10 +2,10 @@
 #include <boost/test/unit_test.hpp>
 
 #include <Protobuf.hpp>
-#include "tutorial.pb.h"
-
 #include <format/Hex.hpp>
+
 #include "tutorial.hpp"
+#include "tutorial.pb.h"
 
 struct MyPerson
 {
@@ -184,8 +184,7 @@ BOOST_AUTO_TEST_CASE(person)
     BOOST_CHECK(!sView.m_Error);
 
     // print in json
-    Json::FastWriter sWriter;
-    BOOST_TEST_MESSAGE("json: " << sWriter.write(sCustom.toJson()));
-    BOOST_TEST_MESSAGE("view: " << sWriter.write(sView.toJson()));
+    BOOST_TEST_MESSAGE("json: " << Format::Json::to_string(sCustom.to_json()));
+    BOOST_TEST_MESSAGE("view: " << Format::Json::to_string(sView.to_json()));
 }
 BOOST_AUTO_TEST_SUITE_END()

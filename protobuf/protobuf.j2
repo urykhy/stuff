@@ -1,0 +1,167 @@
+#pragma once
+
+#include <list>
+#include <memory_resource>
+#include <optional>
+#include <string>
+
+#ifdef WITH_JSON
+#include <format/Json.hpp>
+#endif
+
+{%- macro _type(x) %}
+    {%- if x.enum %}
+        uint32_t
+    {%- else %}
+        {{ x.cxx_type }}
+    {%- endif %}
+{%- endmacro %}
+
+{% macro _parse(x) %}
+    {# check for simple errors #}
+    {%- if x.proto_type == "string" or x.proto_type == "bytes" or x.pmr or x.packed -%}
+        if (aField.tag != Protobuf::FieldInfo::TAG_LENGTH)
+        {
+            m_Error = true;
+            return Protobuf::ACT_SKIP;
+        }
+    {%- else -%}
+        if (aField.tag == Protobuf::FieldInfo::TAG_LENGTH)
+        {
+            m_Error = true;
+            return Protobuf::ACT_SKIP;
+        }
+    {%- endif -%}
+
+    {# magic #}
+    {%- if x.custom_type and x.repeated %}
+        // custom and repeated
+        Protobuf::Buffer sTmpBuf;
+        aWalker->read(sTmpBuf);
+        {{ x.name }}.emplace_back(m_Pool);
+        {{ x.name }}.back().ParseFromString(sTmpBuf);
+        m_Error |= {{ x.name }}.back().m_Error;
+    {%- elif x.custom_type %}
+        // custom
+        Protobuf::Buffer sTmpBuf;
+        aWalker->read(sTmpBuf);
+        {{ x.name }}.emplace(m_Pool);
+        {{ x.name }}->ParseFromString(sTmpBuf);
+        m_Error |= {{ x.name }}->m_Error;
+    {%- elif x.pmr and x.repeated %}
+        // pmr and repeated
+        {{ x.name }}.emplace_back({{ x.cxx_type }}(m_Pool));
+        aWalker->read({{ x.name }}.back());
+    {%- elif x.pmr %}
+        // pmr
+        {{ x.name }}.emplace(m_Pool);
+        aWalker->read(*{{ x.name }});
+    {%- elif x.repeated %}
+        {%- if x.packed %}
+            // repeated packed
+            Protobuf::Buffer sTmpBuf;
+            aWalker->read(sTmpBuf);
+            Protobuf::Walker sWalker(sTmpBuf);
+            while (!sWalker.empty()) {
+                {{- _type(x )}} sTmp{};
+                sWalker.read(sTmp{{ x.encoding }});
+                {{ x.name }}.push_back( {{x.cast }});
+            }
+        {%- else %}
+            // repeated
+            {{- _type(x )}} sTmp{};
+            aWalker->read(sTmp{{ x.encoding }});
+            {{ x.name }}.push_back({{ x.cast }});
+        {%- endif %}
+    {%- else %}
+        // simple
+        {{- _type(x )}} sTmp{};
+        aWalker->read(sTmp{{ x.encoding }});
+        {{- x.name }} = {{ x.cast }};
+    {%- endif %}
+    return Protobuf::ACT_USED;
+{% endmacro %}
+
+namespace {{ doc.namespace }}
+{
+    {% for m in doc.message recursive %}
+    struct {{ m.name }}
+    {
+        std::pmr::memory_resource* m_Pool;
+        bool m_Error {false};
+
+        {% for e in m.enum %}
+            enum {{ e.name }} {
+                {%- for f in e.fields %}
+                    {{ f.name }} = {{ f.value }},
+                {%- endfor %}
+            };
+        {%- endfor %}
+
+        {% if m.message %}
+            {{ loop(m.message) }}
+        {% endif %}
+
+        {% for f in m.fields %}
+            {% if f.repeated %} std::pmr::list {% else %} std::optional {% endif %}<{{ f.cxx_type }}> {{ f.name }}; // id = {{ f.id }}
+        {%- endfor %}
+
+        {{ m.name }}(std::pmr::memory_resource* aPool)
+        : m_Pool(aPool)
+        {%- for f in m.fields %}
+            {%- if f.repeated %}, {{ f.name }}(m_Pool) {% endif %}
+            {%- if f.default %}, {{ f.name }}({{ f.default }}) {% endif %}
+        {%- endfor %}
+        {}
+
+        void ParseFromString(const Protobuf::Buffer& aString) {
+            Protobuf::Walker sWalker(aString);
+            sWalker.parse([this](const Protobuf::FieldInfo& aField, Protobuf::Walker* aWalker) -> Protobuf::Action {
+                switch (aField.id) {
+                    {%- for f in m.fields %}
+                        case {{ f.id }}: {
+                            {{- _parse(f) -}}
+                        }
+                    {%- endfor %}
+                    default: return Protobuf::ACT_SKIP;
+                };
+                return Protobuf::ACT_BREAK;
+            });
+        }
+
+        void Clear() {
+            m_Error = false;
+            {%- for f in m.fields %}
+                {%- if f.default %}
+                    {{ f.name }} = {{ f.default }};
+                {%- elif f.repeated %}
+                    {{ f.name }}.clear();
+                {%- else %}
+                    {{ f.name }}.reset();
+                {%- endif %}
+            {%- endfor %}
+        }
+
+#ifdef WITH_JSON
+        Format::Json::Value to_json() const
+        {
+            using namespace Format::Json;
+            Value sValue(::Json::objectValue);
+            {%- for f in m.fields %}
+                {%- if f.repeated %}
+                {
+                    Value sTmp(::Json::arrayValue);
+                    for (auto& x : {{ f.name }})
+                        sTmp.append(to_value(x));
+                    sValue["{{ f.name }}"] = std::move(sTmp);
+                }
+                {%- else %}
+                    sValue["{{ f.name }}"] = to_value({{ f.name }});
+                {%- endif %}
+            {%- endfor %}
+            return sValue;
+        }
+#endif
+    };
+    {% endfor %}
+}
