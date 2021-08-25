@@ -15,7 +15,7 @@
 #include <resource/Server.hpp>
 #include <sentry/Client.hpp>
 
-DECLARE_RESOURCE(swagger_ui_tar)
+DECLARE_RESOURCE(swagger_ui_tar, "swagger_ui.tar")
 
 struct Common : api::common_1_0::server
 {

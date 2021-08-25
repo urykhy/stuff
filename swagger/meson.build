@@ -26,9 +26,6 @@ endforeach
 # swagger-ui in tarball
 swagger_ui_get = find_program('get_swagger_ui.sh', required : true)
 swagger_ui_tar = custom_target('swagger_ui_tar', output: 'swagger_ui.tar', command: [swagger_ui_get])
-objcopy        = find_program('objcopy', required : true)
-swagger_ui_o   = custom_target('swagger_ui_o', output: 'swagger_ui.o', input: swagger_ui_tar,
-                 command: [objcopy, '--input', 'binary', '--output', 'elf64-x86-64', '--binary-architecture', 'i386:x86-64', '--rename-section', '.data=.rodata', 'swagger_ui.tar', 'swagger_ui.o'])
 
-a = executable('a.out', 'test.cpp', swagger_ui_o, api_src, dependencies : [boost, threads, json, log4cxx, curl, uuid, thrift, jaeger_proto, ssl], include_directories : includes)
+a = executable('a.out', 'test.cpp', api_src, swagger_ui_tar, dependencies : [boost, threads, json, log4cxx, curl, uuid, thrift, jaeger_proto, ssl], include_directories : includes)
 test('basic test', a, args : ['-l', 'all'])
