@@ -18,10 +18,10 @@ namespace Threads
         {
             T data;
             size_t serial;
-            bool operator<(const Task& r) const { return this->serial > r.serial; }
+            bool operator>(const Task& r) const { return this->serial > r.serial; }
         };
 
-        using PriorityQ = std::priority_queue<Task, std::vector<Task>>;
+        using PriorityQ = std::priority_queue<Task, std::vector<Task>, std::greater<Task>>;
 
         SafeQueueThread<Task> m_Worker;
         SafeQueueThread<Task, PriorityQ> m_Join;
