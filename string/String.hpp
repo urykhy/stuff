@@ -60,4 +60,13 @@ namespace String {
             return false;
         return s.compare(s.size() - pa.size(), pa.size(), pa) == 0;
     }
+
+    std::string replace(const std::string& aSrc, std::string_view aFrom, std::string aTo)
+    {
+        std::string sResult = aSrc;
+        const auto sPos = aSrc.find(aFrom);
+        if (sPos != std::string::npos)
+            sResult.replace(sPos, aFrom.size(), aTo);
+        return sResult;
+    }
 } // namespace String
