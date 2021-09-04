@@ -62,7 +62,7 @@ paths:
   '/test_2/parameters/{id}.json':
     get:
       summary: Your GET endpoint
-      x-jaeger-base-id: 90
+      x-jaeger-base-id: 256
       tags:
         - Tutorial
       responses:

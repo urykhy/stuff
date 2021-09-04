@@ -402,7 +402,7 @@ BOOST_AUTO_TEST_CASE(simple)
         {
             Jaeger::Metric::Step sTraceStep(sTrace, "make test");
 
-            auto sR = sClient.get_parameters({.id = "test-id", .string_required = "abcdefg"}, &sTraceStep);
+            auto sR = sClient.get_parameters({.id = "test-id", .string_required = "abcdefg"}, &sTraceStep, 0x1a);
             BOOST_TEST_MESSAGE("request: " << sR.body);
         }
         Jaeger::send(sTrace);

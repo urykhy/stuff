@@ -17,6 +17,7 @@
 #include <networking/UdpSocket.hpp>
 #include <parser/Hex.hpp>
 #include <parser/Parser.hpp>
+#include <parser/Url.hpp>
 #include <time/Meter.hpp>
 #include <unsorted/Env.hpp>
 #include <unsorted/Uuid.hpp>
@@ -39,7 +40,7 @@ namespace Jaeger {
                    "00"; // flags
         };
 
-        static Params parse(std::string_view aParent)
+        static Params parse(std::string_view aParent, std::string_view aState = {})
         {
             Params sNew;
             Parser::simple(
@@ -63,6 +64,10 @@ namespace Jaeger {
                     }
                 },
                 '-');
+            Parser::http_header_kv(aState, [&sNew](auto aName, auto aValue) {
+                if (aName == "span_offset")
+                    sNew.baseId |= int64_t(Parser::from_hex<int8_t>(aValue)) << 56;
+            });
             return sNew;
         }
 

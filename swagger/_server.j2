@@ -113,7 +113,7 @@ public:
         {% endif %}
 
         {% if x_jaeger %}
-            Jaeger::Helper sTrace(aRequest["traceparent"].to_string(), {{ doc['paths'][path][method].get('x-jaeger-base-id', 50) }}, "{{ name }}");
+            Jaeger::Helper sTrace(aRequest["traceparent"].to_string(), aRequest["tracestate"].to_string(), {{ doc['paths'][path][method].get('x-jaeger-base-id', 128) }}, "{{ name }}");
         {% endif %}
 
         {{ name }}_parameters sParameters;

@@ -171,6 +171,28 @@ BOOST_AUTO_TEST_CASE(query)
     });
     BOOST_CHECK_EQUAL(sCalled, true);
 }
+BOOST_AUTO_TEST_CASE(header_kv)
+{
+    unsigned sCount = 0;
+    Parser::http_header_kv("name1=value1,name2=value2,name3", [&sCount](auto name, auto value) {
+        sCount++;
+        switch (sCount) {
+        case 1:
+            BOOST_CHECK_EQUAL(name, "name1");
+            BOOST_CHECK_EQUAL(value, "value1");
+            break;
+        case 2:
+            BOOST_CHECK_EQUAL(name, "name2");
+            BOOST_CHECK_EQUAL(value, "value2");
+            break;
+        case 3:
+            BOOST_CHECK_EQUAL(name, "name3");
+            BOOST_CHECK_EQUAL(value, "");
+            break;
+        };
+    });
+    BOOST_CHECK_EQUAL(sCount, 3);
+}
 BOOST_AUTO_TEST_CASE(multipart)
 {
     // boundary is "--" + Content-Type/boundary

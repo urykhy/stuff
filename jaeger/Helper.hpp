@@ -19,11 +19,12 @@ namespace Jaeger {
         StepPtr                 m_Current;
 
     public:
-        Helper(const std::string& aParent, int64_t aBaseId, std::string_view aService)
+        Helper(const std::string& aParent, const std::string& aState, int64_t aBaseId, std::string_view aService)
         {
             if (!aParent.empty()) {
-                m_Params         = Params::parse(aParent);
-                m_Params.baseId  = aBaseId;
+                m_Params         = Params::parse(aParent, aState);
+                m_Params.baseId  &= 0xFF00000000000000; // preserving high byte (offset)
+                m_Params.baseId  |= aBaseId;
                 m_Params.service = aService;
                 m_Metric         = std::make_unique<Metric>(m_Params);
                 m_Active         = true;

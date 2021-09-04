@@ -3,10 +3,10 @@
 #include <stdexcept>
 #include <string>
 
-#include <string/String.hpp>
-
 #include "Hex.hpp"
 #include "Parser.hpp"
+
+#include <string/String.hpp>
 
 namespace Parser {
     inline std::string url_decode(std::string_view aData)
@@ -120,6 +120,22 @@ namespace Parser {
     }
 
     template <class T>
+    void http_header_kv(std::string_view aHeader, T&& aHandler)
+    {
+        simple(
+            aHeader, [aHandler = std::move(aHandler)](auto&& aStr) {
+                auto sEnd = aStr.find('=');
+                if (sEnd != std::string_view::npos) {
+                    auto sKey   = aStr.substr(0, sEnd);
+                    auto sValue = aStr.substr(sEnd + 1);
+                    aHandler(sKey, sValue);
+                } else
+                    aHandler(aStr, std::string_view());
+            },
+            ',');
+    }
+
+    template <class T>
     void http_path_params(std::string_view aTarget, std::string_view aPattern, T&& aHandler)
     {
         size_t sPos = aPattern.find('{');
@@ -142,13 +158,12 @@ namespace Parser {
         if (sNames.size() != sValues.size())
             throw std::invalid_argument("expect " + std::to_string(sNames.size()) + " parameters, but got " + std::to_string(sValues.size()));
 
-        for (size_t i = 0; i < sNames.size(); i++)
-        {
+        for (size_t i = 0; i < sNames.size(); i++) {
             auto sName = sNames[i];
             if (sName.empty())
                 continue;
 
-            auto sLeft = sName.find('{');
+            auto sLeft  = sName.find('{');
             auto sRight = sName.find('}');
             if (sLeft == std::string_view::npos or sRight == std::string_view::npos)
                 continue;

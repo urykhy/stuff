@@ -40,7 +40,7 @@ public:
         {%- endif %}
 
         {# client response with successful struct, or throw #}
-        {{ returnType }} {{ name }}(const {{ name }}_parameters& aRequest {% if x_jaeger %}, std::optional<Jaeger::Metric::Step*> aTraceParent = std::nullopt{% endif %})
+        {{ returnType }} {{ name }}(const {{ name }}_parameters& aRequest {% if x_jaeger %}, std::optional<Jaeger::Metric::Step*> aTraceParent = std::nullopt, int8_t aTraceOffset = 0{% endif %})
         {
             namespace http = boost::beast::http;
             asio_http::ClientRequest sRequest = aRequest.__format();
@@ -51,6 +51,8 @@ public:
             {
                 sTraceCall = std::make_unique<Jaeger::Metric::Step>((*aTraceParent)->child("call {{ name }}"));
                 sRequest.headers["traceparent"] = sTraceCall->extract().traceparent();
+                if (aTraceOffset > 0)
+                    sRequest.headers["tracestate"] = "span_offset=" + Format::to_hex(aTraceOffset);
             }
             {% endif %}
             {% if x_bearer %}
