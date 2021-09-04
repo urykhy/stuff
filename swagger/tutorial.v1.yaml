@@ -49,14 +49,12 @@ paths:
                 items:
                   type: array
                   items:
-                    type: object
-                    properties:
-                      idx:
-                        type: string
-              examples:
-                example-1:
-                  value:
-                    - - idx: string
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        idx:
+                          type: string
       description: test 1
     parameters: []
   '/test_2/parameters/{id}.json':
