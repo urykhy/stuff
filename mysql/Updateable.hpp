@@ -15,8 +15,8 @@ namespace MySQL {
         using Lock = std::unique_lock<std::mutex>;
         mutable std::mutex m_Mutex;
 
-        typename Policy::Container m_Data;
         typename Policy::Timestamp m_Timestamp = 0;
+        typename Policy::Container m_Data;
 
         using Key   = typename Policy::Container::key_type;
         using Value = typename Policy::Container::mapped_type;
@@ -27,14 +27,16 @@ namespace MySQL {
         void dump(File::IWriter* aWriter) override
         {
             Lock lk(m_Mutex);
-            cbor::write(*aWriter, m_Data);
+            cbor::write(*aWriter, m_Timestamp, m_Data);
         }
 
         void restore(File::IExactReader* aReader) override
         {
+            typename Policy::Timestamp sTimestamp;
             typename Policy::Container sData;
-            cbor::read(*aReader, sData);
+            cbor::read(*aReader, sTimestamp, sData);
             Lock lk(m_Mutex);
+            m_Timestamp = sTimestamp;
             std::swap(m_Data, sData);
             lk.unlock();
         }
