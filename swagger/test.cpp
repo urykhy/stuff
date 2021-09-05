@@ -251,7 +251,7 @@ struct RedirectServer : api::redirect_1_0::server
                     asio_http::asio::yield_context  yield)
         override
     {
-        return get_permanent_response_308{.location = "http://127.0.0.1:3000/api/v1/redirect/finish"};
+        return get_permanent_response_308{.location = "http://127.0.0.1:3001/api/v1/redirect/finish"};
     }
     get_finish_response_v
     get_finish_i(asio_http::asio::io_service&   aService,
@@ -263,218 +263,239 @@ struct RedirectServer : api::redirect_1_0::server
     }
 };
 
+struct RedirectServerX : api::redirect_1_0::server
+{
+    get_permanent_response_v
+    get_permanent_i(asio_http::asio::io_service&    aService,
+                    const get_permanent_parameters& aRequest,
+                    asio_http::asio::yield_context  yield)
+        override
+    {
+        return get_permanent_response_200{.body = "success"};
+    }
+    get_finish_response_v
+    get_finish_i(asio_http::asio::io_service&   aService,
+                 const get_finish_parameters&   aRequest,
+                 asio_http::asio::yield_context yield)
+        override
+    {
+        return get_finish_response_200{.body = "success"};
+    }
+};
+
+struct WithServer
+{
+    Threads::Asio                              m_Asio;
+    std::shared_ptr<asio_http::Router>         m_Router;
+    std::shared_ptr<asio_http::Alive::Manager> m_HttpClient;
+    Threads::Group                             m_Group;
+
+    WithServer()
+    {
+        m_Router = std::make_shared<asio_http::Router>();
+
+        m_HttpClient = std::make_shared<asio_http::Alive::Manager>(m_Asio.service(), asio_http::Alive::Params{});
+        m_HttpClient->start_cleaner();
+
+        asio_http::startServer(m_Asio, 3000, m_Router);
+        m_Asio.start(m_Group);
+    }
+};
+
 BOOST_AUTO_TEST_SUITE(rpc)
-BOOST_AUTO_TEST_CASE(simple)
+BOOST_FIXTURE_TEST_CASE(simple, WithServer)
+{
+    Common sCommon;
+    sCommon.configure(m_Router);
+
+    api::common_1_0::client sClient(m_HttpClient, "http://127.0.0.1:3000");
+
+    auto sResponse = sClient.get_enum({});
+
+    const std::vector<std::string> sExpected = {{"one"}, {"two"}};
+    BOOST_CHECK_EQUAL_COLLECTIONS(sExpected.begin(),
+                                  sExpected.end(),
+                                  sResponse.body.begin(),
+                                  sResponse.body.end());
+
+    Prometheus::Manager::instance().onTimer();
+    for (auto& x : Prometheus::Manager::instance().toPrometheus())
+        BOOST_TEST_MESSAGE(x);
+}
+BOOST_FIXTURE_TEST_CASE(kv_with_auth, WithServer)
 {
     const Jwt::HS256 sTokenManager("secret");
-
-    auto   sRouter = std::make_shared<asio_http::Router>();
-    Common sCommon;
-    sCommon.configure(sRouter);
-
-    resource::Server sUI("/swagger/", resource::swagger_ui_tar());
-    sUI.configure(sRouter);
-
-    KeyValue sKeyValue;
-    sKeyValue.configure(sRouter);
+    KeyValue         sKeyValue;
+    sKeyValue.configure(m_Router);
     sKeyValue.with_authorization(&sTokenManager);
 
-    jsonParam sJsonParam;
-    sJsonParam.configure(sRouter);
+    api::keyValue_1_0::client sClient(m_HttpClient, "http://127.0.0.1:3000");
 
+    Jwt::Claim sClaim{.exp = time(nullptr) + 10,
+                      .nbf = time(nullptr) - 10,
+                      .iss = "test",
+                      .aud = "kv"};
+    sClient.__with_token(sTokenManager.Sign(sClaim));
+
+    auto R1 = sClient.put_kv_key({.key = "abc", .body = "abc_data"});
+    std::get<api::keyValue_1_0::put_kv_key_response_201>(R1);
+
+    // get
+    int16_t sVersion = 0;
+    auto    R2       = sClient.get_kv_key({.key = "abc"});
+    BOOST_CHECK_EQUAL(R2.body, "abc_data");
+    sVersion = R2.etag.value();
+
+    // atomic update
+    auto R3 = sClient.put_kv_key({.key = "abc", .if_match = sVersion, .body = "abc_update1"});
+    std::get<api::keyValue_1_0::put_kv_key_response_200>(R3);
+
+    // atomic update with bad version
+    try {
+        sClient.put_kv_key({.key = "abc", .if_match = sVersion, .body = "abc_update2"});
+        BOOST_TEST(false); // must not happen
+    } catch (api::keyValue_1_0::put_kv_key_response_412& e) {
+        BOOST_TEST(true, "http error 412 occured as expected");
+    }
+
+    // atomic delete with proper version
+    sVersion++;
+    sClient.delete_kv_key({.key = "abc", .if_match = sVersion});
+
+    // call not implemented method
+    BOOST_CHECK_THROW(sClient.get_kx_multi({}), Exception::HttpError);
+}
+BOOST_FIXTURE_TEST_CASE(swagger_ui, WithServer)
+{
+    resource::Server sUI("/swagger/", resource::swagger_ui_tar());
+    sUI.configure(m_Router);
+
+    asio_http::ClientRequest sRequest = {
+        .method = asio_http::http::verb::get,
+        .url    = "http://127.0.0.1:3000/swagger/index.html"};
+
+    auto sResponse = asio_http::async(m_Asio, std::move(sRequest)).get();
+    BOOST_CHECK_EQUAL(sResponse.result(), asio_http::http::status::ok);
+    BOOST_CHECK_EQUAL(sResponse.body().size(), 1425);
+}
+BOOST_FIXTURE_TEST_CASE(json, WithServer)
+{
+    jsonParam sJsonParam;
+    sJsonParam.configure(m_Router);
+
+    api::jsonParam_1_0::client sClient(m_HttpClient, "http://127.0.0.1:3000");
+
+    auto R1 = sClient.get_test1({.param = {{"one", true}, {"two", false}}});
+    BOOST_TEST_MESSAGE("json response: " << R1.body);
+}
+BOOST_FIXTURE_TEST_CASE(sentry, WithServer)
+{
     Sentry::Queue sQueue;
     sQueue.start();
 
-    Threads::QueueExecutor sTaskQueue;
-    TutorialServer         sTutorialServer;
+    TutorialServer sTutorialServer;
     sTutorialServer.with_sentry([&sQueue](Sentry::Message& aMessage) { sQueue.send(aMessage); }, 1);
+    sTutorialServer.configure(m_Router);
+    Util::Raii sCleanup([this]() { m_Group.wait(); });
+
+    api::tutorial_1_0::client sClient(m_HttpClient, "http://127.0.0.1:3000");
+    try {
+        sClient.get_parameters({.id = "test-id", .x_header_int = 92});
+    } catch (const std::exception& e) {
+        BOOST_TEST_MESSAGE("catch: " << e.what());
+    }
+}
+BOOST_FIXTURE_TEST_CASE(queue, WithServer)
+{
+    Threads::QueueExecutor sTaskQueue;
+    sTaskQueue.start(m_Group, 4); // spawn 4 threads
+
+    TutorialServer sTutorialServer;
     sTutorialServer.with_queue(sTaskQueue);
-    sTutorialServer.configure(sRouter);
+    sTutorialServer.configure(m_Router);
+    Util::Raii sCleanup([this]() { m_Group.wait(); });
 
-    RedirectServer sRedirectServer;
-    sRedirectServer.configure(sRouter);
+    api::tutorial_1_0::client sClient(m_HttpClient, "http://127.0.0.1:3000");
 
-    Threads::Asio sAsio;
-    asio_http::startServer(sAsio, 3000, sRouter); // using same port as in swagger schema
-
-    auto sHttpClient = std::make_shared<asio_http::Alive::Manager>(sAsio.service(), asio_http::Alive::Params{});
-    sHttpClient->start_cleaner();
-
-    Threads::Group sGroup;       // group must be created last, to ensure proper termination
-    sTaskQueue.start(sGroup, 4); // spawn 4 threads
-    sAsio.start(sGroup);
-
-    asio_http::ClientRequest sRequest{.method = asio_http::http::verb::get, .url = "http://127.0.0.1:3000/api/v1/enum", .headers = {{asio_http::Headers::Host, "127.0.0.1"}}};
-    auto                     sResponse = asio_http::async(sAsio, std::move(sRequest)).get();
-    BOOST_CHECK_EQUAL(sResponse.result(), asio_http::http::status::ok);
-    BOOST_CHECK_EQUAL(sResponse.body(), "[\n\t\"one\",\n\t\"two\"\n]");
-
-    sRequest  = {.method = asio_http::http::verb::get, .url = "http://127.0.0.1:3000/api/v1/status", .headers = {{asio_http::Headers::Host, "127.0.0.1"}}};
-    sResponse = asio_http::async(sAsio, std::move(sRequest)).get();
-    BOOST_CHECK_EQUAL(sResponse.result(), asio_http::http::status::ok);
-    BOOST_CHECK_EQUAL(sResponse.body(), "{\n\t\"load\" : 1.5,\n\t\"status\" : \"ready\"\n}");
-
-    // call with cbor:
-    {
-        asio_http::ClientRequest sRequest{.method  = asio_http::http::verb::get,
-                                          .url     = "http://127.0.0.1:3000/api/v1/enum",
-                                          .headers = {{asio_http::Headers::Host, "127.0.0.1"}, {asio_http::Headers::Accept, "application/cbor"}}};
-        auto                     sResponse = asio_http::async(sAsio, std::move(sRequest)).get();
-        BOOST_CHECK_EQUAL(sResponse.result(), asio_http::http::status::ok);
-        std::vector<std::string> sResult;
-        cbor::from_string(sResponse.body(), sResult);
-        const std::vector<std::string> sExpected{{"one"}, {"two"}};
-        BOOST_CHECK_EQUAL_COLLECTIONS(sResult.begin(), sResult.end(), sExpected.begin(), sExpected.end());
-    }
-
-    // embedded swagger ui
-    sRequest  = {.method = asio_http::http::verb::get, .url = "http://127.0.0.1:3000/swagger/index.html"};
-    sResponse = asio_http::async(sAsio, std::move(sRequest)).get();
-    BOOST_CHECK_EQUAL(sResponse.result(), asio_http::http::status::ok);
-    BOOST_CHECK_EQUAL(sResponse.body().size(), 1425);
-
-    // generated client
-    {
-        api::common_1_0::client sClient(sHttpClient, "http://127.0.0.1:3000");
-
-        auto                           sResponse = sClient.get_enum({});
-        const std::vector<std::string> sExpected = {{"one"}, {"two"}};
-        BOOST_CHECK_EQUAL_COLLECTIONS(sExpected.begin(), sExpected.end(), sResponse.body.begin(), sResponse.body.end());
-    }
-
-    // keyValue with generated client
-    {
-        api::keyValue_1_0::client sClient(sHttpClient, "http://127.0.0.1:3000");
-
-        Jwt::Claim sClaim{.exp = time(nullptr) + 10,
-                          .nbf = time(nullptr) - 10,
-                          .iss = "test",
-                          .aud = "kv"};
-        sClient.__with_token(sTokenManager.Sign(sClaim));
-
-        auto R1 = sClient.put_kv_key({.key = "abc", .body = "abc_data"});
-        std::get<api::keyValue_1_0::put_kv_key_response_201>(R1);
-
-        // get
-        int16_t sVersion = 0;
-        auto    R2       = sClient.get_kv_key({.key = "abc"});
-        BOOST_CHECK_EQUAL(R2.body, "abc_data");
-        sVersion = R2.etag.value();
-
-        // atomic update
-        auto R3 = sClient.put_kv_key({.key = "abc", .if_match = sVersion, .body = "abc_update1"});
-        std::get<api::keyValue_1_0::put_kv_key_response_200>(R3);
-
-        // atomic update with bad version
+    Time::Meter sMeter;
+    std::thread sR1([&sClient]() {
         try {
-            sClient.put_kv_key({.key = "abc", .if_match = sVersion, .body = "abc_update2"});
-            BOOST_TEST(false); // must not happen
-        } catch (api::keyValue_1_0::put_kv_key_response_412& e) {
-            BOOST_TEST(true, "http error 412 occured as expected");
-        }
-
-        // atomic delete with proper version
-        sVersion++;
-        sClient.delete_kv_key({.key = "abc", .if_match = sVersion});
-
-        // call not implemented method
-        BOOST_CHECK_THROW(sClient.get_kx_multi({}), Exception::HttpError);
-    }
-
-    // json param
-    {
-        api::jsonParam_1_0::client sClient(sHttpClient, "http://127.0.0.1:3000");
-
-        auto R1 = sClient.get_test1({.param = {{"one", true}, {"two", false}}});
-        BOOST_TEST_MESSAGE("json response: " << R1.body);
-    }
-
-    // prometheus metrics
-    {
-        Prometheus::Manager::instance().onTimer();
-        for (auto& x : Prometheus::Manager::instance().toPrometheus())
-            BOOST_TEST_MESSAGE(x);
-    }
-
-    // sentry (emit bad request)
-    {
-        api::tutorial_1_0::client sClient(sHttpClient, "http://127.0.0.1:3000");
-        try {
-            sClient.get_parameters({.id = "test-id", .x_header_int = 92});
+            auto sR = sClient.get_parameters({.id = "test-id", .string_required = "abcdefg"});
+            BOOST_TEST_MESSAGE("request1: " << sR.body);
         } catch (const std::exception& e) {
-            BOOST_TEST_MESSAGE("catch: " << e.what());
+            BOOST_TEST_MESSAGE("got exception: " << e.what());
         }
-    }
+    });
+    Threads::sleep(0.1);
+    std::thread sR2([&sClient]() {
+        try {
+            auto sR = sClient.get_parameters({.id = "test-id", .string_required = "abcdefh"});
+            BOOST_TEST_MESSAGE("request2: " << sR.body);
+        } catch (const std::exception& e) {
+            BOOST_TEST_MESSAGE("got exception: " << e.what());
+        }
+    });
+    sR1.join();
+    sR2.join();
+    BOOST_CHECK_CLOSE(sMeter.get().to_double(), 1.1, 5); // 5% difference is ok
+}
+BOOST_FIXTURE_TEST_CASE(jaeger, WithServer)
+{
+    Threads::QueueExecutor sTaskQueue;
+    sTaskQueue.start(m_Group, 4); // spawn 4 threads
 
-    // call to service with threads
-    // sTaskQueue must have at least 2 threads
+    TutorialServer sTutorialServer;
+    sTutorialServer.with_queue(sTaskQueue);
+    sTutorialServer.configure(m_Router);
+    Util::Raii sCleanup([this]() { m_Group.wait(); });
+
+    api::tutorial_1_0::client sClient(m_HttpClient, "http://127.0.0.1:3000");
+
+    Jaeger::Metric sTrace(Jaeger::Params::uuid("swagger.cpp"));
     {
-        api::tutorial_1_0::client sClient(sHttpClient, "http://127.0.0.1:3000");
+        Jaeger::Metric::Step sTraceStep(sTrace, "make test");
 
-        Time::Meter sMeter;
-        std::thread sR1([&sClient]() {
-            try {
-                auto sR = sClient.get_parameters({.id = "test-id", .string_required = "abcdefg"});
-                BOOST_TEST_MESSAGE("request1: " << sR.body);
-            } catch (const std::exception& e) {
-                BOOST_TEST_MESSAGE("got exception: " << e.what());
+        auto sR = sClient.get_parameters({.id = "test-id", .string_required = "abcdefg"}, &sTraceStep, 0x1a);
+        BOOST_TEST_MESSAGE("request: " << sR.body);
+    }
+    Jaeger::send(sTrace);
+}
+BOOST_FIXTURE_TEST_CASE(redirect, WithServer)
+{
+    RedirectServer sRedirectServer;
+    sRedirectServer.configure(m_Router);
+
+    api::redirect_1_0::client sClient(m_HttpClient, "http://127.0.0.1:3000");
+
+    // temporary
+    {
+        auto sR = sClient.get_temporary_1({});
+        std::visit([&](auto&& arg) {
+            using T = std::decay_t<decltype(arg)>;
+            if constexpr (std::is_same_v<T, api::redirect_1_0::server::get_temporary_1_response_200>) {
+                BOOST_CHECK_EQUAL(arg.body, "success");
             }
-        });
-        Threads::sleep(0.1);
-        std::thread sR2([&sClient]() {
-            try {
-                auto sR = sClient.get_parameters({.id = "test-id", .string_required = "abcdefh"});
-                BOOST_TEST_MESSAGE("request2: " << sR.body);
-            } catch (const std::exception& e) {
-                BOOST_TEST_MESSAGE("got exception: " << e.what());
+        },
+                   sR);
+    }
+
+    // permanent
+    // redirect from server at 3000 to serverX at 3001
+    {
+        RedirectServerX sRedirectServerX;
+        std::shared_ptr<asio_http::Router> sRouter = std::make_shared<asio_http::Router>();
+        sRedirectServerX.configure(sRouter);
+        asio_http::startServer(m_Asio, 3001, sRouter);
+
+        auto sR = sClient.get_permanent({});
+        std::visit([&](auto&& arg) {
+            using T = std::decay_t<decltype(arg)>;
+            if constexpr (std::is_same_v<T, api::redirect_1_0::server::get_permanent_response_200>) {
+                BOOST_CHECK_EQUAL(arg.body, "success");
             }
-        });
-        sR1.join();
-        sR2.join();
-        BOOST_CHECK_CLOSE(sMeter.get().to_double(), 1.1, 5); // 5% difference is ok
-    }
-
-    // jaeger tracer
-    {
-        api::tutorial_1_0::client sClient(sHttpClient, "http://127.0.0.1:3000");
-
-        Jaeger::Metric sTrace(Jaeger::Params::uuid("swagger.cpp"));
-        {
-            Jaeger::Metric::Step sTraceStep(sTrace, "make test");
-
-            auto sR = sClient.get_parameters({.id = "test-id", .string_required = "abcdefg"}, &sTraceStep, 0x1a);
-            BOOST_TEST_MESSAGE("request: " << sR.body);
-        }
-        Jaeger::send(sTrace);
-    }
-
-    // redirect
-    {
-        api::redirect_1_0::client sClient(sHttpClient, "http://127.0.0.1:3000");
-
-        // temporary
-        {
-            auto sR = sClient.get_temporary_1({});
-            std::visit([&](auto&& arg) {
-                using T = std::decay_t<decltype(arg)>;
-                if constexpr (std::is_same_v<T, api::redirect_1_0::server::get_temporary_1_response_200>) {
-                    BOOST_CHECK_EQUAL(arg.body, "success");
-                }
-            },
-                       sR);
-        }
-        // permanent
-        {
-            auto sR = sClient.get_permanent({});
-            std::visit([&](auto&& arg) {
-                using T = std::decay_t<decltype(arg)>;
-                if constexpr (std::is_same_v<T, api::redirect_1_0::server::get_permanent_response_200>) {
-                    BOOST_CHECK_EQUAL(arg.body, "success");
-                }
-            },
-                       sR);
-            sR = sClient.get_permanent({}); // 2nd call
-        }
+        },
+                   sR);
+        sR = sClient.get_permanent({}); // 2nd call
     }
 }
 BOOST_AUTO_TEST_SUITE_END()
