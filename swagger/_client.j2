@@ -7,6 +7,12 @@ class client
     std::string m_Token;
     {% endif %}
 
+    using Lock = std::unique_lock<std::mutex>;
+    std::mutex m_Mutex;
+    {% call(doc, path, method, name) _for_every_method(doc) %}
+    std::string m_{{ name }}_redirect = {};
+    {% endcall %}
+
 public:
     client(asio_http::Alive::ManagerPtr aHttpClient, const std::string& aBase)
     : m_HttpClient(aHttpClient)
@@ -26,7 +32,7 @@ public:
         {# detect if we have only one successul response kind #}
         {%- set variant_list = [] %}
         {%- call(name, k, response) _for_every_response(doc, path, method, name) -%}
-            {%- if k | int < 300 %}
+            {%- if k | int < 400 %}
                 {% do variant_list.append( Aname + "::" + name + "_response_" + k ) %}
             {%- endif %}
         {%- endcall %}
@@ -44,7 +50,16 @@ public:
         {
             namespace http = boost::beast::http;
             asio_http::ClientRequest sRequest = aRequest.__format();
-            sRequest.url = m_Base + sRequest.url;
+            if (Lock sLock(m_Mutex); m_{{ name }}_redirect.empty())
+            {
+                sRequest.url = m_Base + sRequest.url;
+            }
+            else
+            {
+                DEBUG("permanent redirected to " << m_{{ name }}_redirect);
+                sRequest.url = m_{{ name }}_redirect + sRequest.url;
+            }
+
             {% if x_jaeger %}
             std::unique_ptr<Jaeger::Metric::Step> sTraceCall;
             if (aTraceParent)
@@ -59,11 +74,53 @@ public:
             if (!m_Token.empty())
                 sRequest.headers["Authorization"] = "Bearer " + m_Token;
             {% endif %}
-            INFO("{{ method }} " << sRequest.url);
-            auto sResponse = m_HttpClient->async(std::move(sRequest)).get();
-            const auto sFromSwagger = !sResponse["X-From-Swagger"].empty();
+
+            asio_http::Response sResponse;
+            int64_t sRedirectCount = 0;
+            while (sRedirectCount < 5) {# up to 5 redirects #}
+            {
+                INFO("{{ method }} " << sRequest.url);
+                sResponse = m_HttpClient->async(asio_http::ClientRequest(sRequest)).get(); {# copy request #}
+                if (sResponse.result() == asio_http::http::status::temporary_redirect or
+                    sResponse.result() == asio_http::http::status::found)
+                {
+                    DEBUG("temporary redirect");
+                    const auto sLocation = sResponse[asio_http::http::field::location];
+                    if (sLocation.empty())
+                        throw Exception::HttpError(
+                            "redirect without location",
+                            static_cast<unsigned>(sResponse.result())
+                        );
+                    sRequest.url = sLocation.to_string();
+                }
+                else if (sResponse.result() == asio_http::http::status::permanent_redirect or
+                         sResponse.result() == asio_http::http::status::moved_permanently)
+                {
+                    DEBUG("permanent redirect");
+                    const auto sLocation = sResponse[asio_http::http::field::location];
+                    if (sLocation.empty())
+                        throw Exception::HttpError(
+                            "redirect without location",
+                            static_cast<unsigned>(sResponse.result())
+                        );
+                    sRequest.url = sLocation.to_string();
+                    const auto sParsed = Parser::url(sLocation.to_string());
+                    Lock sLock(m_Mutex);
+                    m_{{ name }}_redirect = "http://" + sParsed.host + ":" + sParsed.port;
+                }
+                else
+                {
+                    break;
+                }
+                sRedirectCount++;
+            }
+            {% if x_jaeger %}
+            if (sRedirectCount > 0)
+                sTraceCall->set_tag(Jaeger::Metric::Tag{"redirect_count", sRedirectCount});
+            {% endif %}
 
             {# error codes from swagger #}
+            const auto sFromSwagger = !sResponse["X-From-Swagger"].empty();
             if (sFromSwagger)
             {
                 if (sResponse.result() == asio_http::http::status::bad_request)
@@ -79,7 +136,7 @@ public:
                 {
                     {{ name }}_response_{{ k }} sResponseBody;
                     sResponseBody.__parse(sResponse);
-                    {%- if k | int < 300 %}
+                    {%- if k | int < 400 %}
                         return sResponseBody;
                     {%- else %}
                         throw sResponseBody;

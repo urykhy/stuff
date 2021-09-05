@@ -4,6 +4,7 @@
 #include "common.v1.hpp"
 #include "jsonParam.v1.hpp"
 #include "keyValue.v1.hpp"
+#include "redirect.v1.hpp"
 #include "tutorial.v1.hpp"
 
 #include <asio_http/Client.hpp>
@@ -226,6 +227,42 @@ struct TutorialServer : api::tutorial_1_0::server
     }
 };
 
+struct RedirectServer : api::redirect_1_0::server
+{
+    get_temporary_1_response_v
+    get_temporary_1_i(asio_http::asio::io_service&      aService,
+                      const get_temporary_1_parameters& aRequest,
+                      asio_http::asio::yield_context    yield)
+        override
+    {
+        return get_temporary_1_response_302{.location = "http://127.0.0.1:3000/api/v1/redirect/temporary_2"};
+    }
+    get_temporary_2_response_v
+    get_temporary_2_i(asio_http::asio::io_service&      aService,
+                      const get_temporary_2_parameters& aRequest,
+                      asio_http::asio::yield_context    yield)
+        override
+    {
+        return get_temporary_2_response_307{.location = "http://127.0.0.1:3000/api/v1/redirect/finish"};
+    }
+    get_permanent_response_v
+    get_permanent_i(asio_http::asio::io_service&    aService,
+                    const get_permanent_parameters& aRequest,
+                    asio_http::asio::yield_context  yield)
+        override
+    {
+        return get_permanent_response_308{.location = "http://127.0.0.1:3000/api/v1/redirect/finish"};
+    }
+    get_finish_response_v
+    get_finish_i(asio_http::asio::io_service&   aService,
+                 const get_finish_parameters&   aRequest,
+                 asio_http::asio::yield_context yield)
+        override
+    {
+        return get_finish_response_200{.body = "success"};
+    }
+};
+
 BOOST_AUTO_TEST_SUITE(rpc)
 BOOST_AUTO_TEST_CASE(simple)
 {
@@ -253,6 +290,9 @@ BOOST_AUTO_TEST_CASE(simple)
     sTutorialServer.with_sentry([&sQueue](Sentry::Message& aMessage) { sQueue.send(aMessage); }, 1);
     sTutorialServer.with_queue(sTaskQueue);
     sTutorialServer.configure(sRouter);
+
+    RedirectServer sRedirectServer;
+    sRedirectServer.configure(sRouter);
 
     Threads::Asio sAsio;
     asio_http::startServer(sAsio, 3000, sRouter); // using same port as in swagger schema
@@ -406,6 +446,35 @@ BOOST_AUTO_TEST_CASE(simple)
             BOOST_TEST_MESSAGE("request: " << sR.body);
         }
         Jaeger::send(sTrace);
+    }
+
+    // redirect
+    {
+        api::redirect_1_0::client sClient(sHttpClient, "http://127.0.0.1:3000");
+
+        // temporary
+        {
+            auto sR = sClient.get_temporary_1({});
+            std::visit([&](auto&& arg) {
+                using T = std::decay_t<decltype(arg)>;
+                if constexpr (std::is_same_v<T, api::redirect_1_0::server::get_temporary_1_response_200>) {
+                    BOOST_CHECK_EQUAL(arg.body, "success");
+                }
+            },
+                       sR);
+        }
+        // permanent
+        {
+            auto sR = sClient.get_permanent({});
+            std::visit([&](auto&& arg) {
+                using T = std::decay_t<decltype(arg)>;
+                if constexpr (std::is_same_v<T, api::redirect_1_0::server::get_permanent_response_200>) {
+                    BOOST_CHECK_EQUAL(arg.body, "success");
+                }
+            },
+                       sR);
+            sR = sClient.get_permanent({}); // 2nd call
+        }
     }
 }
 BOOST_AUTO_TEST_SUITE_END()

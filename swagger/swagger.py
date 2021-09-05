@@ -31,11 +31,6 @@ def swagger_raise(message):
 environment.globals['swagger_raise'] = swagger_raise
 
 
-def swagger_is_array(p):
-    return p.startswith('array<')
-environment.tests['swagger_is_array'] = swagger_is_array
-
-
 def swagger_prefix(p):
     xr = []
     for n in urlparse(p).path.split('/'):

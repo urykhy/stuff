@@ -1,0 +1,65 @@
+openapi: 3.0.0
+info:
+  title: redirect
+  version: '1.0'
+servers:
+  - url: 'http://localhost:3000/api/v1/redirect'
+paths:
+  /temporary_1:
+    get:
+      summary: Begin tmp redirect chain
+      tags: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/octet-stream:
+              schema: {}
+              examples: {}
+        '302':
+          description: Found
+          headers:
+            location:
+              schema:
+                type: string
+      operationId: get-temporary_1
+  /temporary_2:
+    get:
+      summary: Continue redirect chain
+      tags: []
+      responses:
+        '307':
+          description: Temporary Redirect
+          headers:
+            location:
+              schema:
+                type: string
+      operationId: get-temporary_2
+  /permanent:
+    get:
+      summary: Create permanent redirect
+      tags: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/octet-stream:
+              schema: {}
+        '308':
+          description: Permanent Redirect (experiemental)
+          headers:
+            location:
+              schema:
+                type: string
+      operationId: get-permanent
+  /finish:
+    get:
+      summary: Redirect final point
+      tags: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/octet-stream:
+              schema: {}
+      operationId: get-finish

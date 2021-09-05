@@ -1,5 +1,5 @@
 struct {{ name }}_response_{{ k }}
-    {%- if k | int >= 300 %} : public {{ _err_class(k) }}{%- endif %}
+    {%- if k | int >= 400 %} : public {{ _err_class(k) }}{%- endif %}
 {
     {%- set json = response.get('content',{}).get('application/json',{}) | length %}
     {%- set binary = (json == 0 and response.get('content',{}) | length == 1) %}
@@ -40,7 +40,7 @@ struct {{ name }}_response_{{ k }}
         {#  push response headers #}
         {%- for k,v in headers | dictsort %}
             if ( swagger::is_specified({{ _name(k) }}) )
-                aResponse.set(swagger::header("{{ k }}"), Format::url_encode(swagger::format({{ _name(k) }})));
+                aResponse.set(swagger::header("{{ k }}"), swagger::format({{ _name(k) }}));
         {%- endfor -%}
 
         aResponse.result({{ k }});
@@ -67,13 +67,13 @@ struct {{ name }}_response_{{ k }}
         {%- endif %}
 
         {%- for k,v in headers | dictsort %}
-            if (auto sValue = Parser::url_decode(aResponse["{{ k }}"].to_string()); !sValue.empty())
+            if (auto sValue = aResponse["{{ k }}"].to_string(); !sValue.empty())
                 swagger::parse(sValue, {{ _name(k) }});
         {%- endfor %}
     }
 
     {#  default c-tor for runtime-error #}
-    {%- if k | int >= 300 %}
+    {%- if k | int >= 400 %}
         {{ name }}_response_{{ k }}() : {{ _err_class(k) }}("{{ response['description'] }}"){}
     {%- endif %}
 };
