@@ -5,56 +5,20 @@
 #include <memory>
 #include <optional>
 
-#include <boost/multi_index/hashed_index.hpp>
-#include <boost/multi_index/member.hpp>
-#include <boost/multi_index/ordered_index.hpp>
-#include <boost/multi_index_container.hpp>
-
 #include "Algorithm.hpp"
 
 namespace Container {
-
-    // hack to create namespace alias
-    namespace {
-        namespace mi = boost::multi_index;
-    }
 
     // T must be shared_ptr
     template <class T>
     class Pool
     {
-        struct Rec
+        struct Data
         {
-            T         data;
-            uintptr_t serial;
-            time_t    deadline;
-
-            struct _key
-            {};
-            struct _deadline
-            {};
-
-            Rec()
-            : serial(0)
-            , deadline(0)
-            {}
-
-            Rec(T aPtr)
-            : data(aPtr)
-            , serial(reinterpret_cast<uintptr_t>(aPtr.get()))
-            , deadline(::time(nullptr))
-            {}
+            time_t timestamp;
+            T      data;
         };
-
-        using Store = boost::multi_index_container<
-            Rec,
-            mi::indexed_by<
-                mi::ordered_unique<
-                    mi::tag<typename Rec::_key>, mi::member<Rec, uintptr_t, &Rec::serial>>,
-                mi::ordered_non_unique<
-                    mi::tag<typename Rec::_deadline>, mi::member<Rec, time_t, &Rec::deadline>>>>;
-
-        Store m_Store;
+        std::list<Data> m_Store;
 
     public:
         std::optional<T> get()
@@ -62,27 +26,23 @@ namespace Container {
             if (m_Store.empty())
                 return {};
 
-            auto& sStore = mi::get<typename Rec::_key>(m_Store);
-            auto  sKeyIt = sStore.begin();
-            auto  sPtr   = sKeyIt->data;
-            sStore.erase(sKeyIt);
+            auto sPtr = m_Store.back().data;
+            m_Store.pop_back();
             return sPtr;
         }
 
         void insert(T& p)
         {
-            m_Store.insert(p);
+            m_Store.push_back({time(nullptr), p});
             p.reset();
         }
 
-        void cleanup(const time_t aTimeout = 10)
+        void cleanup(time_t aTimeout = 10)
         {
-            const time_t sNow   = ::time(nullptr);
-            auto&        sStore = mi::get<typename Rec::_deadline>(m_Store);
-            while (!sStore.empty()) {
-                auto sIt = sStore.begin();
-                if (sIt->deadline + aTimeout < sNow)
-                    sStore.erase(sIt);
+            const time_t sNow = time(nullptr);
+            while (!m_Store.empty()) {
+                if (m_Store.front().timestamp + aTimeout < sNow)
+                    m_Store.pop_front();
                 else
                     break;
             }
@@ -110,7 +70,6 @@ namespace Container {
         void insert(const Key& aKey, T& p)
         {
             m_Set[aKey].insert(p);
-            p.reset();
         }
 
         void cleanup(const time_t aTimeout = 10)

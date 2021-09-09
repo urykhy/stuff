@@ -56,7 +56,7 @@ namespace asio_http {
         });
     }
 
-    void startServer(Threads::Asio& aContext, uint16_t aPort, RouterPtr aRouter)
+    inline void startServer(Threads::Asio& aContext, uint16_t aPort, RouterPtr aRouter)
     {
         auto const sAddress  = asio::ip::make_address("0.0.0.0");
         auto       sAcceptor = std::make_shared<tcp::acceptor>(aContext.service(), tcp::endpoint(sAddress, aPort));

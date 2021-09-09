@@ -61,7 +61,7 @@ namespace String {
         return s.compare(s.size() - pa.size(), pa.size(), pa) == 0;
     }
 
-    std::string replace(const std::string& aSrc, std::string_view aFrom, std::string aTo)
+    inline std::string replace(const std::string& aSrc, std::string_view aFrom, std::string aTo)
     {
         std::string sResult = aSrc;
         const auto sPos = aSrc.find(aFrom);
