@@ -77,7 +77,7 @@ namespace Container {
             return aSize;
         }
 
-        bool eof() override { return m_Data.empty(); }
+        bool eof() override { return m_Offset >= m_Data.size(); }
         void close() override {}
     };
 

@@ -5,6 +5,7 @@
 #include "Client.hpp"
 #include "Router.hpp"
 #include "Server.hpp"
+#include "v2/Server.hpp"
 
 #include <curl/Curl.hpp>
 using namespace std::chrono_literals;
@@ -126,5 +127,27 @@ BOOST_AUTO_TEST_CASE(alive)
         BOOST_CHECK_EQUAL(sResponse.result(), http::status::ok);
     });
     sleep(1);
+}
+BOOST_AUTO_TEST_CASE(server2, *boost::unit_test::disabled())
+{
+    auto sRouter = std::make_shared<asio_http::Router>();
+    sRouter->insert("/hello", [](asio_http::asio::io_service&, const asio_http::Request& aRequest, asio_http::Response& aResponse, asio_http::asio::yield_context yield) {
+        if (aRequest.method() == http::verb::post)
+            BOOST_TEST_MESSAGE("post with body size " << aRequest.body().size());
+        aResponse.result(http::status::ok);
+        aResponse.set(asio_http::Headers::ContentType, "text/html");
+        while (aResponse.body().size() < 130 * 1024) {
+            aResponse.body() += "hello world";
+        }
+    });
+    Threads::Asio  sAsio;
+    Threads::Group sGroup;
+    asio_http::v2::startServer(sAsio, 2081, sRouter);
+    sAsio.start(sGroup);
+
+    std::this_thread::sleep_for(100s);
+
+    // nghttp -n -v http://localhost:2081/hello
+    // nghttp -n -v -d README.md http://localhost:2081/hello
 }
 BOOST_AUTO_TEST_SUITE_END()

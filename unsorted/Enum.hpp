@@ -13,3 +13,42 @@
         aStream << to_string(aValue);                                      \
         return aStream;                                                    \
     }
+
+#define _DECLARE_ENUM_OPS(X)                                          \
+    inline X operator|(X a, X b)                                      \
+    {                                                                 \
+        using U = std::underlying_type<X>::type;                      \
+        return static_cast<X>(static_cast<U>(a) | static_cast<U>(b)); \
+    }                                                                 \
+    inline X& operator|=(X& a, X b)                                   \
+    {                                                                 \
+        a = a | b;                                                    \
+        return a;                                                     \
+    }                                                                 \
+    inline X operator&(X a, X b)                                      \
+    {                                                                 \
+        using U = std::underlying_type<X>::type;                      \
+        return static_cast<X>(static_cast<U>(a) & static_cast<U>(b)); \
+    }                                                                 \
+    inline X& operator&=(X& a, X b)                                   \
+    {                                                                 \
+        a = a & b;                                                    \
+        return a;                                                     \
+    }                                                                 \
+    inline X operator~(X a)                                           \
+    {                                                                 \
+        using U = std::underlying_type<X>::type;                      \
+        return static_cast<X>(~static_cast<U>(a));                    \
+    }                                                                 \
+    inline X operator^(X a, X b)                                      \
+    {                                                                 \
+        using U = std::underlying_type<X>::type;                      \
+        return static_cast<X>(static_cast<U>(a) ^ static_cast<U>(b)); \
+    }                                                                 \
+    inline X& operator^=(X& a, X b)                                   \
+    {                                                                 \
+        a = a ^ b;                                                    \
+        return a;                                                     \
+    }
+
+/* avoid backslash-newline at end of file */

@@ -49,6 +49,12 @@ namespace String {
         rtrim(s);
     }
 
+    inline void tolower(std::string& s)
+    {
+        for (auto& x : s)
+            x = std::tolower(x);
+    }
+
     inline bool starts_with(const std::string_view& s, const std::string_view& pa)
     {
         return s.compare(0, pa.size(), pa) == 0;

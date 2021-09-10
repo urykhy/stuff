@@ -6,6 +6,7 @@ boost     = dependency('boost', modules : ['unit_test_framework', 'system', 'cor
 threads   = dependency('threads')
 curl      = dependency('libcurl')
 log4cxx   = dependency('liblog4cxx')
+nghttp2   = dependency('libnghttp2')
 
-a = executable('a.out', 'test.cpp', dependencies : [boost, threads, curl, log4cxx], include_directories : includes)
+a = executable('a.out', 'test.cpp', dependencies : [boost, threads, curl, log4cxx, nghttp2], include_directories : includes)
 test('basic test', a, args : ['-l', 'all'])
