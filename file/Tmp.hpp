@@ -3,10 +3,10 @@
 #include <filesystem>
 #include <memory>
 
+#include "Writer.hpp"
+
 #include <exception/Error.hpp>
 #include <unsorted/Raii.hpp>
-
-#include "Writer.hpp"
 
 namespace File {
     class Tmp : public IWriter
@@ -16,17 +16,12 @@ namespace File {
         std::unique_ptr<BufWriter>  m_Writer;
 
     public:
-        using Error = Exception::Error<Tmp>;
-
         Tmp(const std::string& aName)
         {
-            auto sPath = std::filesystem::temp_directory_path();
-            sPath /= aName + ".tmp-XXXXXX";
-            m_Name = sPath.native();
-
+            m_Name  = tmpName(std::filesystem::temp_directory_path() / aName, ".tmp-XXXXXX");
             int sFD = mkstemp(m_Name.data());
             if (sFD == -1)
-                throw Error("File::Tmp: fail to create tmp file");
+                throw Exception::ErrnoError("File::Tmp: fail to create tmp file");
 
             Util::Raii sGuard([sFD]() { ::close(sFD); });
             m_File = std::make_unique<FileWriter>(sFD);
@@ -58,9 +53,9 @@ namespace File {
         }
         virtual ~Tmp() noexcept(false)
         {
+            close();
             std::error_code ec; // avoid throw
             std::filesystem::remove(name(), ec);
-            close();
         }
 
         const std::string& name() const { return m_Name; }

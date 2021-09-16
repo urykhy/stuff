@@ -1,5 +1,6 @@
 #pragma once
 
+#include <filesystem>
 #include <string>
 
 namespace File {
@@ -23,7 +24,7 @@ namespace File {
         if (found == std::string::npos)
             return "";
         std::string sExt = aFilename.substr(found + 1);
-        if (aSkipTmp and sExt.size() == 10 and 0 == sExt.compare(0, 4, "tmp-")) // is this File::Tmp extension ?
+        if (aSkipTmp and sExt.size() >= 3 and 0 == sExt.compare(0, 3, "tmp")) // tmp extension ?
         {
             auto second = aFilename.rfind(".", found - 1);
             if (second == std::string::npos)
@@ -31,5 +32,12 @@ namespace File {
             sExt = aFilename.substr(second + 1, found - second - 1);
         }
         return sExt;
+    }
+
+    inline std::string tmpName(const std::string& aPath, const std::string& sExt = ".tmp")
+    {
+        namespace fs = std::filesystem;
+        fs::path sPath(aPath);
+        return fs::path(sPath.parent_path() / ("." + sPath.filename().string() + sExt));
     }
 } // namespace File

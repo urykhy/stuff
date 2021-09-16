@@ -99,8 +99,10 @@ BOOST_AUTO_TEST_CASE(util)
     BOOST_CHECK_EQUAL(File::getBasename("ls"), "");
     BOOST_CHECK_EQUAL(File::getExtension("test.gif"), "gif");
     BOOST_CHECK_EQUAL(File::getExtension("test.gif.tmp-123456"), "gif");
+    BOOST_CHECK_EQUAL(File::getExtension(".test.gif.tmp"), "gif");
     BOOST_CHECK_EQUAL(File::getExtension("gif.tmp-123456"), "");
     BOOST_CHECK_EQUAL(File::getExtension("test.gif.tmp-123456", false), "tmp-123456");
+    BOOST_CHECK_EQUAL(File::tmpName("/foo/bar/name"), "/foo/bar/.name.tmp");
 }
 BOOST_AUTO_TEST_CASE(glob)
 {
