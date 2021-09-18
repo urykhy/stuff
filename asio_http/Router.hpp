@@ -49,7 +49,12 @@ namespace asio_http {
             for (auto& [sLoc, sHandler] : m_Locations)
                 if (match(sLoc, aRequest)) {
                     sLock.unlock();
-                    sHandler(aService, aRequest, aResponse, yield);
+                    try {
+                        sHandler(aService, aRequest, aResponse, yield);
+                    } catch (const std::exception& e) {
+                        aResponse = {};
+                        aResponse.result(http::status::internal_server_error);
+                    }
                     return;
                 }
 

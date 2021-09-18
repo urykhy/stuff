@@ -80,20 +80,35 @@ namespace asio_http::v2 {
         }
     } __attribute__((packed));
 
-    class Session
+    class Session : public std::enable_shared_from_this<Session>
     {
         using InflaterT = std::unique_ptr<nghttp2_hd_inflater, void (*)(nghttp2_hd_inflater*)>;
         using DeflaterT = std::unique_ptr<nghttp2_hd_deflater, void (*)(nghttp2_hd_deflater*)>;
 
-        beast::error_code   m_Ec;
-        asio::io_service&   m_Service;
-        beast::tcp_stream&  m_Stream;
-        RouterPtr           m_Router;
-        asio::yield_context m_Yield;
-        InflaterT           m_Inflate;
-        DeflaterT           m_Deflate;
-        Header              m_Header;
-        std::string         m_Buffer;
+        asio::io_service&        m_Service;
+        asio::io_service::strand m_Strand;
+        beast::tcp_stream        m_Stream;
+        RouterPtr                m_Router;
+        InflaterT                m_Inflate;
+        DeflaterT                m_Deflate;
+        Header                   m_Header;
+        std::string              m_Buffer;
+
+        struct ResponseItem
+        {
+            uint32_t stream_id;
+            Response response;
+        };
+        std::list<ResponseItem> m_WriteQueue;
+
+        struct CoroState
+        {
+            beast::error_code   ec;
+            asio::yield_context yield;
+        };
+        std::unique_ptr<CoroState> m_ReadCoro;
+        std::unique_ptr<CoroState> m_WriteCoro;
+        asio::steady_timer         m_Timer;
 
         // frame control
 
@@ -119,10 +134,10 @@ namespace asio_http::v2 {
                 if (sLen == aData.size() and aLast)
                     sHeader.flags = Flags::END_STREAM;
                 sHeader.stream = aStream;
-                send(sHeader);
+                send(sHeader, m_WriteCoro);
                 DEBUG("sent data header");
 
-                send(aData.substr(0, sLen));
+                send(aData.substr(0, sLen), m_WriteCoro);
                 DEBUG("sent data body " << sLen << " bytes");
                 aData.remove_prefix(sLen);
             }
@@ -130,8 +145,7 @@ namespace asio_http::v2 {
 
         bool flush_step()
         {
-            bool sMore = false;
-
+            bool sNoMore = true;
             // iterate and flush as much as we can
             for (auto x = m_Streams.begin(); x != m_Streams.end();) {
                 auto& sStream = x->first;
@@ -146,20 +160,16 @@ namespace asio_http::v2 {
                     continue;
                 }
 
-                auto sGetLen = [&]() {
-                    return std::min({(size_t)m_Budget,
-                                     (size_t)sData.m_Budget,
-                                     sBody.size(),
-                                     MAX_STREAM_EXCLUSIVE});
-                };
-                size_t sLen = sGetLen();
+                const size_t sLen      = std::min({(size_t)m_Budget,
+                                              (size_t)sData.m_Budget,
+                                              sBody.size(),
+                                              MAX_STREAM_EXCLUSIVE});
+                const bool   sNoBudget = sLen < MIN_FRAME_SIZE and sBody.size() > sLen;
 
-                auto sNoBudget = [&]() {
-                    return sLen < MIN_FRAME_SIZE and sBody.size() > sLen;
-                };
-                if (sNoBudget()) {
+                if (sNoBudget) {
                     DEBUG("low budget " << sLen << " for stream " << sStream << " (" << sBody.size() << " bytes pending)");
                     x++;
+                    sNoMore = false;
                     continue;
                 }
 
@@ -175,65 +185,66 @@ namespace asio_http::v2 {
                     sBody.erase(0, sLen);
                     DEBUG("stream " << sStream << " have " << sBody.size() << " bytes pending");
                     x++;
-                    sLen = sGetLen();
-                    sMore |= !sNoBudget();
+                    sNoMore = false; // have more data to write
                 }
             }
-
-            return sMore;
+            return sNoMore;
         }
 
-        void flush()
+        bool flush() // return true if no more data to write out
         {
-            while (true) {
-                if (m_Budget < MIN_FRAME_SIZE) {
-                    DEBUG("connection budget low: " << m_Budget);
-                    return;
-                }
-                if (!flush_step())
-                    return;
+            DEBUG("flush responses...");
+
+            while (!m_WriteQueue.empty()) {
+                send(std::move(m_WriteQueue.front()));
+                m_WriteQueue.pop_front();
             }
+
+            return flush_step();
         }
 
         // Recv
 
-        void recv_header()
+        void
+        recv_header()
         {
-            boost::asio::async_read(m_Stream, boost::asio::buffer(&m_Header, sizeof(m_Header)), m_Yield[m_Ec]);
-            if (m_Ec)
-                throw m_Ec;
+            asio::async_read(m_Stream, asio::buffer(&m_Header, sizeof(m_Header)), m_ReadCoro->yield[m_ReadCoro->ec]);
             m_Header.to_host();
+            if (m_ReadCoro->ec)
+                throw m_ReadCoro->ec;
         }
 
         void recv_body(size_t aSize)
         {
             m_Buffer.resize(aSize);
-            boost::asio::async_read(m_Stream, boost::asio::buffer(m_Buffer.data(), aSize), m_Yield[m_Ec]);
-            if (m_Ec)
-                throw m_Ec;
+            asio::async_read(m_Stream, asio::buffer(m_Buffer.data(), aSize), m_ReadCoro->yield[m_ReadCoro->ec]);
+            if (m_ReadCoro->ec)
+                throw m_ReadCoro->ec;
         }
 
         // Send
 
-        void send(Header aData) // copy here
+        void send(Header aData, std::unique_ptr<CoroState>& aState) // copy here
         {
             aData.to_net();
-            boost::asio::async_write(m_Stream, boost::asio::const_buffer(&aData, sizeof(aData)), m_Yield[m_Ec]);
-            if (m_Ec)
-                throw m_Ec;
+            asio::async_write(m_Stream, asio::const_buffer(&aData, sizeof(aData)), aState->yield[aState->ec]);
+            if (aState->ec)
+                throw aState->ec;
         }
 
-        void send(std::string_view aStr)
+        void send(std::string_view aStr, std::unique_ptr<CoroState>& aState)
         {
-            boost::asio::async_write(m_Stream, boost::asio::const_buffer(aStr.data(), aStr.size()), m_Yield[m_Ec]);
-            if (m_Ec)
-                throw m_Ec;
+            asio::async_write(m_Stream, asio::const_buffer(aStr.data(), aStr.size()), aState->yield[aState->ec]);
+            if (aState->ec)
+                throw aState->ec;
         }
 
-        void send(const Response& aResponse)
+        void send(ResponseItem&& aResponse)
         {
             std::list<std::string>  sShadow;
             std::vector<nghttp2_nv> sPairs;
+
+            auto& sResponse = aResponse.response;
 
             auto sAssign = [&sPairs](boost::beast::string_view sName, boost::beast::string_view sValue) {
                 nghttp2_nv sNV;
@@ -245,9 +256,9 @@ namespace asio_http::v2 {
                 sPairs.push_back(sNV);
             };
 
-            sShadow.push_back(std::to_string(aResponse.result_int()));
+            sShadow.push_back(std::to_string(sResponse.result_int()));
             sAssign(":status", sShadow.back());
-            for (auto& x : aResponse) {
+            for (auto& x : sResponse) {
                 sShadow.push_back(x.name_string().to_string());
                 String::tolower(sShadow.back());
                 sAssign(sShadow.back(), x.value());
@@ -267,39 +278,61 @@ namespace asio_http::v2 {
             sHeader.size   = sUsed;
             sHeader.type   = Type::HEADERS;
             sHeader.flags  = Flags::END_HEADERS;
-            sHeader.stream = m_Header.stream;
+            sHeader.stream = aResponse.stream_id;
 
-            if (aResponse.body().empty())
+            if (sResponse.body().empty())
                 sHeader.flags |= Flags::END_STREAM;
 
-            send(sHeader);
+            send(sHeader, m_WriteCoro);
             DEBUG("sent header");
 
-            send(m_Buffer);
+            send(m_Buffer, m_WriteCoro);
             DEBUG("sent header body");
 
-            auto sIt = m_Streams.find(m_Header.stream);
+            auto sIt = m_Streams.find(aResponse.stream_id);
             assert(sIt != m_Streams.end());
-            if (aResponse.body().empty()) {
+            if (sResponse.body().empty()) {
                 m_Streams.erase(sIt);
             } else {
-                sIt->second.m_Body  = std::move(aResponse.body());
+                sIt->second.m_Body  = std::move(sResponse.body());
                 sIt->second.m_Ready = true;
             }
         }
 
         // Protocol handling
 
-        void call(Request& aRequest)
+        void call(Request&& aRequest)
         {
-            Response sResponse;
-            m_Router->call(m_Service, aRequest, sResponse, m_Yield[m_Ec]);
-            if (m_Ec)
-                throw m_Ec;
-            sResponse.prepare_payload();
-            if (0 == sResponse.count(http::field::server))
-                sResponse.set(http::field::server, "Beast/cxx");
-            send(sResponse);
+            uint32_t sStreamId = m_Header.stream;
+            // make router->call in any asio thread,
+            // process result in proper strand
+
+            DEBUG("spawn to perform call for stream " << sStreamId);
+            asio::spawn(
+                m_Service,
+                [p = shared_from_this(), sStreamId, aRequest = std::move(aRequest)](asio::yield_context yield) mutable {
+                    beast::error_code ec;
+                    Response          sResponse;
+
+                    p->m_Router->call(p->m_Service, aRequest, sResponse, yield[ec]);
+
+                    sResponse.prepare_payload();
+                    if (0 == sResponse.count(http::field::server))
+                        sResponse.set(http::field::server, "Beast/cxx");
+
+                    p->m_Strand.post([p, sStreamId, sResponse = std::move(sResponse)]() mutable {
+                        p->call_cb(sStreamId, std::move(sResponse));
+                    });
+                });
+        }
+
+        void call_cb(uint32_t aStreamId, Response&& aResponse)
+        {
+            const bool sStart = m_WriteQueue.empty();
+            DEBUG("queued response for stream " << aStreamId);
+            m_WriteQueue.push_back(ResponseItem{aStreamId, std::move(aResponse)});
+            if (sStart and !m_WriteCoro)
+                spawn_write_coro();
         }
 
         void process_data()
@@ -310,7 +343,7 @@ namespace asio_http::v2 {
 
             if (m_Header.flags & Flags::END_STREAM) {
                 DEBUG("got complete request")
-                call(sRequest);
+                call(std::move(sRequest));
             }
         }
 
@@ -372,7 +405,7 @@ namespace asio_http::v2 {
             }
 
             if (m_Header.flags & Flags::END_STREAM)
-                call(sRequest);
+                call(std::move(sRequest));
         }
 
         void process_settings()
@@ -390,7 +423,7 @@ namespace asio_http::v2 {
             Header sAck;
             sAck.type  = Type::SETTINGS;
             sAck.flags = Flags::ACK_SETTINGS;
-            send(sAck);
+            send(sAck, m_ReadCoro);
             DEBUG("ack settings");
         }
 
@@ -414,26 +447,6 @@ namespace asio_http::v2 {
             }
         }
 
-    public:
-        Session(asio::io_service& aService, beast::tcp_stream& aStream, RouterPtr aRouter, asio::yield_context yield)
-        : m_Service(aService)
-        , m_Stream(aStream)
-        , m_Router(aRouter)
-        , m_Yield(yield)
-        , m_Inflate([]() {
-            nghttp2_hd_inflater* sTmp = nullptr;
-            if (nghttp2_hd_inflate_new(&sTmp))
-                throw std::runtime_error("fail to initialize nghttp/inflater");
-            return InflaterT(sTmp, nghttp2_hd_inflate_del);
-        }())
-        , m_Deflate([]() {
-            nghttp2_hd_deflater* sTmp = nullptr;
-            if (nghttp2_hd_deflate_new(&sTmp, DEFAULT_HEADER_TABLE_SIZE))
-                throw std::runtime_error("fail to initialize nghttp/deflater");
-            return DeflaterT(sTmp, nghttp2_hd_deflate_del);
-        }())
-        {}
-
         void hello()
         {
             const std::string_view sExpected("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n");
@@ -446,11 +459,12 @@ namespace asio_http::v2 {
 
             Header sAck;
             sAck.type = Type::SETTINGS;
-            send(sAck);
+            send(sAck, m_ReadCoro);
         }
 
         bool process_frame()
         {
+            m_Stream.expires_after(std::chrono::seconds(30));
             recv_header();
             DEBUG("got header, size: " << m_Header.size << ", type: " << (int)m_Header.type << ", flags: " << (int)m_Header.flags << ", stream: " << m_Header.stream);
 
@@ -468,42 +482,108 @@ namespace asio_http::v2 {
             default: break;
             }
 
-            flush();
-
             return true;
         }
-    };
 
-    inline void session2(asio::io_service& aService, beast::tcp_stream& aStream, RouterPtr aRouter, asio::yield_context yield)
-    {
-        try {
-            Session sSession(aService, aStream, aRouter, yield);
-            sSession.hello();
-            DEBUG("http/2 negotiated");
+    public:
+        Session(asio::io_service& aService, beast::tcp_stream&& aStream, RouterPtr aRouter)
+        : m_Service(aService)
+        , m_Strand(m_Service)
+        , m_Stream(std::move(aStream))
+        , m_Router(aRouter)
+        , m_Inflate([]() {
+            nghttp2_hd_inflater* sTmp = nullptr;
+            if (nghttp2_hd_inflate_new(&sTmp))
+                throw std::runtime_error("fail to initialize nghttp/inflater");
+            return InflaterT(sTmp, nghttp2_hd_inflate_del);
+        }())
+        , m_Deflate([]() {
+            nghttp2_hd_deflater* sTmp = nullptr;
+            if (nghttp2_hd_deflate_new(&sTmp, DEFAULT_HEADER_TABLE_SIZE))
+                throw std::runtime_error("fail to initialize nghttp/deflater");
+            return DeflaterT(sTmp, nghttp2_hd_deflate_del);
+        }())
+        , m_Timer(m_Service)
+        {}
 
-            while (true) {
-                aStream.expires_after(std::chrono::seconds(30));
-                if (!sSession.process_frame())
-                    break; // GO AWAY
-            }
-        } catch (const beast::error_code e) {
-            ERROR("beast error: " << e);
-        } catch (const std::exception& e) {
-            ERROR("exception: " << e.what());
+        ~Session()
+        {
+            beast::error_code ec;
+            m_Stream.socket().shutdown(tcp::socket::shutdown_send, ec);
         }
 
-        beast::error_code ec;
-        aStream.socket().shutdown(tcp::socket::shutdown_send, ec);
-    }
+        // coro magic
+
+        void spawn_read_coro()
+        {
+            asio::spawn(m_Strand,
+                        [p = shared_from_this()](asio::yield_context yield) mutable {
+                            p->read_coro(yield);
+                        });
+        }
+
+    private:
+        void read_coro(asio::yield_context yield)
+        {
+            try {
+                m_ReadCoro = std::make_unique<CoroState>(CoroState{{}, yield});
+                hello();
+                DEBUG("http/2 negotiated");
+
+                while (true) {
+                    if (!process_frame())
+                        break; // GO AWAY
+                    if (m_WriteCoro and m_WriteCoro->ec)
+                        throw m_WriteCoro->ec;
+                }
+            } catch (const beast::error_code e) {
+                ERROR("beast error: " << e);
+            } catch (const std::exception& e) {
+                ERROR("exception: " << e.what());
+            }
+        }
+
+        void spawn_write_coro()
+        {
+            asio::spawn(m_Strand, [p = shared_from_this()](asio::yield_context yield) mutable {
+                try {
+                    p->write_coro(yield);
+                } catch (const beast::error_code e) {
+                    ERROR("beast error: " << e);
+                }
+            });
+        }
+
+        void write_coro(asio::yield_context yield)
+        {
+            DEBUG("write out coro started");
+            m_WriteCoro = std::make_unique<CoroState>(CoroState{{}, yield});
+
+            bool sNoMore = false; // no more m_Streams data to write
+            auto sEnd    = [this, &sNoMore]() {
+                return m_ReadCoro->ec or (m_WriteQueue.empty() and sNoMore);
+            };
+
+            while (!sEnd()) {
+                m_Timer.expires_from_now(std::chrono::milliseconds(1));
+                m_Timer.async_wait(m_WriteCoro->yield[m_WriteCoro->ec]);
+                sNoMore = flush();
+            }
+            DEBUG("write out coro finished");
+            m_WriteCoro.reset();
+        }
+    };
 
     inline void server2(asio::io_service& aService, std::shared_ptr<tcp::acceptor> aAcceptor, std::shared_ptr<tcp::socket> aSocket, RouterPtr aRouter)
     {
         aAcceptor->async_accept(*aSocket, [aService = std::ref(aService), aAcceptor, aSocket, aRouter](beast::error_code ec) {
             if (!ec) {
                 aSocket->set_option(tcp::no_delay(true));
-                boost::asio::spawn(aAcceptor->get_executor(), [aService, sStream = beast::tcp_stream(std::move(*aSocket)), aRouter](boost::asio::yield_context yield) mutable {
-                    session2(aService, sStream, aRouter, yield);
-                });
+                auto sSession = std::make_shared<Session>(
+                    aService,
+                    beast::tcp_stream(std::move(*aSocket)),
+                    aRouter);
+                sSession->spawn_read_coro();
             }
             server2(aService, aAcceptor, aSocket, aRouter);
         });
