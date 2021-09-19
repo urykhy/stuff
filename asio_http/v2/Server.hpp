@@ -22,6 +22,7 @@ namespace asio_http::v2 {
         SETTINGS      = 4,
         GOAWAY        = 7,
         WINDOW_UPDATE = 8,
+        CONTINUATION  = 9,
     };
 
     enum Setting : uint16_t
@@ -118,6 +119,7 @@ namespace asio_http::v2 {
             Request     m_Request;
             std::string m_Body;
             bool        m_Ready = false;
+            bool        m_NoBody = false;
         };
 
         uint32_t                   m_Budget = DEFAULT_WINDOW_SIZE;
@@ -367,18 +369,17 @@ namespace asio_http::v2 {
         void process_headers()
         {
             assert(m_Header.stream != 0);
-            auto& sRequest = m_Streams[m_Header.stream].m_Request;
+            // if continuation -> asert we already have seen headers frame
+            auto& sStream  = m_Streams[m_Header.stream];
+            auto& sRequest = sStream.m_Request;
 
             Container::imemstream sData(m_Buffer);
 
             uint8_t  sPadLength = 0;
-            uint32_t sStream    = 0;
-            uint8_t  sPrio      = 0;
             if (m_Header.flags & Flags::PADDED)
                 sData.read(sPadLength);
             if (m_Header.flags & Flags::PRIORITY) {
-                sData.read(sStream);
-                sData.read(sPrio);
+                sData.skip(4 + 1);  // stream id + prio
             }
             std::string_view sRest = sData.rest();
             sRest.remove_suffix(sPadLength);
@@ -405,7 +406,13 @@ namespace asio_http::v2 {
             }
 
             if (m_Header.flags & Flags::END_STREAM)
+                sStream.m_NoBody = true;
+
+            if (m_Header.flags & Flags::END_HEADERS and sStream.m_NoBody)
+            {
+                DEBUG("got complete request")
                 call(std::move(sRequest));
+            }
         }
 
         void process_settings()
@@ -479,6 +486,7 @@ namespace asio_http::v2 {
             case Type::SETTINGS: process_settings(); break;
             case Type::GOAWAY: return false; break;
             case Type::WINDOW_UPDATE: process_window_update(); break;
+            case Type::CONTINUATION: process_headers(); break;
             default: break;
             }
 
