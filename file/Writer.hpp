@@ -17,8 +17,6 @@ namespace File {
     {
         int          m_FD = -1;
         Util::Unwind m_Unwind;
-        FileWriter(const FileWriter&) = delete;
-        FileWriter& operator=(const FileWriter&) = delete;
 
     public:
         explicit FileWriter(int aFD)

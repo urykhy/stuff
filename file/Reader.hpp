@@ -5,12 +5,12 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include "Interface.hpp"
+
 #include <archive/Interface.hpp>
 #include <exception/Error.hpp>
 #include <unsorted/Raii.hpp>
 #include <unsorted/Unwind.hpp>
-
-#include "Interface.hpp"
 
 namespace File {
 
@@ -19,8 +19,6 @@ namespace File {
         int          m_FD  = -1;
         bool         m_EOF = false;
         Util::Unwind m_Unwind;
-        FileReader(const FileReader&) = delete;
-        FileReader& operator=(const FileReader&) = delete;
 
     public:
         FileReader(const std::string& aName)
@@ -198,12 +196,13 @@ namespace File {
         {
             if (m_Unget) {
                 *reinterpret_cast<uint8_t*>(aPtr) = m_Last;
+
                 m_Unget = false;
                 aSize--;
                 if (aSize == 0)
                     return 1;
-                aPtr = (reinterpret_cast<uint8_t*>(aPtr)) + 1;
-                m_Last  = 0;
+                aPtr   = (reinterpret_cast<uint8_t*>(aPtr)) + 1;
+                m_Last = 0;
             }
 
             size_t sSize = m_Parent->read(aPtr, aSize);
