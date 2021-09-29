@@ -40,7 +40,7 @@ namespace asio_http {
         beast::tcp_stream sStream{aService};
 
         auto    sParsed = Parser::url(aRequest.url);
-        Request sInternal{aRequest.method, sParsed.query, 10}; // 10 is 1.0 http version
+        Request sInternal{aRequest.method, sParsed.path, 10}; // 10 is 1.0 http version
         sInternal.body() = std::move(aRequest.body);
         for (auto& [sField, sValue] : aRequest.headers)
             sInternal.set(sField, std::move(sValue));

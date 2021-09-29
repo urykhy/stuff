@@ -182,7 +182,7 @@ namespace asio_http::Alive {
         template <class T>
         static Request prepareRequest(ClientRequest& aRequest, const T& aParsed)
         {
-            Request sInternal{aRequest.method, aParsed.query, 11}; // 11 is 1.1 http version
+            Request sInternal{aRequest.method, aParsed.path, 11}; // 11 is 1.1 http version
 
             for (auto& [sField, sValue] : aRequest.headers)
                 sInternal.set(sField, std::move(sValue));

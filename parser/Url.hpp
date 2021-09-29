@@ -54,8 +54,8 @@ namespace Parser {
         struct Parsed
         {
             std::string host;
-            std::string port  = "80";
-            std::string query = "/";
+            std::string port = "80";
+            std::string path = "/";
         };
         Parsed sParsed;
 
@@ -91,7 +91,7 @@ namespace Parser {
                 }
                 break;
             case QUERY:
-                sParsed.query.push_back(c);
+                sParsed.path.push_back(c);
                 break;
             }
         }

@@ -151,15 +151,15 @@ BOOST_AUTO_TEST_CASE(url)
     auto sParsed = Parser::url("http://localhost/ping");
     BOOST_CHECK_EQUAL(sParsed.host, "localhost");
     BOOST_CHECK_EQUAL(sParsed.port, "80");
-    BOOST_CHECK_EQUAL(sParsed.query, "/ping");
+    BOOST_CHECK_EQUAL(sParsed.path, "/ping");
 
     sParsed = Parser::url("http://localhost:2345/pong");
     BOOST_CHECK_EQUAL(sParsed.host, "localhost");
     BOOST_CHECK_EQUAL(sParsed.port, "2345");
-    BOOST_CHECK_EQUAL(sParsed.query, "/pong");
+    BOOST_CHECK_EQUAL(sParsed.path, "/pong");
 
     sParsed = Parser::url("http://localhost");
-    BOOST_CHECK_EQUAL(sParsed.query, "/");
+    BOOST_CHECK_EQUAL(sParsed.path, "/");
 }
 BOOST_AUTO_TEST_CASE(query)
 {
