@@ -131,12 +131,12 @@ BOOST_AUTO_TEST_CASE(ZstdThreads)
 
     Zstd::C      sCompressor1(3);
     Time::Meter  sMeter;
-    const auto   sC1    = Archive::filter(&sCompressor1, sData);
+    const auto   sC1    = Archive::filter(sData, &sCompressor1);
     const double sTime1 = sMeter.get().to_double();
 
     Zstd::C sCompressor2(3, Zstd::C::Params{.threads = 4}); // use 4 threads
     sMeter.reset();
-    const auto   sC2    = Archive::filter(&sCompressor2, sData);
+    const auto   sC2    = Archive::filter(sData, &sCompressor2);
     const double sTime2 = sMeter.get().to_double();
 
     BOOST_CHECK_CLOSE(float(sC1.size()), float(sC2.size()), 1);
@@ -149,10 +149,10 @@ BOOST_AUTO_TEST_CASE(ZstdLong)
     BOOST_TEST_MESSAGE("source file size: " << sData.size());
 
     Zstd::C      sCompressor1(3);
-    const auto   sC1    = Archive::filter(&sCompressor1, sData);
+    const auto   sC1    = Archive::filter(sData, &sCompressor1);
 
     Zstd::C sCompressor2(3, Zstd::C::Params{.long_matching = true});
-    const auto   sC2    = Archive::filter(&sCompressor2, sData);
+    const auto   sC2    = Archive::filter(sData, &sCompressor2);
 
     BOOST_TEST_MESSAGE("normal size: " << sC1.size());
     BOOST_TEST_MESSAGE("long   size: " << sC2.size());

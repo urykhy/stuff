@@ -7,7 +7,7 @@
 #include "Interface.hpp"
 
 namespace Archive {
-    std::string filter(IFilter* aFilter, const std::string& aStr)
+    std::string filter(const std::string& aStr, IFilter* aFilter)
     {
         std::string sResult;
         std::string sBuffer(64 * 1024, ' '); // tmp buffer
