@@ -1,9 +1,13 @@
 #pragma once
+
+#include <sys/prctl.h>
+
 #include <cmath>
 #include <functional>
 #include <list>
 #include <thread>
 
+#include <exception/Error.hpp>
 #include <time/Meter.hpp>
 
 namespace Threads {
@@ -41,5 +45,11 @@ namespace Threads {
     {
         const Time::time_spec sTime(aTime);
         nanosleep(&sTime, nullptr);
+    }
+
+    inline void threadName(const std::string& aName)
+    {
+        if (prctl(PR_SET_NAME, aName.c_str()))
+            throw Exception::ErrnoError("fail to threadName");
     }
 } // namespace Threads
