@@ -23,7 +23,7 @@ namespace S3 {
         std::string secret_key = Util::getEnv("S3_SECRET_KEY");
         std::string region     = Util::getEnv("S3_REGION");
 
-        Curl::Client::Params curl;
+        Curl::Client::Default curl;
     };
 
     class API
@@ -121,7 +121,7 @@ namespace S3 {
                 sRequest.headers["x-amz-meta-sha256"] = sContentHash;
             sRequest.headers["Authorization"] = authorization(aMethod, sRequest.headers, aName, aQuery, sContentHash, sDateTime);
 
-            return sRequest;
+            return m_Params.curl.wrap(std::move(sRequest));
         }
 
         void reportError(Curl::Client::Result& aResult) const
@@ -148,7 +148,6 @@ namespace S3 {
         API(const Params& aParams)
         : m_Params(aParams)
         , m_Zone(Time::load("UTC"))
-        , m_Client(aParams.curl)
         {}
 
         using Error = Exception::HttpError;

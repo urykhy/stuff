@@ -39,12 +39,12 @@ namespace Curl {
             std::string      username   = {};
             std::string      password   = {};
             std::string      cookie     = {};
-            std::string      user_agent = {};
+            std::string      user_agent = "Curl++";
             Headers          headers    = {};
 
             time_t ims        = 0;
-            time_t timeout_ms = 0;
-            time_t connect_ms = 0;
+            time_t timeout_ms = 3000;
+            time_t connect_ms = 100;
             bool   verbose    = false;
 
             RecvHandler callback = {};
@@ -61,23 +61,40 @@ namespace Curl {
         };
 
         // default parameters
-        struct Params
+        struct Default
         {
             std::string username;
             std::string password;
             std::string cookie;
             std::string user_agent = "Curl++";
             Headers     headers;
+            bool        verbose = false;
 
-            time_t timeout_ms = 3000;
-            time_t connect_ms = 100;
-            bool   verbose    = false;
+            Request wrap(Request&& aRequest) const
+            {
+                if (aRequest.username.empty() and !username.empty()) {
+                    aRequest.username = username;
+                    aRequest.password = password;
+                }
 
-            Params() {}
+                if (aRequest.cookie.empty() and !cookie.empty())
+                    aRequest.cookie = cookie;
+
+                if (aRequest.user_agent.empty() and !user_agent.empty())
+                    aRequest.user_agent = user_agent;
+
+                for (auto& [sHeader, sValue] : headers)
+                    if (aRequest.headers.find(sHeader) == aRequest.headers.end())
+                        aRequest.headers[sHeader] = sValue;
+
+                if (verbose)
+                    aRequest.verbose = verbose;
+
+                return aRequest;
+            }
         };
 
-        Client(const Params& aParams = Params())
-        : m_Params(aParams)
+        Client()
         {
             m_Curl = curl_easy_init();
             if (m_Curl == nullptr) {
@@ -164,11 +181,10 @@ namespace Curl {
         }
 
     protected:
-        const Params m_Params;
-        CURL*        m_Curl;
-        curl_slist*  m_HeaderList = nullptr;
-        CURLM*       m_Multi      = nullptr;
-        Result       m_Result;
+        CURL*       m_Curl;
+        curl_slist* m_HeaderList = nullptr;
+        CURLM*      m_Multi      = nullptr;
+        Result      m_Result;
 
         std::string_view m_UploadData = {};
 
@@ -229,28 +245,6 @@ namespace Curl {
             return sTime > 0 ? sTime : 0;
         }
 
-#define _GENERATE_GET(X)                                 \
-    auto x_##X(const Request& aRequest)                  \
-    {                                                    \
-        return aRequest.X > 0 ? aRequest.X : m_Params.X; \
-    }
-        _GENERATE_GET(timeout_ms)
-        _GENERATE_GET(connect_ms)
-        _GENERATE_GET(verbose)
-#undef _GENERATE_GET
-
-#define _GENERATE_GET(X)                                      \
-    const auto& x_##X(const Request& aRequest)                \
-    {                                                         \
-        return !aRequest.X.empty() ? aRequest.X : m_Params.X; \
-    }
-        _GENERATE_GET(username)
-        _GENERATE_GET(password)
-        _GENERATE_GET(cookie)
-        _GENERATE_GET(user_agent)
-        _GENERATE_GET(headers)
-#undef _GENERATE_GET
-
         //Result& query(const std::string& aUrl, bool aOwnBuffer = false)
         Result& query(const Request& aRequest)
         {
@@ -269,33 +263,35 @@ namespace Curl {
             setopt(CURLOPT_FILETIME, 1);
             setopt(CURLOPT_NOSIGNAL, 1);
             setopt(CURLOPT_FOLLOWLOCATION, 1);
-            setopt(CURLOPT_TIMEOUT_MS, x_timeout_ms(aRequest));
-            setopt(CURLOPT_CONNECTTIMEOUT_MS, x_connect_ms(aRequest));
+            setopt(CURLOPT_TIMEOUT_MS, aRequest.timeout_ms);
+            setopt(CURLOPT_CONNECTTIMEOUT_MS, aRequest.connect_ms);
             //setopt(CURLOPT_BUFFERSIZE, 1024*1024);
 
             // user agent
-            if (auto sUseragent = x_user_agent(aRequest); !sUseragent.empty())
-                setopt(CURLOPT_USERAGENT, sUseragent.c_str());
+            if (!aRequest.user_agent.empty())
+                setopt(CURLOPT_USERAGENT, aRequest.user_agent.c_str());
 
             // set headers
-            for (auto& [sName, sValue] : x_headers(aRequest)) {
+            for (auto& [sName, sValue] : aRequest.headers) {
                 std::string sLine = sName + ": " + sValue;
-                m_HeaderList      = curl_slist_append(m_HeaderList, sLine.c_str()); // make a copy
+                auto sTmp = curl_slist_append(m_HeaderList, sLine.c_str()); // make a copy
+                if (sTmp == nullptr)
+                    throw Error("Curl: fail to slist_append");
+                m_HeaderList = sTmp;
             }
             setopt(CURLOPT_HTTPHEADER, m_HeaderList);
 
             // auth
-            if (auto sUsername = x_username(aRequest); !sUsername.empty()) {
-                auto sPassword = x_password(aRequest);
-                setopt(CURLOPT_USERNAME, sUsername.c_str());
-                setopt(CURLOPT_PASSWORD, sPassword.c_str());
+            if (!aRequest.username.empty()) {
+                setopt(CURLOPT_USERNAME, aRequest.username.c_str());
+                setopt(CURLOPT_PASSWORD, aRequest.password.c_str());
             }
 
             // cookies // "name1=content1; name2=content2;"
-            if (auto sCookie = x_cookie(aRequest); !sCookie.empty())
-                setopt(CURLOPT_COOKIE, sCookie.c_str());
+            if (!aRequest.cookie.empty())
+                setopt(CURLOPT_COOKIE, aRequest.cookie.c_str());
 
-            if (x_verbose(aRequest))
+            if (aRequest.verbose)
                 setopt(CURLOPT_VERBOSE, 1);
 
             if (m_Multi) {

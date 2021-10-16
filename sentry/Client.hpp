@@ -23,31 +23,29 @@ namespace Sentry {
         };
 
     private:
-        const Params                  m_Sentry;
-        std::unique_ptr<Curl::Client> m_Client;
+        const Params          m_Sentry;
+        Curl::Client::Default m_Hint;
+        Curl::Client          m_Client;
 
     public:
         Client()
         {
-            Curl::Client::Params sParams;
-
-            auto& sHeaders            = sParams.headers;
+            auto& sHeaders            = m_Hint.headers;
             sHeaders["Content-Type"]  = "application/json";
             sHeaders["X-Sentry-Auth"] = std::string("Sentry ") +
                                         "sentry_key=" + m_Sentry.key + ", " +
                                         "sentry_secret=" + m_Sentry.secret + ", " +
                                         "sentry_client=" + m_Sentry.client + ", " +
                                         "sentry_version=7";
-            m_Client = std::make_unique<Curl::Client>(sParams);
         }
         Curl::Client::Result send(const Message& aMsg) { return send(aMsg.to_string()); }
         Curl::Client::Result send(std::string_view aMsg)
         {
-            const Curl::Client::Request sRequest{
+            Curl::Client::Request sRequest{
                 .method = Curl::Client::Method::POST,
                 .url    = m_Sentry.url,
                 .body   = aMsg};
-            return m_Client->operator()(sRequest);
+            return m_Client(m_Hint.wrap(std::move(sRequest)));
         }
     };
 

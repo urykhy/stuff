@@ -5,26 +5,31 @@
 #include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/split.hpp>
 
+#include "Curl.hpp"
+#include "exception/Holder.hpp"
+
 #include <file/File.hpp>
 #include <file/Tmp.hpp>
 #include <parser/Autoindex.hpp>
 #include <threads/SafeQueue.hpp>
 
-#include "Curl.hpp"
-#include "exception/Holder.hpp"
-
 namespace Curl {
-    inline File::Tmp download(const std::string& aUrl, const Curl::Client::Params& aParams = {})
+    inline File::Tmp download(const std::string& aUrl, const Curl::Client::Default& aParams = {})
     {
         File::Tmp sTmp(File::getFilename(aUrl)); // FIXME: cut query
-        Client    sClient(aParams);
+        Client    sClient;
 
         auto sCallback = [&sTmp](void* aPtr, size_t aSize) -> size_t {
             sTmp.write(aPtr, aSize);
             return aSize;
         };
 
-        int sStatus = sClient.GET(aUrl, sCallback);
+        int sStatus = sClient(
+                          aParams.wrap(
+                              {.method   = Curl::Client::Method::GET,
+                               .url      = aUrl,
+                               .callback = sCallback}))
+                          .status;
         if (sStatus != 200)
             throw Client::Error("fail to download: http .status: " + std::to_string(sStatus));
         sTmp.flush();
@@ -33,7 +38,7 @@ namespace Curl {
     }
 
     // download without order. handler called from multiple threads
-    void download(const Parser::StringList& aUrls, unsigned aCount, std::function<void(const std::string&, File::Tmp&)> aHandler, const Curl::Client::Params& aParams = {})
+    void download(const Parser::StringList& aUrls, unsigned aCount, std::function<void(const std::string&, File::Tmp&)> aHandler, const Curl::Client::Default& aParams = {})
     {
         Exception::Holder sError;
 
@@ -63,11 +68,16 @@ namespace Curl {
     }
 
     // pair.first is false if not modified
-    inline std::pair<bool, Parser::StringList> index(const std::string& aUrl, const time_t aIMS = 0, const Curl::Client::Params& aParams = {})
+    inline std::pair<bool, Parser::StringList> index(const std::string& aUrl, const time_t aIMS = 0, const Curl::Client::Default& aParams = {})
     {
         using L = Parser::StringList;
-        Client sClient(aParams);
-        auto   sResponse = sClient.GET(aUrl, aIMS);
+        Client sClient;
+
+        auto sResponse = sClient(
+            aParams.wrap(
+                {.method = Curl::Client::Method::GET,
+                 .url    = aUrl,
+                 .ims    = aIMS}));
 
         if (sResponse.status == 304)
             return std::make_pair(false, L{});
