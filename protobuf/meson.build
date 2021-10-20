@@ -27,7 +27,7 @@ foreach name : ['tutorial.proto']
 endforeach
 
 a  = executable('a.out',  'test.cpp',       api_src, dependencies : [tutorial_dep, protobuf, boost, json], cpp_args : '-DWITH_JSON', include_directories : includes)
-b  = executable('b.out',  'benchmark.cpp',  api_src, dependencies : [tutorial_dep, protobuf, boost, benchmark])
+b  = executable('b.out',  'benchmark.cpp',  api_src, dependencies : [tutorial_dep, protobuf, boost, benchmark], include_directories : includes)
 b2 = executable('b2.out', 'benchmark2.cpp', api_src, dependencies : [tutorial_dep, protobuf, boost, benchmark], include_directories : includes)
 test('basic test', a, args : ['-l', 'all'])
 benchmark('protobuf', b)

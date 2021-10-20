@@ -36,47 +36,47 @@
     {# magic #}
     {%- if x.custom_type and x.repeated %}
         // custom and repeated
-        Protobuf::Buffer sTmpBuf;
-        aWalker->read(sTmpBuf);
+        std::string_view sTmpBuf;
+        aReader->read(sTmpBuf);
         {{ x.name }}.emplace_back(m_Pool);
         {{ x.name }}.back().ParseFromString(sTmpBuf);
         m_Error |= {{ x.name }}.back().m_Error;
     {%- elif x.custom_type %}
         // custom
-        Protobuf::Buffer sTmpBuf;
-        aWalker->read(sTmpBuf);
+        std::string_view sTmpBuf;
+        aReader->read(sTmpBuf);
         {{ x.name }}.emplace(m_Pool);
         {{ x.name }}->ParseFromString(sTmpBuf);
         m_Error |= {{ x.name }}->m_Error;
     {%- elif x.pmr and x.repeated %}
         // pmr and repeated
         {{ x.name }}.emplace_back({{ x.cxx_type }}(m_Pool));
-        aWalker->read({{ x.name }}.back());
+        aReader->read({{ x.name }}.back());
     {%- elif x.pmr %}
         // pmr
         {{ x.name }}.emplace(m_Pool);
-        aWalker->read(*{{ x.name }});
+        aReader->read(*{{ x.name }});
     {%- elif x.repeated %}
         {%- if x.packed %}
             // repeated packed
-            Protobuf::Buffer sTmpBuf;
-            aWalker->read(sTmpBuf);
-            Protobuf::Walker sWalker(sTmpBuf);
-            while (!sWalker.empty()) {
+            std::string_view sTmpBuf;
+            aReader->read(sTmpBuf);
+            Protobuf::Reader sReader(sTmpBuf);
+            while (!sReader.empty()) {
                 {{- _type(x )}} sTmp{};
-                sWalker.read(sTmp{{ x.encoding }});
+                sReader.read(sTmp{{ x.encoding }});
                 {{ x.name }}.push_back( {{x.cast }});
             }
         {%- else %}
             // repeated
             {{- _type(x )}} sTmp{};
-            aWalker->read(sTmp{{ x.encoding }});
+            aReader->read(sTmp{{ x.encoding }});
             {{ x.name }}.push_back({{ x.cast }});
         {%- endif %}
     {%- else %}
         // simple
         {{- _type(x )}} sTmp{};
-        aWalker->read(sTmp{{ x.encoding }});
+        aReader->read(sTmp{{ x.encoding }});
         {{- x.name }} = {{ x.cast }};
     {%- endif %}
     return Protobuf::ACT_USED;
@@ -114,9 +114,9 @@ namespace {{ doc.namespace }}
         {%- endfor %}
         {}
 
-        void ParseFromString(const Protobuf::Buffer& aString) {
-            Protobuf::Walker sWalker(aString);
-            sWalker.parse([this](const Protobuf::FieldInfo& aField, Protobuf::Walker* aWalker) -> Protobuf::Action {
+        void ParseFromString(std::string_view aString) {
+            Protobuf::Reader sReader(aString);
+            sReader.parse([this](const Protobuf::FieldInfo& aField, Protobuf::Reader* aReader) -> Protobuf::Action {
                 switch (aField.id) {
                     {%- for f in m.fields %}
                         case {{ f.id }}: {

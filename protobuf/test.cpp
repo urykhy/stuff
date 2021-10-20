@@ -33,33 +33,46 @@ BOOST_AUTO_TEST_CASE(simple)
     BOOST_CHECK_EQUAL(true, sPerson.ParseFromString(sBuf));
     BOOST_CHECK_EQUAL(sPerson.id(), 0x01020304);
 
-    Protobuf::Buffer sInput(sBuf);
+    std::string_view sInput(sBuf);
     {
-        Protobuf::Walker sWalker(sInput);
-        const auto sTag1 = sWalker.readTag(); BOOST_CHECK_EQUAL(1, sTag1.id); sWalker.skip(sTag1);
-        const auto sTag2 = sWalker.readTag(); BOOST_CHECK_EQUAL(2, sTag2.id); sWalker.skip(sTag2);
-        const auto sTag3 = sWalker.readTag(); BOOST_CHECK_EQUAL(3, sTag3.id); sWalker.skip(sTag3);
-        BOOST_CHECK(sWalker.empty());
+        Protobuf::Reader sReader(sInput);
+        const auto sTag1 = sReader.readTag(); BOOST_CHECK_EQUAL(1, sTag1.id); sReader.skip(sTag1);
+        BOOST_TEST_MESSAGE("tag1 " << (int)sTag1.tag);
+        const auto sTag2 = sReader.readTag(); BOOST_CHECK_EQUAL(2, sTag2.id); sReader.skip(sTag2);
+        BOOST_TEST_MESSAGE("tag2 " << (int)sTag2.tag);
+        const auto sTag3 = sReader.readTag(); BOOST_CHECK_EQUAL(3, sTag3.id); sReader.skip(sTag3);
+        BOOST_TEST_MESSAGE("tag3 " << (int)sTag3.tag);
+        BOOST_CHECK(sReader.empty());
     }
 
     {
         MyPerson sMyPerson;
-        Protobuf::Walker sWalker(sInput);
-        sWalker.parse([&sMyPerson](const Protobuf::FieldInfo& aField, Protobuf::Walker* aWalker) -> Protobuf::Action {
+        Protobuf::Reader sReader(sInput);
+        sReader.parse([&sMyPerson](const Protobuf::FieldInfo& aField, Protobuf::Reader* aReader) -> Protobuf::Action {
             switch (aField.id)
             {
                 case 1: return Protobuf::ACT_SKIP;
-                case 2: sMyPerson.id    = aWalker->readVarInt<int>(); return Protobuf::ACT_USED;
-                case 3: sMyPerson.email = aWalker->readString();  return Protobuf::ACT_USED;
+                case 2: aReader->read(sMyPerson.id); return Protobuf::ACT_USED;
+                case 3: aReader->read(sMyPerson.email);  return Protobuf::ACT_USED;
             }
             return Protobuf::ACT_BREAK;
         });
-        BOOST_CHECK(sWalker.empty());
-        BOOST_CHECK_THROW(sWalker.readTag(), Protobuf::EndOfBuffer);
+        BOOST_CHECK(sReader.empty());
+        BOOST_CHECK_THROW(sReader.readTag(), Protobuf::EndOfBuffer);
 
         BOOST_CHECK(sMyPerson.name.empty());
         BOOST_CHECK_EQUAL(sMyPerson.id,    sPerson.id());
         BOOST_CHECK_EQUAL(sMyPerson.email, sPerson.email());
+    }
+
+    // serialize to string
+    {
+        std::string sTmp;
+        Protobuf::Writer sWriter(sTmp);
+        sWriter.write(1, "my_name");
+        sWriter.write(2, 42);
+        sWriter.write(3, "my_email");
+        BOOST_CHECK_EQUAL(true, sPerson.ParseFromString(sTmp));
     }
 }
 BOOST_AUTO_TEST_CASE(sint)
@@ -74,10 +87,10 @@ BOOST_AUTO_TEST_CASE(sint)
     std::string sBuf;
     sPerson.SerializeToString(&sBuf);
 
-    Protobuf::Buffer sInput(sBuf);
-    Protobuf::Walker sWalker(sInput);
-    const auto sTag1 = sWalker.readTag(); BOOST_CHECK_EQUAL(1, sTag1.id); sWalker.skip(sTag1);
-    const auto sTag2 = sWalker.readTag(); BOOST_CHECK_EQUAL(2, sTag2.id); BOOST_CHECK_EQUAL(sPerson.id(), sWalker.readVarInt<int64_t>());
+    std::string_view sInput(sBuf);
+    Protobuf::Reader sReader(sInput);
+    const auto sTag1 = sReader.readTag(); BOOST_CHECK_EQUAL(1, sTag1.id); sReader.skip(sTag1);
+    const auto sTag2 = sReader.readTag(); BOOST_CHECK_EQUAL(2, sTag2.id); BOOST_CHECK_EQUAL(sPerson.id(), sReader.readVarInt<int64_t>());
 }
 BOOST_AUTO_TEST_CASE(xdecode)
 {
@@ -90,39 +103,39 @@ BOOST_AUTO_TEST_CASE(xdecode)
 
         std::string sBuf;
         sMessage.SerializeToString(&sBuf);
-        Protobuf::Buffer sInput(sBuf);
-        Protobuf::Walker sWalker(sInput);
-        v(sWalker);
+        std::string_view sInput(sBuf);
+        Protobuf::Reader sReader(sInput);
+        v(sReader);
     };
 
     xTest([](auto& x){ x.set_i32(0); },
-          [](auto& x){ BOOST_CHECK_EQUAL(1, x.readTag().id); uint32_t tmp = 0; x.read(tmp, Protobuf::Walker::FIXED); BOOST_CHECK_EQUAL(tmp, 0); });
+          [](auto& x){ BOOST_CHECK_EQUAL(1, x.readTag().id); uint32_t tmp = 0; x.read(tmp, Protobuf::FIXED); BOOST_CHECK_EQUAL(tmp, 0); });
     xTest([](auto& x){ x.set_i32(UINT32_MAX); },
-          [](auto& x){ BOOST_CHECK_EQUAL(1, x.readTag().id); uint32_t tmp = 0; x.read(tmp, Protobuf::Walker::FIXED); BOOST_CHECK_EQUAL(tmp, UINT32_MAX); });
+          [](auto& x){ BOOST_CHECK_EQUAL(1, x.readTag().id); uint32_t tmp = 0; x.read(tmp, Protobuf::FIXED); BOOST_CHECK_EQUAL(tmp, UINT32_MAX); });
 
     xTest([](auto& x){ x.set_s32(0); },
-          [](auto& x){ BOOST_CHECK_EQUAL(2, x.readTag().id); int32_t tmp = 0; x.read(tmp, Protobuf::Walker::ZIGZAG); BOOST_CHECK_EQUAL(tmp, 0); });
+          [](auto& x){ BOOST_CHECK_EQUAL(2, x.readTag().id); int32_t tmp = 0; x.read(tmp, Protobuf::ZIGZAG); BOOST_CHECK_EQUAL(tmp, 0); });
     xTest([](auto& x){ x.set_s32(-450); },
-          [](auto& x){ BOOST_CHECK_EQUAL(2, x.readTag().id); int32_t tmp = 0; x.read(tmp, Protobuf::Walker::ZIGZAG); BOOST_CHECK_EQUAL(tmp, -450); });
+          [](auto& x){ BOOST_CHECK_EQUAL(2, x.readTag().id); int32_t tmp = 0; x.read(tmp, Protobuf::ZIGZAG); BOOST_CHECK_EQUAL(tmp, -450); });
     xTest([](auto& x){ x.set_s32(INT32_MAX); },
-          [](auto& x){ BOOST_CHECK_EQUAL(2, x.readTag().id); int32_t tmp = 0; x.read(tmp, Protobuf::Walker::ZIGZAG); BOOST_CHECK_EQUAL(tmp, INT32_MAX); });
+          [](auto& x){ BOOST_CHECK_EQUAL(2, x.readTag().id); int32_t tmp = 0; x.read(tmp, Protobuf::ZIGZAG); BOOST_CHECK_EQUAL(tmp, INT32_MAX); });
     xTest([](auto& x){ x.set_s32(INT32_MIN); },
-          [](auto& x){ BOOST_CHECK_EQUAL(2, x.readTag().id); int32_t tmp = 0; x.read(tmp, Protobuf::Walker::ZIGZAG); BOOST_CHECK_EQUAL(tmp, INT32_MIN); });
+          [](auto& x){ BOOST_CHECK_EQUAL(2, x.readTag().id); int32_t tmp = 0; x.read(tmp, Protobuf::ZIGZAG); BOOST_CHECK_EQUAL(tmp, INT32_MIN); });
 
     xTest([](auto& x){ x.set_f32(-4.6); },
           [](auto& x){ BOOST_CHECK_EQUAL(3, x.readTag().id); float tmp = 0; x.read(tmp); BOOST_CHECK_CLOSE(tmp, -4.6, 0.001); });
 
     xTest([](auto& x){ x.set_i64(0); },
-          [](auto& x){ BOOST_CHECK_EQUAL(10, x.readTag().id); uint64_t tmp = 0; x.read(tmp, Protobuf::Walker::FIXED); BOOST_CHECK_EQUAL(tmp, 0); });
+          [](auto& x){ BOOST_CHECK_EQUAL(10, x.readTag().id); uint64_t tmp = 0; x.read(tmp, Protobuf::FIXED); BOOST_CHECK_EQUAL(tmp, 0); });
     xTest([](auto& x){ x.set_i64(UINT64_MAX); },
-          [](auto& x){ BOOST_CHECK_EQUAL(10, x.readTag().id); uint64_t tmp = 0; x.read(tmp, Protobuf::Walker::FIXED); BOOST_CHECK_EQUAL(tmp, UINT64_MAX); });
+          [](auto& x){ BOOST_CHECK_EQUAL(10, x.readTag().id); uint64_t tmp = 0; x.read(tmp, Protobuf::FIXED); BOOST_CHECK_EQUAL(tmp, UINT64_MAX); });
 
     xTest([](auto& x){ x.set_s64(0); },
-          [](auto& x){ BOOST_CHECK_EQUAL(11, x.readTag().id); int64_t tmp = 0; x.read(tmp, Protobuf::Walker::ZIGZAG); BOOST_CHECK_EQUAL(tmp, 0); });
+          [](auto& x){ BOOST_CHECK_EQUAL(11, x.readTag().id); int64_t tmp = 0; x.read(tmp, Protobuf::ZIGZAG); BOOST_CHECK_EQUAL(tmp, 0); });
     xTest([](auto& x){ x.set_s64(INT64_MAX); },
-          [](auto& x){ BOOST_CHECK_EQUAL(11, x.readTag().id); int64_t tmp = 0; x.read(tmp, Protobuf::Walker::ZIGZAG); BOOST_CHECK_EQUAL(tmp, INT64_MAX); });
+          [](auto& x){ BOOST_CHECK_EQUAL(11, x.readTag().id); int64_t tmp = 0; x.read(tmp, Protobuf::ZIGZAG); BOOST_CHECK_EQUAL(tmp, INT64_MAX); });
     xTest([](auto& x){ x.set_s64(INT64_MIN); },
-          [](auto& x){ BOOST_CHECK_EQUAL(11, x.readTag().id); int64_t tmp = 0; x.read(tmp, Protobuf::Walker::ZIGZAG); BOOST_CHECK_EQUAL(tmp, INT64_MIN); });
+          [](auto& x){ BOOST_CHECK_EQUAL(11, x.readTag().id); int64_t tmp = 0; x.read(tmp, Protobuf::ZIGZAG); BOOST_CHECK_EQUAL(tmp, INT64_MIN); });
 }
 BOOST_AUTO_TEST_CASE(generated)
 {

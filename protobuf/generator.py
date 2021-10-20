@@ -68,10 +68,10 @@ def convert(x):
             return proto_type in localTypeNames
 
         def _encoding(name):
-            xtype = {'fixed32': 'Protobuf::Walker::FIXED',
-                     'sint32': 'Protobuf::Walker::ZIGZAG',
-                     'fixed64': 'Protobuf::Walker::FIXED',
-                     'sint64': 'Protobuf::Walker::ZIGZAG'
+            xtype = {'fixed32': 'Protobuf::FIXED',
+                     'sint32': 'Protobuf::ZIGZAG',
+                     'fixed64': 'Protobuf::FIXED',
+                     'sint64': 'Protobuf::ZIGZAG'
                      }
             if name in xtype:
                 return ', ' + xtype[name]
