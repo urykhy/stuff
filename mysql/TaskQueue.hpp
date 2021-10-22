@@ -5,10 +5,10 @@
 #include <chrono>
 #include <optional>
 
-#include <threads/Group.hpp>
-
 #include "Client.hpp"
 #include "Quote.hpp"
+
+#include <threads/Group.hpp>
 
 namespace MySQL::TaskQueue {
     struct Config
@@ -16,14 +16,10 @@ namespace MySQL::TaskQueue {
         std::string table  = "task_queue";
         std::string worker = "test";
         time_t      sleep  = 10;
+        std::string resume = "updated < DATE_SUB(NOW(), INTERVAL 1 HOUR)";
+        std::string extra;
 
-        enum Isolation
-        {
-            STRICT, // process own tasks only (table.worker == config.worker)
-            RESUME, // resume own tasks only
-            NONE    // resume tasks by other worker
-        };
-        Isolation isolation = NONE;
+        bool isolation = false; // true to resume own tasks only
     };
 
     struct Task
@@ -34,6 +30,7 @@ namespace MySQL::TaskQueue {
         std::string cookie;
     };
 
+    // data must be quoted
     using updateCookieCB = std::function<void(const std::string&)>;
 
     struct HandlerFace
@@ -50,15 +47,20 @@ namespace MySQL::TaskQueue {
         HandlerFace*     m_Handler;
         std::atomic_bool m_Exit{false};
 
-        std::string resume()
-        {   // resume task only after a hour
-            const std::string_view sCond = "(status = 'started' AND updated < DATE_SUB(NOW(), INTERVAL 1 HOUR))";
-            switch (m_Config.isolation) {
-            case Config::STRICT: return fmt::format("(status = 'new' OR {0}) AND worker = '{1}'", sCond, m_Config.worker);
-            case Config::RESUME: return fmt::format("status = 'new' OR ({0} AND worker = '{1}')", sCond, m_Config.worker);
-            case Config::NONE: return fmt::format("status = 'new' OR {0}", sCond);
-            default: throw std::logic_error("TaskQueue::Manager::Resume");
-            };
+        std::string resume() const
+        {
+            std::string sResume;
+            sResume.append("status = 'started'");
+            if (!m_Config.resume.empty())
+                sResume.append(" AND " + m_Config.resume);
+            if (m_Config.isolation)
+                sResume.append(" AND worker = '" + m_Config.worker + "'");
+            const std::string sCond = "status = 'new' OR (" + sResume + ")";
+
+            if (m_Config.extra.empty())
+                return sCond;
+
+            return m_Config.extra + " AND (" + sCond + ")";
         }
 
         std::optional<Task> get_task()
@@ -104,6 +106,7 @@ namespace MySQL::TaskQueue {
             m_Connection->Query("COMMIT");
 
             bool sStatusCode = m_Handler->process(*sTask, [this, &sTask](const std::string& aValue) {
+                m_Connection->ensure();
                 m_Connection->Query(fmt::format(
                     "UPDATE {0} "
                     "SET cookie = '{2}' "

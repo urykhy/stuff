@@ -27,4 +27,12 @@ namespace Format
     {
         return List(aStream, aList, [](const auto& x) -> auto { return x; }, aSeparator);
     }
+
+    template<class L>
+    std::string List(const L& aList, const std::string& aSeparator = ", ")
+    {
+        std::stringstream sTmp;
+        List(sTmp, aList, aSeparator);
+        return sTmp.str();
+    }
 }
