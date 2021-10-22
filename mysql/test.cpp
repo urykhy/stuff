@@ -51,8 +51,19 @@ BOOST_AUTO_TEST_CASE(simple)
     });
     BOOST_CHECK_EQUAL(sAttr, true);
 
+    try
+    {
+        c.Query("select 123 from");
+    }
+    catch (const MySQL::Error& e)
+    {
+        BOOST_TEST_MESSAGE("exception: " << e.what());
+        BOOST_CHECK_EQUAL(e.decode(), MySQL::Error::BAD_QUERY);
+    }
+
     c.close();
     BOOST_CHECK_EQUAL(c.ping(), false); // not connected
+
 }
 BOOST_AUTO_TEST_CASE(pool)
 {

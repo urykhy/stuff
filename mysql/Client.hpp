@@ -1,5 +1,6 @@
 #pragma once
 
+#include <errmsg.h>
 #include <mysql.h>
 #include <mysqld_error.h>
 
@@ -12,6 +13,7 @@
 #include <mpl/Mpl.hpp>
 #include <parser/Atoi.hpp>
 #include <unsorted/Env.hpp>
+#include <unsorted/Raii.hpp>
 
 namespace MySQL {
 
@@ -24,6 +26,41 @@ namespace MySQL {
         std::string database     = "";
         time_t      timeout      = 10;
         std::string program_name = "";
+    };
+
+    struct Error : public std::runtime_error
+    {
+        const unsigned m_Errno = 0;
+
+        Error(const std::string& aMsg, unsigned aErrno = 0)
+        : std::runtime_error(aMsg)
+        , m_Errno(aErrno)
+        {}
+
+        enum ErrorType
+        {
+            NETWORK,
+            DUPLICATE,
+            DEADLOCK,
+            BAD_QUERY,
+            CLIENT,
+            SERVER,
+        };
+
+        ErrorType decode() const
+        {
+            if (m_Errno >= CR_SOCKET_CREATE_ERROR and m_Errno <= CR_SERVER_LOST)
+                return NETWORK;
+            else if (m_Errno == ER_DUP_ENTRY)
+                return DUPLICATE;
+            else if (m_Errno == ER_LOCK_DEADLOCK)
+                return DEADLOCK;
+            else if (m_Errno >= ER_BAD_TABLE_ERROR and m_Errno <= ER_PARSE_ERROR and m_Errno != ER_SERVER_SHUTDOWN)
+                return BAD_QUERY;
+            else if (m_Errno >= CR_MIN_ERROR and m_Errno < CR_MAX_ERROR)
+                return CLIENT;
+            return SERVER;
+        }
     };
 
     class Row : boost::noncopyable
@@ -126,8 +163,7 @@ namespace MySQL {
 
         void report(const char* aMsg)
         {
-            const std::string sMsg = std::string(aMsg) + ": " + mysql_stmt_error(m_Stmt);
-            throw std::runtime_error(sMsg);
+            throw Error(std::string(aMsg) + ": " + mysql_stmt_error(m_Stmt), mysql_stmt_errno(m_Stmt));
         }
 
         using ResultRow = std::vector<std::string_view>;
@@ -146,12 +182,11 @@ namespace MySQL {
         {
             m_Stmt = mysql_stmt_init(aHandle);
             if (!m_Stmt)
-                throw std::runtime_error("mysql_stmt_init");
+                throw Error("mysql_stmt_init");
 
             if (mysql_stmt_prepare(m_Stmt, aQuery.c_str(), aQuery.size())) {
-                const std::string sMsg = std::string("mysql_stmt_prepare: ") + mysql_stmt_error(m_Stmt);
-                cleanup();
-                throw std::runtime_error(sMsg);
+                Util::Raii sCleanup([this]() { cleanup(); });
+                report("mysql_stmt_prepare");
             }
         }
         Statment(Statment&& aParent)
@@ -253,16 +288,6 @@ namespace MySQL {
         }
 
     public:
-        struct Error : public std::runtime_error
-        {
-            const unsigned m_Errno = 0;
-
-            Error(const std::string& aMsg, unsigned aErrno = 0)
-            : std::runtime_error(aMsg)
-            , m_Errno(aErrno)
-            {}
-        };
-
         Connection(const Config& aCfg)
         : m_Cfg(aCfg)
         {

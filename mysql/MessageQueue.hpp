@@ -88,7 +88,7 @@ namespace MySQL::MessageQueue {
                     sPosition);
                 m_Connection->Query(sQuery);
                 return OK;
-            } catch (const Connection::Error& aErr) {
+            } catch (const Error& aErr) {
                 if (aErr.m_Errno == ER_DUP_ENTRY or aErr.m_Errno == ER_LOCK_WAIT_TIMEOUT) {
                     return Status::CONFLICT;
                 }
