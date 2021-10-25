@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <stdexcept>
+#include <string>
 #include <string_view>
 
 #include <mpl/Mpl.hpp>
@@ -59,5 +60,12 @@ namespace SSLxx {
             throw std::runtime_error("EVP_CIPHER_CTX_new");
         return CipherCtx(sCtx, EVP_CIPHER_CTX_free);
     }
+
+    struct Config
+    {
+        const EVP_CIPHER* kind = nullptr; // EVP_aes_256_gcm, EVP_aes_128_ctr
+        std::string       iv;
+        std::string       key;
+    };
 
 } // namespace SSLxx

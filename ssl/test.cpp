@@ -1,12 +1,13 @@
 #define BOOST_TEST_MODULE Suites
 #include <boost/test/unit_test.hpp>
 
-#include <parser/Hex.hpp>
-
 #include "Asymm.hpp"
+#include "CTR.hpp"
 #include "Digest.hpp"
 #include "GCM.hpp"
 #include "HMAC.hpp"
+
+#include <parser/Hex.hpp>
 
 BOOST_AUTO_TEST_SUITE(SSLxx)
 BOOST_AUTO_TEST_CASE(hash)
@@ -18,18 +19,34 @@ BOOST_AUTO_TEST_CASE(hash)
     BOOST_CHECK_EQUAL(SSLxx::DigestNth(EVP_md5(), 10, std::string_view("qwerty99")), true);
     BOOST_CHECK_EQUAL(SSLxx::DigestStr(EVP_md5(), 42), "9824a7030ce67cf3f0efe7529f0c6ecc");
 }
+BOOST_AUTO_TEST_CASE(encrypt_aes_ctr)
+{
+    using namespace SSLxx::CTR;
+    const std::string sMessage = "test123";
+    const std::string sKey     = SSLxx::Scrypt("123", "salt", 16);       // 128bit key for aes 128
+    SSLxx::Config     sCfg{EVP_aes_128_ctr(), "0123456789abcdef", sKey}; // 128 bit iv
+
+    auto sResult = Encrypt(sCfg, sMessage);
+    BOOST_TEST_MESSAGE("key:       " << Format::to_hex(sKey));
+    BOOST_TEST_MESSAGE("iv:        " << Format::to_hex(sCfg.iv));
+    BOOST_TEST_MESSAGE("plain:     " << Format::to_hex(sMessage));
+    BOOST_TEST_MESSAGE("encrypted: " << Format::to_hex(sResult));
+    auto sDecrypt = Decrypt(sCfg, sResult);
+    BOOST_CHECK_EQUAL(sDecrypt, sMessage);
+}
 BOOST_AUTO_TEST_CASE(encrypt_aes_gcm)
 {
     using namespace SSLxx::GCM;
     const std::string sMessage = "test123";
     const std::string sKey     = SSLxx::Scrypt("123", "salt", 32);   // 256bit key for aes256
-    Config            sCfg{EVP_aes_256_gcm(), "0123456789ab", sKey}; // 96 bit iv
-    auto              sResult = Encrypt(sMessage, sCfg);
+    SSLxx::Config     sCfg{EVP_aes_256_gcm(), "0123456789ab", sKey}; // 96 bit iv
+    auto              sResult = Encrypt(sCfg, sMessage);
     BOOST_TEST_MESSAGE("key:       " << Format::to_hex(sKey));
+    BOOST_TEST_MESSAGE("iv:        " << Format::to_hex(sCfg.iv));
     BOOST_TEST_MESSAGE("plain:     " << Format::to_hex(sMessage));
     BOOST_TEST_MESSAGE("encrypted: " << Format::to_hex(sResult.data));
     BOOST_TEST_MESSAGE("tag:       " << Format::to_hex(sResult.tag));
-    auto sDecrypt = Decrypt(sResult, sCfg);
+    auto sDecrypt = Decrypt(sCfg, sResult);
     BOOST_CHECK_EQUAL(sDecrypt, sMessage);
 }
 BOOST_AUTO_TEST_CASE(encrypt_chacha20_poly1305)
@@ -37,13 +54,14 @@ BOOST_AUTO_TEST_CASE(encrypt_chacha20_poly1305)
     using namespace SSLxx::GCM;
     const std::string sMessage = "test123";
     const std::string sKey     = SSLxx::Scrypt("123", "salt", 32);         // 256bit key
-    Config            sCfg{EVP_chacha20_poly1305(), "0123456789ab", sKey}; // 96 bit iv
-    auto              sResult = Encrypt(sMessage, sCfg);
+    SSLxx::Config     sCfg{EVP_chacha20_poly1305(), "0123456789ab", sKey}; // 96 bit iv
+    auto              sResult = Encrypt(sCfg, sMessage);
     BOOST_TEST_MESSAGE("key:       " << Format::to_hex(sKey));
+    BOOST_TEST_MESSAGE("iv:        " << Format::to_hex(sCfg.iv));
     BOOST_TEST_MESSAGE("plain:     " << Format::to_hex(sMessage));
     BOOST_TEST_MESSAGE("encrypted: " << Format::to_hex(sResult.data));
     BOOST_TEST_MESSAGE("tag:       " << Format::to_hex(sResult.tag));
-    auto sDecrypt = Decrypt(sResult, sCfg);
+    auto sDecrypt = Decrypt(sCfg, sResult);
     BOOST_CHECK_EQUAL(sDecrypt, sMessage);
 }
 BOOST_AUTO_TEST_CASE(hmac)
@@ -51,7 +69,7 @@ BOOST_AUTO_TEST_CASE(hmac)
     using namespace SSLxx::HMAC;
 
     const std::string sData = "qwerty";
-    const auto        sKey = hmacKey("secret");
+    const auto        sKey  = hmacKey("secret");
 
     const std::string sTmp = Sign(EVP_sha256(), sKey, sData);
     BOOST_CHECK(Verify(EVP_sha256(), sKey, sTmp, sData));
@@ -85,10 +103,10 @@ BOOST_AUTO_TEST_CASE(key)
     std::string sData      = "12345";
     std::string sSignature = SSLxx::Asymm::Sign(EVP_sha256(), sKey.get(), sData);
     BOOST_TEST_MESSAGE("signature: " << Format::to_hex(sSignature));
-    BOOST_CHECK(SSLxx::Asymm::Verify(EVP_sha256(), sSignature, sPubKey.get(), sData));
+    BOOST_CHECK(SSLxx::Asymm::Verify(EVP_sha256(), sPubKey.get(), sSignature, sData));
 
     // test with signature from signature.bin
     sSignature = Parser::from_hex("3045022100bb6d810217ba40f5b7a09b5c81c7e7e0007173d24064f06a2802aeb8850036c002203e1b6fadded87fc3473b170c196042b5ffd36fdbf0cdc74e2871085fbe4765e0");
-    BOOST_CHECK(SSLxx::Asymm::Verify(EVP_sha256(), sSignature, sPubKey.get(), sData));
+    BOOST_CHECK(SSLxx::Asymm::Verify(EVP_sha256(), sPubKey.get(), sSignature, sData));
 }
 BOOST_AUTO_TEST_SUITE_END()

@@ -59,7 +59,7 @@ namespace SSLxx::Asymm {
     }
 
     template <class... T>
-    bool Verify(const EVP_MD* aKind, const std::string& aSignature, EVP_PKEY* aKey, T&&... aInput)
+    bool Verify(const EVP_MD* aKind, EVP_PKEY* aKey, const std::string& aSignature, T&&... aInput)
     {
         auto sCtx = makeDigestCtx();
 
