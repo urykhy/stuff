@@ -54,4 +54,25 @@ namespace SSLxx::CTR {
 
         return sResult;
     }
+
+    inline std::string calculateIV(const std::string& aIV, uint64_t aOffset)
+    {
+        std::string sIV;
+        sIV.resize(aIV.size());
+
+        uint64_t   sHigh = be64toh(*reinterpret_cast<const uint64_t*>(aIV.data()));
+        uint64_t   sLow  = be64toh(*reinterpret_cast<const uint64_t*>(aIV.data() + sizeof(uint64_t)));
+        const auto sOrig = sLow;
+
+        sLow += aOffset / 16; // aes block size
+        if (sLow < sOrig)
+            sHigh++;
+
+        sHigh = htobe64(sHigh);
+        sLow = htobe64(sLow);
+        memcpy(sIV.data(), &sHigh, sizeof(sHigh));
+        memcpy(sIV.data() + sizeof(uint64_t), &sLow, sizeof(sLow));
+
+        return sIV;
+    }
 } // namespace SSLxx::CTR

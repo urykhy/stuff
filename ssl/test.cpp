@@ -34,6 +34,17 @@ BOOST_AUTO_TEST_CASE(encrypt_aes_ctr)
     auto sDecrypt = Decrypt(sCfg, sResult);
     BOOST_CHECK_EQUAL(sDecrypt, sMessage);
 }
+BOOST_AUTO_TEST_CASE(aes_ctr_calculate_iv)
+{
+    using namespace SSLxx::CTR;
+    const std::string sKey = SSLxx::Scrypt("123", "salt", 16); // 128bit key for aes 128
+    const std::string sIV("\x00\x00\x00\x00\x00\x00\x00\x00\xff\xff\xff\xff\xff\xff\xff\xf5", 16);
+
+    auto sResult = Encrypt(SSLxx::Config{EVP_aes_128_ctr(), sIV, sKey}, "Begin some not very long message");  // 32 bytes
+    auto sPart1  = Encrypt(SSLxx::Config{EVP_aes_128_ctr(), sIV, sKey}, "Begin some not v");                  // 16 bytes
+    auto sPart2  = Encrypt(SSLxx::Config{EVP_aes_128_ctr(), calculateIV(sIV, 16), sKey}, "ery long message"); // 16 bytes
+    BOOST_CHECK_EQUAL(Format::to_hex(sResult), Format::to_hex(sPart1 + sPart2));
+}
 BOOST_AUTO_TEST_CASE(encrypt_aes_gcm)
 {
     using namespace SSLxx::GCM;
