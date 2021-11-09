@@ -16,7 +16,7 @@ namespace MySQL::TaskQueue {
         std::string table  = "task_queue";
         std::string worker = "test";
         time_t      sleep  = 10;
-        std::string resume = "updated < DATE_SUB(NOW(), INTERVAL 1 HOUR)";
+        std::string resume = "status = 'started' AND updated < DATE_SUB(NOW(), INTERVAL 1 HOUR)";
         std::string extra;
 
         bool isolation = false; // true to resume own tasks only
@@ -28,6 +28,13 @@ namespace MySQL::TaskQueue {
         std::string task;
         std::string worker;
         std::string cookie;
+
+        Task(const MySQL::Row& aRow)
+        : id(aRow[0].as_uint64())
+        , task(aRow[1].as_string())
+        , worker(aRow[2].as_string())
+        , cookie(aRow[3].as_string())
+        {}
     };
 
     // data must be quoted
@@ -35,27 +42,29 @@ namespace MySQL::TaskQueue {
 
     struct HandlerFace
     {
-        virtual bool process(const Task& task, updateCookieCB&& api) = 0; // return true if success
+        virtual bool process(const Task& task, updateCookieCB&& api) = 0; // true = success
         virtual void report(const char* msg) noexcept                = 0; // report exceptions
         virtual ~HandlerFace() {}
     };
 
     class Manager
     {
-        Config           m_Config;
-        ConnectionFace*  m_Connection;
-        HandlerFace*     m_Handler;
-        std::atomic_bool m_Exit{false};
+        Config            m_Config;
+        ConnectionFace*   m_Connection;
+        HandlerFace*      m_Handler;
+        std::atomic_bool  m_Exit{false};
+        const std::string m_Where;
 
-        std::string resume() const
+        std::string where() const
         {
-            std::string sResume;
-            sResume.append("status = 'started'");
-            if (!m_Config.resume.empty())
-                sResume.append(" AND " + m_Config.resume);
-            if (m_Config.isolation)
-                sResume.append(" AND worker = '" + m_Config.worker + "'");
-            const std::string sCond = "status = 'new' OR (" + sResume + ")";
+            std::string sCond = "status = 'new'";
+
+            if (!m_Config.resume.empty()) {
+                std::string sResume = m_Config.resume;
+                if (m_Config.isolation)
+                    sResume.append(" AND worker = '" + m_Config.worker + "'");
+                sCond += " OR (" + sResume + ")";
+            }
 
             if (m_Config.extra.empty())
                 return sCond;
@@ -67,33 +76,24 @@ namespace MySQL::TaskQueue {
         {
             // SKIP LOCKED works on mysql 8
             std::optional<Task> sTask;
+
+            m_Connection->ensure();
+            m_Connection->Query("BEGIN"); // start transaction for `SELECT FOR UPDATE`
+
             m_Connection->Query(fmt::format(
                 "SELECT id, task, worker, cookie "
                 "FROM {0} "
                 "WHERE {1} "
                 "ORDER BY id ASC LIMIT 1 FOR UPDATE",
                 m_Config.table,
-                resume()));
+                m_Where));
             m_Connection->Use([&sTask](const MySQL::Row& aRow) {
-                sTask.emplace();
-                sTask->id     = aRow[0].as_int64();
-                sTask->task   = aRow[1].as_string();
-                sTask->worker = aRow[2].as_string();
-                sTask->cookie = aRow[3].as_string();
+                sTask.emplace(aRow);
             });
-            return sTask;
-        }
 
-        void one_step_i()
-        {
-            m_Connection->ensure();
-            m_Connection->Query("BEGIN"); // start transaction for `SELECT FOR UPDATE`
-
-            auto sTask = get_task();
             if (!sTask) {
                 m_Connection->Query("ROLLBACK");
-                wait(m_Config.sleep);
-                return;
+                return {};
             }
 
             m_Connection->Query(fmt::format(
@@ -105,7 +105,23 @@ namespace MySQL::TaskQueue {
                 m_Config.worker));
             m_Connection->Query("COMMIT");
 
-            bool sStatusCode = m_Handler->process(*sTask, [this, &sTask](const std::string& aValue) {
+            return sTask;
+        }
+
+        std::string_view decode(bool aResult) const
+        {
+            return aResult ? "done" : "error";
+        }
+
+        void one_step_i()
+        {
+            auto sTask = get_task();
+            if (!sTask) {
+                wait(m_Config.sleep);
+                return;
+            }
+
+            auto sStatusCode = m_Handler->process(*sTask, [this, &sTask](const std::string& aValue) {
                 m_Connection->ensure();
                 m_Connection->Query(fmt::format(
                     "UPDATE {0} "
@@ -116,14 +132,13 @@ namespace MySQL::TaskQueue {
                     aValue));
             });
 
-            const std::string sStatusStr = sStatusCode ? "done" : "error";
             m_Connection->Query(fmt::format(
                 "UPDATE {0} "
                 "SET status = '{2}' "
                 "WHERE id = {1}",
                 m_Config.table,
                 sTask->id,
-                sStatusStr));
+                decode(sStatusCode)));
         }
 
         void one_step()
@@ -149,6 +164,7 @@ namespace MySQL::TaskQueue {
         : m_Config(aConfig)
         , m_Connection(aConnection)
         , m_Handler(aHandler)
+        , m_Where(where())
         {}
 
         void start(Threads::Group& aGroup)
