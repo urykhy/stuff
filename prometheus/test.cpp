@@ -5,6 +5,7 @@
 #include "Common.hpp"
 #include "GetOrCreate.hpp"
 #include "Metrics.hpp"
+#include "Notice.hpp"
 
 #include <asio_http/Client.hpp>
 #include <asio_http/Server.hpp>
@@ -64,5 +65,26 @@ BOOST_AUTO_TEST_CASE(get_or_create)
     sStore.get<T>("rps")->set(10);
     sStore.get<T>("rps")->tick();
     BOOST_CHECK_EQUAL(sStore.get<T>("rps")->format(), "11");
+}
+BOOST_AUTO_TEST_CASE(notice)
+{
+    Prometheus::Notice      sNotice;
+    Prometheus::Notice::Key sKey{.message = "connection error"};
+
+    auto sTest = [](std::string_view aVal) {
+        unsigned   sCount  = 0;
+        const auto sActual = Prometheus::Manager::instance().toPrometheus();
+        for (auto x : sActual) {
+            BOOST_TEST_MESSAGE(x);
+            if (x == aVal)
+                sCount++;
+        }
+        BOOST_CHECK_EQUAL(sCount, 1);
+    };
+
+    sNotice.set(sKey);
+    sTest(R"(status{priority="notice",message="connection error"} 1)");
+    sNotice.clear(sKey);
+    sTest(R"(status{priority="notice",message="connection error"} 0)");
 }
 BOOST_AUTO_TEST_SUITE_END()
