@@ -14,7 +14,7 @@ import logging
 import coloredlogs
 
 coloredlogs.install()
-logger = logging.getLogger('dns')
+logger = logging.getLogger("dns")
 
 from collections import namedtuple
 from functools import reduce
@@ -26,9 +26,9 @@ import dns.tsigkeyring
 import dns.update
 import dns.rdatatype
 
-Container = namedtuple('Container', 'id, name, running, addrs')
-client = docker.APIClient("unix:///var/run/docker.sock", version='auto')
-KEYRING = dns.tsigkeyring.from_text({'rndc-key': 'oqLIg3VDxYIscfWapwwNSA=='})
+Container = namedtuple("Container", "id, name, running, addrs")
+client = docker.APIClient("unix:///var/run/docker.sock", version="auto")
+KEYRING = dns.tsigkeyring.from_text({"rndc-key": "oqLIg3VDxYIscfWapwwNSA=="})
 ALGORITHM = dns.tsig.HMAC_MD5
 DDNS_SERVER = "127.0.0.1"
 
@@ -40,20 +40,20 @@ def get(d, *keys):
 
 def _get_addrs(networks):
     if networks:
-        return [value['IPAddress'] for value in networks.values()]
+        return [value["IPAddress"] for value in networks.values()]
     return []
 
 
 def _get_names(name, labels):
     labels = labels or {}
-    service = labels.get('com.docker.compose.service')
-    project = labels.get('com.docker.compose.project')
+    service = labels.get("com.docker.compose.service")
+    project = labels.get("com.docker.compose.project")
     if project and project.endswith("docker"):
         project = project[:-6]
     if service is not None and service == project:
         name = str(service)
     elif service is not None and project > "":
-        name = '%s.%s' % (str(service), str(project))
+        name = "%s.%s" % (str(service), str(project))
     # name = name.replace("_",".") # if enabled - dns zone filled with crapy names from `--rm` containers
     return [name]
 
@@ -66,14 +66,14 @@ def _inspect(cid):
     name = rec["Config"]["Hostname"]
     id = rec["Id"][:12]
     if name == id:
-        name = get(rec, 'Name')[1:]
+        name = get(rec, "Name")[1:]
     if not name:
         return None
 
-    id_ = get(rec, 'Id')
-    labels = get(rec, 'Config', 'Labels')
-    state = get(rec, 'State', 'Running')
-    networks = get(rec, 'NetworkSettings', 'Networks')
+    id_ = get(rec, "Id")
+    labels = get(rec, "Config", "Labels")
+    state = get(rec, "State", "Running")
+    networks = get(rec, "NetworkSettings", "Networks")
     ip_addrs = _get_addrs(networks)
 
     return [Container(id_, name, state, ip_addrs) for name in _get_names(name, labels)]
@@ -125,7 +125,7 @@ def _rm_ns(name, addr):
 
 events = client.events()
 for container in client.containers():
-    for rec in _inspect(container['Id']):
+    for rec in _inspect(container["Id"]):
         if rec.running:
             for addr in rec.addrs:
                 if len(addr) > 0:
@@ -133,18 +133,18 @@ for container in client.containers():
 
 for raw in events:
     evt = json.loads(raw)
-    if evt.get('Type', 'container') == 'container':
-        cid = evt.get('id')
+    if evt.get("Type", "container") == "container":
+        cid = evt.get("id")
         if cid is None:
             continue
-        status = evt.get('status')
-        if status == 'start':
+        status = evt.get("status")
+        if status == "start":
             for rec in _inspect(cid):
                 for addr in rec.addrs:
                     for addr in rec.addrs:
                         if len(addr) > 0:
                             _update_ns(rec.name, addr)
-        if status == 'kill':
+        if status == "kill":
             for rec in _inspect(cid):
                 for addr in rec.addrs:
                     for addr in rec.addrs:
