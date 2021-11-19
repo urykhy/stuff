@@ -14,6 +14,8 @@
 
 namespace asio_http::v2 {
 
+    inline log4cxx::LoggerPtr sLogger = Logger::Get("http");
+
     enum class Type : uint8_t
     {
         DATA          = 0,
@@ -113,7 +115,7 @@ namespace asio_http::v2 {
         {
             std::string sName((const char*)sHeader.name, sHeader.namelen);
             std::string sValue((const char*)sHeader.value, sHeader.valuelen);
-            DEBUG(sName << ": " << sValue);
+            TRACE(sName << ": " << sValue);
             if (sName == ":method")
                 aRequest.method(http::string_to_verb(sValue));
             else if (sName == ":path")
@@ -130,7 +132,7 @@ namespace asio_http::v2 {
         {
             std::string sName((const char*)sHeader.name, sHeader.namelen);
             std::string sValue((const char*)sHeader.value, sHeader.valuelen);
-            DEBUG(sName << ": " << sValue);
+            TRACE(sName << ": " << sValue);
             if (sName == ":status")
                 aResponse.result(Parser::Atoi<unsigned>(sValue));
             else if (sName.size() > 1 and sName[0] == ':')
@@ -261,7 +263,7 @@ namespace asio_http::v2 {
             }
             std::string_view sRest = sData.rest();
             sRest.remove_suffix(sPadLength);
-            DEBUG("got headers block of " << sRest.size() << " bytes");
+            TRACE("got headers block of " << sRest.size() << " bytes");
             inflate(sRest, aObject);
         }
     };
@@ -334,7 +336,7 @@ namespace asio_http::v2 {
                 const bool sNoBudget = sLen < MIN_FRAME_SIZE and sBody.size() > sLen;
 
                 if (sNoBudget) {
-                    DEBUG("low budget " << sLen << " for stream " << sStream << " (" << sBody.size() << " bytes pending)");
+                    TRACE("low budget " << sLen << " for stream " << sStream << " (" << sBody.size() << " bytes pending)");
                     x++;
                     continue;
                 }
@@ -342,15 +344,15 @@ namespace asio_http::v2 {
                 const bool sLast = sLen == sBody.size();
                 send(sStream, std::string_view(sBody.data(), sLen), sLast);
                 m_Budget -= sLen;
-                DEBUG("sent " << sLen << " bytes for stream " << sStream);
+                TRACE("sent " << sLen << " bytes for stream " << sStream);
 
                 if (sLast) {
-                    DEBUG("stream " << sStream << " done");
+                    TRACE("stream " << sStream << " done");
                     x = m_Info.erase(x);
                 } else {
                     sData.budget -= sLen;
                     sBody.erase(0, sLen);
-                    DEBUG("stream " << sStream << " have " << sBody.size() << " bytes pending");
+                    TRACE("stream " << sStream << " have " << sBody.size() << " bytes pending");
                     x++;
                 }
             }
@@ -373,11 +375,11 @@ namespace asio_http::v2 {
         {
             if (aStreamId == 0) {
                 m_Budget += aInc;
-                DEBUG("connection window increment " << aInc << ", now " << m_Budget);
+                TRACE("connection window increment " << aInc << ", now " << m_Budget);
             } else {
                 auto& sBudget = m_Info[aStreamId].budget;
                 sBudget += aInc;
-                DEBUG("stream window increment " << aInc << ", now " << sBudget);
+                TRACE("stream window increment " << aInc << ", now " << sBudget);
             }
         }
 
@@ -437,7 +439,7 @@ namespace asio_http::v2 {
             sHeader.type   = Type::WINDOW_UPDATE;
             sHeader.stream = aStreamId;
             send(sHeader, htobe32(DEFAULT_WINDOW_SIZE));
-            DEBUG("sent window update for " << aStreamId << ", was " << aCurrent);
+            TRACE("sent window update for " << aStreamId << ", was " << aCurrent);
             aCurrent += DEFAULT_WINDOW_SIZE;
         }
 
@@ -494,7 +496,7 @@ namespace asio_http::v2 {
             asio::async_read(m_Stream, asio::buffer(&sTmp.header, sizeof(Header)), m_Coro->yield[m_Coro->ec]);
             sTmp.header.to_host();
 
-            DEBUG("frame header; size: "
+            TRACE("frame header; size: "
                   << sTmp.header.size << "; type: "
                   << sTmp.header.type << "; flags: "
                   << sTmp.header.flags << "; stream: "

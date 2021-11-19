@@ -73,7 +73,7 @@ namespace asio_http::v2 {
 
         void call(uint32_t aStreamId, Request&& aRequest)
         {
-            DEBUG("spawn to perform call for stream " << aStreamId);
+            TRACE("spawn to perform call for stream " << aStreamId);
 
             auto sCall = [p=shared_from_this(), aStreamId, aRequest = std::move(aRequest)](asio::yield_context yield) mutable {
                 beast::error_code ec;
@@ -95,13 +95,13 @@ namespace asio_http::v2 {
                 asio::spawn(p->m_Service, sCall);
             });
 
-            DEBUG("spawned");
+            TRACE("spawned");
         }
 
         void call_cb(uint32_t aStreamId, Response&& aResponse)
         {
             const bool sStart = m_WriteQueue.empty();
-            DEBUG("queued response for stream " << aStreamId);
+            TRACE("queued response for stream " << aStreamId);
             m_WriteQueue.push_back(ResponseItem{aStreamId, std::move(aResponse)});
             if (sStart and !m_WriteCoro)
                 spawn_write_coro();
@@ -121,7 +121,7 @@ namespace asio_http::v2 {
             if (aFrame.header.flags & Flags::END_STREAM) {
                 Request& sRequest = sIt->second.m_Request;
                 sRequest.body().assign(m_Input.extract(sStreamId));
-                DEBUG("got complete request")
+                TRACE("got complete request");
                 call(sStreamId, std::move(sRequest));
                 m_Streams.erase(sIt);
             }
@@ -140,7 +140,7 @@ namespace asio_http::v2 {
             if (aFrame.header.flags & Flags::END_STREAM)
                 sStream.m_NoBody = true;
             if (aFrame.header.flags & Flags::END_HEADERS and sStream.m_NoBody) {
-                DEBUG("got complete request")
+                TRACE("got complete request");
                 call(sStreamId, std::move(sRequest));
                 m_Streams.erase(sStreamId);
             }
@@ -156,13 +156,13 @@ namespace asio_http::v2 {
                 SettingVal sVal;
                 sData.read(sVal);
                 sVal.to_host();
-                DEBUG(sVal.key << ": " << sVal.value);
+                TRACE(sVal.key << ": " << sVal.value);
             }
             Header sAck;
             sAck.type  = Type::SETTINGS;
             sAck.flags = Flags::ACK_SETTINGS;
             m_Output.send(sAck, {}, m_ReadCoro.get());
-            DEBUG("ack settings");
+            TRACE("ack settings");
         }
 
         void process_window_update(const Input::Frame& aFrame)
@@ -173,7 +173,7 @@ namespace asio_http::v2 {
         void hello()
         {
             const std::string_view sExpected("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n");
-            DEBUG("wait for preface");
+            TRACE("wait for preface");
             m_Stream.expires_after(std::chrono::seconds(30));
 
             std::string sTmp;
@@ -238,10 +238,11 @@ namespace asio_http::v2 {
         void read_coro(asio::yield_context yield)
         {
             try {
+                DEBUG("connection from " << m_Stream.socket().remote_endpoint());
                 m_ReadCoro = std::make_unique<CoroState>(CoroState{{}, yield});
                 m_Input.assign(m_ReadCoro.get());
                 hello();
-                DEBUG("http/2 negotiated");
+                TRACE("http/2 negotiated");
 
                 while (true) {
                     if (!process_frame())
@@ -269,7 +270,7 @@ namespace asio_http::v2 {
 
         void write_coro(asio::yield_context yield)
         {
-            DEBUG("write out coro started");
+            TRACE("write out coro started");
             m_WriteCoro = std::make_unique<CoroState>(CoroState{{}, yield});
             m_Output.assign(m_WriteCoro.get());
 
@@ -282,7 +283,7 @@ namespace asio_http::v2 {
                 flush();
             }
 
-            DEBUG("write out coro finished");
+            TRACE("write out coro finished");
             m_WriteCoro.reset();
             m_Output.assign(nullptr);
         }

@@ -48,7 +48,7 @@ namespace asio_http::v2 {
             const uint32_t sStreamId = m_Serial;
             m_Serial += 2; // odd-numbered stream identifiers
 
-            DEBUG("create stream " << sStreamId << " for " << aRQ.request.url);
+            TRACE("create stream " << sStreamId << " for " << aRQ.request.url);
 
             Header sHeader;
             sHeader.type   = Type::HEADERS;
@@ -96,7 +96,7 @@ namespace asio_http::v2 {
             m_Input.append(sStreamId, aFrame.body, aFrame.header.flags ^ Flags::END_STREAM);
 
             if (aFrame.header.flags & Flags::END_STREAM) {
-                DEBUG("got complete response");
+                TRACE("got complete response");
                 auto& sStream   = sIt->second;
                 auto& sResponse = sStream.response;
                 sResponse.body().assign(m_Input.extract(sStreamId));
@@ -121,7 +121,7 @@ namespace asio_http::v2 {
             if (aFrame.header.flags & Flags::END_STREAM)
                 sStream.m_NoBody = true;
             if (aFrame.header.flags & Flags::END_HEADERS and sStream.m_NoBody) {
-                DEBUG("got complete response");
+                TRACE("got complete response");
                 sStream.promise->set_value(std::move(sResponse));
                 m_Streams.erase(sIt);
             }
@@ -138,7 +138,7 @@ namespace asio_http::v2 {
             sAck.type  = Type::SETTINGS;
             sAck.flags = Flags::ACK_SETTINGS;
             m_Output.send(sAck, {}, m_ReadCoro.get());
-            DEBUG("ack settings");
+            TRACE("ack settings");
         }
 
         void process_window_update(const Input::Frame& aFrame)
@@ -171,7 +171,7 @@ namespace asio_http::v2 {
             Header sSettings;
             sSettings.type = Type::SETTINGS;
             m_Output.send(sSettings, {}, m_ReadCoro.get());
-            DEBUG("sent hello settings");
+            TRACE("sent hello settings");
 
             auto sFrame = m_Input.recv();
             if (sFrame.header.type != Type::SETTINGS)
@@ -243,9 +243,9 @@ namespace asio_http::v2 {
                 m_ReadCoro = std::make_unique<CoroState>(CoroState{{}, yield});
                 m_Input.assign(m_ReadCoro.get());
                 connect();
-                DEBUG("connected");
+                DEBUG("connected to " << m_Host << ':' << m_Port);
                 hello();
-                DEBUG("http/2 negotiated");
+                TRACE("http/2 negotiated");
                 while (true) {
                     if (!process_frame())
                         break;
@@ -270,7 +270,7 @@ namespace asio_http::v2 {
 
         void write_coro(asio::yield_context yield)
         {
-            DEBUG("write out coro started");
+            TRACE("write out coro started");
             m_WriteCoro = std::make_unique<CoroState>(CoroState{{}, yield});
             m_Output.assign(m_WriteCoro.get());
 
@@ -283,7 +283,7 @@ namespace asio_http::v2 {
                 flush();
             }
 
-            DEBUG("write out coro finished");
+            TRACE("write out coro finished");
             m_WriteCoro.reset();
             m_Output.assign(nullptr);
         }
