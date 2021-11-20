@@ -1,0 +1,98 @@
+#pragma once
+
+#include <string>
+
+#include <prometheus/Metrics.hpp>
+#include <time/Meter.hpp>
+
+namespace drawio::{{ doc.attrib['name'] }} {
+
+    {% set lookup = dict() %}
+
+    // interface
+    struct API
+    {
+        {%- for x in doc.findall(".//mxCell[@parent='1'][@vertex='1']") if not x.attrib['style'].startswith('swimlane') %}
+            {%- set name = x.attrib['value'] %}
+            {%- set id = x.attrib['id'] %}
+            {%- set link_count = doc.findall(".//mxCell[@target='"+ id + "']") | list | length %}
+            {%- if link_count == 0 %}
+                virtual void {{ name }}(const std::string& aName) = 0; // {{ id }}
+                {%- do lookup.update({'start': id}) %}
+            {%- else %}
+                virtual void {{ name }}() = 0; // {{ id }}
+            {%- endif %}
+            {%- do lookup.update({ id: name }) %}
+        {%- endfor %}
+
+        virtual void Reset() = 0; // reserved name to reset worker state
+        virtual ~API() {};
+    };
+
+    // helper classes
+    {%- for x in doc.findall(".//mxCell[@parent='1'][@vertex='1']") if x.attrib['style'].startswith('swimlane') %}
+        struct {{ x.attrib['value'] }} {
+            {%- for y in doc.findall(".//mxCell[@parent='" + x.attrib['id'] + "']") if y.attrib['style'].startswith('text') %}
+                {%- set l = y.attrib['value'].split(' ') %}
+                {%- if l[0] == '+' %}
+                    {%- if l[2] == 'string' %}std::{% endif %}{{ l[2] }} {{ l[1].replace(':','') }} = {};
+                {% endif %}
+            {%- endfor %}
+        };
+    {%- endfor %}
+
+    // worker
+    class Worker
+    {
+        API* m_Handler;
+
+        struct Metrics
+        {
+            {%- for x in doc.findall(".//mxCell[@parent='1'][@vertex='1']") if not x.attrib['style'].startswith('swimlane') %}
+                {%- set name = x.attrib['value'] %}
+                {%- set tag = 'stage="' + name | lower + '", pipeline="' + doc.attrib['name'] + '"' %}
+                {%- set _open = '{' %}
+                {%- set _close = '}' %}
+                Prometheus::Time {{ name | lower }} {R"(pipeline_time{{ _open }}{{ tag }}{{ _close }})"};
+            {%- endfor %}
+        };
+        Metrics m_Metrics;
+        bool m_Dirty = false;
+
+    public:
+        Worker(API* aHandler)
+        : m_Handler(aHandler)
+        {}
+
+        void operator()(const std::string& aName)
+        {
+            if (m_Dirty == true)
+                m_Handler->Reset();
+
+            {%- set id = lookup['start'] %}
+            {%- set name = lookup[id] %}
+            {
+                Time::Meter sTimeMeter;
+                m_Handler->{{ name }}(aName);
+                m_Metrics.{{ name | lower }}.account(sTimeMeter.get().to_double());
+            }
+
+            {%- for n in range(lookup | length) %}
+                {%- set id = lookup['start'] %}
+                {%- for x in doc.findall(".//mxCell[@source='"+ id + "']") %}
+                    {%- set name = lookup[x.attrib['target']] %}
+                    {
+                        Time::Meter sTimeMeter;
+                        m_Handler->{{ name }}();
+                        m_Metrics.{{ name | lower }}.account(sTimeMeter.get().to_double());
+                    }
+                    {%- do lookup.update({'start': x.attrib['target']}) %}
+                {%- endfor %}
+            {%- endfor %}
+
+            m_Handler->Reset();
+            m_Dirty = false;
+        }
+    };
+
+}

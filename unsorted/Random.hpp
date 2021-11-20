@@ -6,7 +6,9 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <cmath>
+#include <vector>
 
 #include <exception/Error.hpp>
 
@@ -49,7 +51,7 @@ namespace Util {
                 sTmp[i - 1] = 1.0 / std::pow(double(i), aAlpha);
 
             std::vector<double> sZeta(aMax + 1, 0);
-            m_Dist.resize(aMax+1);
+            m_Dist.resize(aMax + 1);
 
             for (unsigned i = 1; i < aMax + 1; i++)
                 sZeta[i] += sZeta[i - 1] + sTmp[i - 1];

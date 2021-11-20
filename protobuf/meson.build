@@ -7,7 +7,6 @@ benchmark = dependency('benchmark', required : true)
 boost     = dependency('boost', modules : ['unit_test_framework', 'system'])
 threads   = dependency('threads')
 json      = dependency('jsoncpp')
-pmr_gen   = find_program('generator.sh', required : true)
 import('python').find_installation('python3', modules : ['lark','jinja2'])
 
 protoc        = generator(protoc, output : ['@BASENAME@.pb.cc', '@BASENAME@.pb.h'], arguments : ['--proto_path=@CURRENT_SOURCE_DIR@', '--cpp_out=@BUILD_DIR@', '@INPUT@'])
