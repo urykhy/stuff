@@ -13,8 +13,8 @@ case "$1" in
 
             # create ipset rules for tor
             ipset create TOR hash:net
-            ipset add TOR 195.82.146.0/24 # rutracker, web
-            ipset add TOR 45.82.70.214    # booktracker
+            ipset add TOR 45.132.105.85   # rutracker, web
+            ipset add TOR 45.82.178.27    # booktracker
             ipset add TOR 5.79.86.208     # coollib
             ipset add TOR 81.17.19.227    # flibusta
             ipset add TOR 104.24.106.53   # kinozal
@@ -65,35 +65,38 @@ case "$1" in
             $ip6 -A INPUT -m conntrack --ctstate established,related -j ACCEPT
             $ip6 -A INPUT -i lo -j ACCEPT
             $ip6 -A INPUT -m conntrack --ctstate invalid -j REJECT
-            $ip6 -A INPUT -i tun* -m conntrack --ctstate new -j REJECT # drop from open vpn networks
+            $ip6 -A INPUT -i tun+ -m conntrack --ctstate new -j REJECT # drop from open vpn networks
             $ip6 -A INPUT -p icmpv6 -j ACCEPT
             # torrent + syncthing
             $ip6 -A INPUT -p udp -m multiport --dports 21027,6771,6881 -j ACCEPT
             $ip6 -A INPUT -p tcp -m multiport --dports 22000,6771,6881 -j ACCEPT
             $ip6 -A INPUT -j $NFLOG --nflog-prefix "ip6"
             $ip6 -P INPUT DROP
-            $ip6 -A FORWARD -i tun* -j REJECT # drop from open vpn networks
+            $ip6 -A FORWARD -i tun+ -j REJECT  # drop from open vpn networks
+            $ip6 -A FORWARD -i wlan1 -j REJECT # drop from wifi
             $ip6 -P FORWARD ACCEPT
 
             # IPv4
             # forward
-            $ipt -A FORWARD -i tun*    -j REJECT # drop from open vpn networks
-            $ipt -A FORWARD -i mru     -j REJECT # drop from open vpn networks
-            $ipt -A FORWARD -i proton  -j REJECT # drop from open vpn networks
-            $ipt -A FORWARD -i cameron -j REJECT # drop from open vpn networks
+            $ipt -N F_DROP
+            $ipt -A F_DROP -j $NFLOG --nflog-prefix "forward"
+            $ipt -A F_DROP -j REJECT
+
+            $ipt -A FORWARD -m conntrack --ctstate established,related -j ACCEPT
+            $ipt -A FORWARD -m conntrack --ctstate invalid -j F_DROP
+            $ipt -A FORWARD -i tun+    -j F_DROP # drop from open vpn networks
+            $ipt -A FORWARD -i mru     -j F_DROP # drop from open vpn networks
+            $ipt -A FORWARD -i proton  -j F_DROP # drop from open vpn networks
+            $ipt -A FORWARD -i cameron -j F_DROP # drop from open vpn networks
+            $ipt -A FORWARD -i space+ -o wlan1 -j ACCEPT # network namespaces
+            $ipt -A FORWARD -i wlan1 ! -s 192.168.1.0/24 -j F_DROP
+            $ipt -A FORWARD -j $NFLOG --nflog-prefix "f-info"
             $ipt -P FORWARD ACCEPT
 
             # input
-            $ipt -A INPUT -m conntrack --ctstate established,related -j ACCEPT
-            $ipt -A INPUT -m conntrack --ctstate invalid -j REJECT
-            $ipt -A INPUT -i tun*    -m conntrack --ctstate new -j REJECT # drop from open vpn networks
-            $ipt -A INPUT -i mru     -m conntrack --ctstate new -j REJECT # drop from open vpn networks
-            $ipt -A INPUT -i proton  -m conntrack --ctstate new -j REJECT # drop from open vpn networks
-            $ipt -A INPUT -i cameron -m conntrack --ctstate new -j REJECT # drop from open vpn networks
-            # allow good local
-            $ipt -A INPUT -i lo -j ACCEPT
-            $ipt -A INPUT -p icmp -j ACCEPT
-            $ipt -A INPUT -m set --match-set LOCALS src -j ACCEPT   # accept from safe networks
+            $ipt -N I_DROP
+            $ipt -A I_DROP -j $NFLOG --nflog-prefix "input"
+            $ipt -A I_DROP -j REJECT
 
             # tcp syn/connections limits
             $ipt -N TCPSYN
@@ -101,16 +104,20 @@ case "$1" in
             $ipt -A TCPSYN -m connlimit --connlimit-above 100 --connlimit-mask 24 -j DROP
             $ipt -A TCPSYN -m hashlimit --hashlimit-above 50/second --hashlimit-mode srcip --hashlimit-srcmask 24 --hashlimit-name ddos -j DROP
             $ipt -A TCPSYN -j RETURN
-            $ipt -A INPUT  -p tcp --syn -j TCPSYN
 
-            # open for internet
-            # syncthing and torrents and i2p
-            $ipt -A INPUT -p udp -m multiport --dports 21027,6771,6881,16881 -j ACCEPT
+            $ipt -A INPUT -m conntrack --ctstate established,related -j ACCEPT
+            $ipt -A INPUT -i lo -j ACCEPT
+            $ipt -A INPUT -p icmp -j ACCEPT
+            $ipt -A INPUT -m conntrack --ctstate invalid -j I_DROP
+            $ipt -A INPUT -i tun+    -m conntrack --ctstate new -j I_DROP # drop from open vpn networks
+            $ipt -A INPUT -i mru     -m conntrack --ctstate new -j I_DROP # drop from open vpn networks
+            $ipt -A INPUT -i proton  -m conntrack --ctstate new -j I_DROP # drop from open vpn networks
+            $ipt -A INPUT -i cameron -m conntrack --ctstate new -j I_DROP # drop from open vpn networks
+            $ipt -A INPUT -m set --match-set LOCALS src -j ACCEPT   # accept from safe networks
+            $ipt -A INPUT -p tcp --syn -j TCPSYN # syn filter
+            $ipt -A INPUT -p udp -m multiport --dports 21027,6771,6881,16881 -j ACCEPT  # syncthing, torrents and i2p
             $ipt -A INPUT -p tcp -m multiport --dports 22000,6771,6881,61089,16881 -j ACCEPT
-            #$ipt -A INPUT -p tcp -m multiport --dports 9001,9030 -j ACCEPT # tor
-            # drop others
-            $ipt -A INPUT -j $NFLOG --nflog-prefix "in"
-            $ipt -A INPUT -j REJECT
+            $ipt -A INPUT -j I_DROP
 
             # NAT
             # redirects
@@ -124,13 +131,10 @@ case "$1" in
             #$ipt -t nat -A OUTPUT     -p tcp --dport 80  -d 127.0.0.1,10.103.10.3 -j REDIRECT --to-ports 3080 # catch access from localhost
             #$ipt -t nat -A PREROUTING -p tcp --dport 443 -d 192.168.1.70          -j REDIRECT --to-ports 3081
             #$ipt -t nat -A OUTPUT     -p tcp --dport 443 -d 127.0.0.1,10.103.10.3 -j REDIRECT --to-ports 3081 # catch access from localhost
-
             #$ipt -t nat -A PREROUTING -i wlan1 -p tcp --dport 81 -j DNAT --to-destination 10.103.10.1:80 # nextcloud
 
             # masquerade on output interfaces
-            #$ipt -t nat -A POSTROUTING -o eth0  -m set ! --match-set LOCALS dst -j MASQUERADE
             $ipt -t nat -A POSTROUTING -o wlan1 -m set ! --match-set LOCALS dst -j MASQUERADE
-            #$ipt -t nat -A POSTROUTING -o wlan1 -j MASQUERADE
 
             # setup conntrack helpers (or only wifi/eth0?)
             $ipt -t raw -A OUTPUT     -p tcp --dport 21 -j CT --helper ftp
@@ -161,6 +165,8 @@ case "$1" in
             $ipt -P INPUT ACCEPT
             $ipt -P FORWARD ACCEPT
             $ipt -X TCPSYN
+            $ipt -X F_DROP
+            $ipt -X I_DROP
             ipset destroy TOR
             ipset destroy LOCALS
             ipset destroy PROXY
