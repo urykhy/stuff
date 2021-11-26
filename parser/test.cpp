@@ -1,9 +1,11 @@
 #define BOOST_TEST_MODULE Suites
 #include <boost/test/unit_test.hpp>
 
+#define FILE_NO_ARCHIVE
 #include "Atoi.hpp"
 #include "Autoindex.hpp"
 #include "Base64.hpp"
+#include "CSV.hpp"
 #include "Hex.hpp"
 #include "Json.hpp"
 #include "Multipart.hpp"
@@ -12,6 +14,7 @@
 #include "Url.hpp"
 #include "format/Base64.hpp"
 
+#include <file/Tmp.hpp>
 #include <format/Hex.hpp>
 #include <format/ULeb128.hpp>
 #include <format/Url.hpp>
@@ -25,83 +28,6 @@ BOOST_AUTO_TEST_CASE(simple)
         BOOST_CHECK(Parser::simple(line, result));
         std::vector<std::string_view> expected = {"asd", "zxc", "123"};
         BOOST_CHECK_EQUAL_COLLECTIONS(result.begin(), result.end(), expected.begin(), expected.end());
-    }
-}
-BOOST_AUTO_TEST_CASE(quoted)
-{
-    {
-        std::list<std::string> result;
-
-        std::string line = "asd,\"foo\",\"Super, \"\"luxurious\"\" truck\",";
-        BOOST_CHECK(Parser::quoted(line, [&result](std::string& aStr) mutable {
-            result.push_back(aStr);
-        }));
-
-        std::list<std::string> expected = {"asd", "foo", "Super, \"luxurious\" truck", ""};
-        BOOST_CHECK_EQUAL_COLLECTIONS(result.begin(), result.end(), expected.begin(), expected.end());
-    }
-
-    {
-        std::list<std::string> result;
-
-        std::string line = "asd,\"foo\"";
-        BOOST_CHECK(Parser::quoted(line, [&result](std::string& aStr) mutable {
-            result.push_back(aStr);
-        }));
-    }
-
-    {
-        std::list<std::string> result;
-
-        std::string line = "asd,\"foo";
-        BOOST_CHECK(false == Parser::quoted(line, [&result](std::string& aStr) mutable {
-                        result.push_back(aStr);
-                    }));
-    }
-}
-BOOST_AUTO_TEST_CASE(escape)
-{
-    {
-        std::list<std::string> result;
-
-        std::string line = R"(asd,f\,oo,Super\, "luxurious" truck,)";
-        BOOST_CHECK(Parser::quoted(
-            line, [&result](std::string& aStr) mutable {
-                result.push_back(aStr);
-            },
-            ',', '"', '\\'));
-
-        std::list<std::string> expected = {"asd", "f,oo", "Super, \"luxurious\" truck", ""};
-        BOOST_CHECK_EQUAL_COLLECTIONS(result.begin(), result.end(), expected.begin(), expected.end());
-    }
-    {
-        std::list<std::string> result;
-
-        std::string line = R"("a\\sd",f"oo,"Super, \"luxurious"" truck",)";
-        BOOST_CHECK(Parser::quoted(line, [&result](std::string& aStr) mutable {
-            result.push_back(aStr);
-        }));
-
-        std::list<std::string> expected = {"a\\sd", "f\"oo", "Super, \"luxurious\" truck", ""};
-        BOOST_CHECK_EQUAL_COLLECTIONS(result.begin(), result.end(), expected.begin(), expected.end());
-    }
-    {
-        std::list<std::string> result;
-        std::string            line = R"(asd,foo\)";
-        BOOST_CHECK(false == Parser::quoted(line, [&result](std::string& aStr) mutable {
-                        result.push_back(aStr);
-                    }));
-    }
-    {
-        std::list<std::string> result;
-        std::string            line = R"(asd,\"foo,"""bar""")";
-        BOOST_CHECK(true == Parser::quoted(line, [&result](std::string& aStr) mutable {
-                        result.push_back(aStr);
-                    }));
-        auto it = result.begin();
-        BOOST_CHECK_EQUAL(*it++, "asd");
-        BOOST_CHECK_EQUAL(*it++, "\"foo");
-        BOOST_CHECK_EQUAL(*it++, "\"bar\"");
     }
 }
 BOOST_AUTO_TEST_CASE(hex)
@@ -312,5 +238,156 @@ BOOST_AUTO_TEST_CASE(json)
 
     const std::vector<Tmp> sExpected = {{"string1", 123}, {"string2", 0}};
     BOOST_CHECK(sTmp == sExpected);
+}
+BOOST_AUTO_TEST_SUITE_END()
+
+BOOST_AUTO_TEST_SUITE(CSV)
+BOOST_AUTO_TEST_CASE(simple)
+{
+    {
+        std::list<std::string> result;
+
+        std::string line = "asd,\"foo\",\"Super, \"\"luxurious\"\" truck\",";
+        BOOST_CHECK(Parser::CSV::line(line, [&result](std::string& aStr) mutable {
+            result.push_back(aStr);
+        }));
+
+        std::list<std::string> expected = {"asd", "foo", "Super, \"luxurious\" truck", ""};
+        BOOST_CHECK_EQUAL_COLLECTIONS(result.begin(), result.end(), expected.begin(), expected.end());
+    }
+
+    {
+        std::list<std::string> result;
+
+        std::string line = "asd,\"foo\"";
+        BOOST_CHECK(Parser::CSV::line(line, [&result](std::string& aStr) mutable {
+            result.push_back(aStr);
+        }));
+    }
+
+    {
+        std::list<std::string> result;
+
+        std::string line = "asd,\"foo";
+        BOOST_CHECK(false == Parser::CSV::line(line, [&result](std::string& aStr) mutable {
+                        result.push_back(aStr);
+                    }));
+    }
+}
+BOOST_AUTO_TEST_CASE(escape)
+{
+    {
+        std::list<std::string> result;
+
+        std::string line = R"(asd,f\,oo,Super\, "luxurious" truck,)";
+        BOOST_CHECK(Parser::CSV::line(
+            line, [&result](std::string& aStr) mutable {
+                result.push_back(aStr);
+            },
+            ',', '"', '\\'));
+
+        std::list<std::string> expected = {"asd", "f,oo", "Super, \"luxurious\" truck", ""};
+        BOOST_CHECK_EQUAL_COLLECTIONS(result.begin(), result.end(), expected.begin(), expected.end());
+    }
+    {
+        std::list<std::string> result;
+
+        std::string line = R"("a\\sd",f"oo,"Super, \"luxurious"" truck",)";
+        BOOST_CHECK(Parser::CSV::line(line, [&result](std::string& aStr) mutable {
+            result.push_back(aStr);
+        }));
+
+        std::list<std::string> expected = {"a\\sd", "f\"oo", "Super, \"luxurious\" truck", ""};
+        BOOST_CHECK_EQUAL_COLLECTIONS(result.begin(), result.end(), expected.begin(), expected.end());
+    }
+    {
+        std::list<std::string> result;
+        std::string            line = R"(asd,foo\)";
+        BOOST_CHECK(false == Parser::CSV::line(line, [&result](std::string& aStr) mutable {
+                        result.push_back(aStr);
+                    }));
+    }
+    {
+        std::list<std::string> result;
+        std::string            line = R"(asd,\"foo,"""bar""")";
+        BOOST_CHECK(true == Parser::CSV::line(line, [&result](std::string& aStr) mutable {
+                        result.push_back(aStr);
+                    }));
+        auto it = result.begin();
+        BOOST_CHECK_EQUAL(*it++, "asd");
+        BOOST_CHECK_EQUAL(*it++, "\"foo");
+        BOOST_CHECK_EQUAL(*it++, "\"bar\"");
+    }
+}
+BOOST_AUTO_TEST_CASE(header)
+{
+    const Parser::CSV::Header sExpected{"type", "id", "data", "timestamp"};
+    const std::string         sStr    = "type, id, data, timestamp";
+    const auto                sParsed = Parser::CSV::header(sStr);
+    BOOST_CHECK(sParsed == sExpected);
+}
+struct Row
+{
+    std::string type;
+    std::string id;
+    std::string data;
+    time_t      timestamp = {};
+
+    using Assign = std::function<void(std::string&, Row&)>;
+    using Index  = std::vector<Assign>;
+    static Index prepare(const Parser::CSV::Header& aHeader)
+    {
+        Index sIndex;
+        for (auto& sName : aHeader) {
+            if (sName == "type")
+                sIndex.push_back([](std::string& aData, Row& aObj) { aObj.type = std::move(aData); });
+            else if (sName == "id")
+                sIndex.push_back([](std::string& aData, Row& aObj) { aObj.id = std::move(aData); });
+            else if (sName == "data")
+                sIndex.push_back([](std::string& aData, Row& aObj) { aObj.data = std::move(aData); });
+            else if (sName == "timestamp")
+                sIndex.push_back([](std::string& aData, Row& aObj) { aObj.timestamp = Parser::Atoi<unsigned>(aData); });
+            else
+                sIndex.push_back({});
+        }
+        return sIndex;
+    }
+};
+BOOST_AUTO_TEST_CASE(object)
+{
+    const std::string         sStr = "device, R12345, foo bar or not to bar, 123456789";
+    const Parser::CSV::Header sHeader{"type", "id", "data", "timestamp"};
+
+    Row sRow;
+    Parser::CSV::object(sStr, Row::prepare(sHeader), sRow);
+
+    BOOST_CHECK_EQUAL(sRow.type, "device");
+    BOOST_CHECK_EQUAL(sRow.id, "R12345");
+    BOOST_CHECK_EQUAL(sRow.data, "foo bar or not to bar");
+    BOOST_CHECK_EQUAL(sRow.timestamp, 123456789);
+}
+BOOST_AUTO_TEST_CASE(from_file)
+{
+    File::Tmp sTmpFile("test.csv");
+    std::list<std::string_view> sList{
+        {"type, id, data, timestamp\n"},
+        {"device, R12345, foo bar or not to bar, 123456789\n"},
+        {"device, R2D2, galaxy far far away, 987654321\n"}};
+    for (auto& x : sList)
+        sTmpFile.write(x.data(), x.size());
+    sTmpFile.flush();
+
+    auto sTest = [](const Row& sRow) -> bool {
+        return true;
+    };
+    std::vector<Row> sData;
+    Parser::CSV::from_file(sTmpFile.name(), sTest, sData);
+    BOOST_REQUIRE_EQUAL(sData.size(), 2);
+
+    const auto& sRow = sData[0];
+    BOOST_CHECK_EQUAL(sRow.type, "device");
+    BOOST_CHECK_EQUAL(sRow.id, "R12345");
+    BOOST_CHECK_EQUAL(sRow.data, "foo bar or not to bar");
+    BOOST_CHECK_EQUAL(sRow.timestamp, 123456789);
 }
 BOOST_AUTO_TEST_SUITE_END()

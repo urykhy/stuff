@@ -7,10 +7,12 @@ namespace Parser::Json {
 
     inline Value parse(const std::string& aStr)
     {
-        Value          sJson;
-        ::Json::Reader sReader;
-        if (!sReader.parse(aStr, sJson))
-            throw std::invalid_argument(sReader.getFormattedErrorMessages());
+        Value                               sJson;
+        ::Json::CharReaderBuilder           sBuilder;
+        std::unique_ptr<::Json::CharReader> sReader(sBuilder.newCharReader());
+        std::string                         sErrors;
+        if (!sReader->parse(aStr.data(), aStr.data() + aStr.size(), &sJson, &sErrors))
+            throw std::invalid_argument(sErrors);
         return sJson;
     }
 
@@ -85,7 +87,7 @@ namespace Parser::Json {
     }
 
     // helper to get object fields
-    template<class T>
+    template <class T>
     void from_value(const Value& aJson, const std::string& aName, T& aValue)
     {
         if (!aJson.isObject())

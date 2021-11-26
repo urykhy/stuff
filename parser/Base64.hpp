@@ -86,7 +86,7 @@ namespace Parser {
                         throw std::invalid_argument("Format::Base64: invalid padding");
                     }
                 } else
-                    throw std::invalid_argument("Format::Base64: invalid character: " + c);
+                    throw std::invalid_argument(std::string("Format::Base64: invalid character: ") + (char)c);
 
                 if (it != aStr.end())
                     it++;

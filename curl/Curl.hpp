@@ -90,7 +90,7 @@ namespace Curl {
                 if (verbose)
                     aRequest.verbose = verbose;
 
-                return aRequest;
+                return std::move(aRequest);
             }
         };
 

@@ -37,7 +37,7 @@ namespace Prometheus {
 
         Manager(){};
 
-        friend class MetricFace;
+        friend struct MetricFace;
         void MetricInsert(MetricFace* aMetric)
         {
             Lock lk(m_Mutex);
@@ -49,7 +49,7 @@ namespace Prometheus {
             m_Set.erase(aMetric);
         }
 
-        friend class ComplexFace;
+        friend struct ComplexFace;
         void ComplexInsert(ComplexFace* aMetric)
         {
             Lock lk(m_Mutex);

@@ -24,8 +24,7 @@ namespace MySQL::MessageQueue {
         enum Status
         {
             OK,
-            ALREADY,
-            CONFLICT
+            ALREADY
         };
 
         Producer(const Config& aConfig, ConnectionFace* aConnection)
@@ -52,50 +51,40 @@ namespace MySQL::MessageQueue {
         // user must start and commit transaction
         Status insert(std::string_view aTask, std::string_view aHash = {})
         {
-            m_Connection->ensure();
-            try {
-                uint64_t sPosition = 0;
+            uint64_t sPosition = 0;
 
-                std::string sQuery = fmt::format(
-                    "SELECT position"
-                    "  FROM message_state"
-                    " WHERE service='{}'"
-                    "   FOR UPDATE",
-                    m_Config.producer);
-                m_Connection->Query(sQuery);
-                m_Connection->Use([&sPosition](const MySQL::Row& aRow) { sPosition = aRow[0].as_uint64(); });
+            std::string sQuery = fmt::format(
+                "SELECT position"
+                "  FROM message_state"
+                " WHERE service='{}'"
+                "   FOR UPDATE",
+                m_Config.producer);
+            m_Connection->Query(sQuery);
+            m_Connection->Use([&sPosition](const MySQL::Row& aRow) { sPosition = aRow[0].as_uint64(); });
 
-                if (is_exists(aTask)) {
-                    return ALREADY;
-                }
-
-                sPosition++;
-
-                sQuery = fmt::format(
-                    "INSERT INTO message_queue(producer, serial, task, hash) "
-                    "VALUES ('{}', {}, '{}', '{}')",
-                    m_Config.producer,
-                    sPosition,
-                    aTask,
-                    aHash);
-                m_Connection->Query(sQuery);
-
-                sQuery = fmt::format(
-                    "INSERT INTO message_state(service, position) "
-                    "VALUES ('{}',{}) "
-                    "ON DUPLICATE KEY UPDATE position=VALUES(position)",
-                    m_Config.producer,
-                    sPosition);
-                m_Connection->Query(sQuery);
-                return OK;
-            } catch (const Error& aErr) {
-                if (aErr.m_Errno == ER_DUP_ENTRY or aErr.m_Errno == ER_LOCK_WAIT_TIMEOUT) {
-                    return Status::CONFLICT;
-                }
-                throw;
-            } catch (...) {
-                throw;
+            if (is_exists(aTask)) {
+                return ALREADY;
             }
+
+            sPosition++;
+
+            sQuery = fmt::format(
+                "INSERT INTO message_queue(producer, serial, task, hash) "
+                "VALUES ('{}', {}, '{}', '{}')",
+                m_Config.producer,
+                sPosition,
+                aTask,
+                aHash);
+            m_Connection->Query(sQuery);
+
+            sQuery = fmt::format(
+                "INSERT INTO message_state(service, position) "
+                "VALUES ('{}',{}) "
+                "ON DUPLICATE KEY UPDATE position=VALUES(position)",
+                m_Config.producer,
+                sPosition);
+            m_Connection->Query(sQuery);
+            return OK;
         }
     };
 
