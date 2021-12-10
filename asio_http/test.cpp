@@ -132,7 +132,7 @@ BOOST_AUTO_TEST_CASE(alive)
 BOOST_AUTO_TEST_SUITE_END()
 
 BOOST_AUTO_TEST_SUITE(asio_http_v2)
-BOOST_AUTO_TEST_CASE(server2)
+BOOST_AUTO_TEST_CASE(client_server)
 {
     auto sRouter = std::make_shared<asio_http::Router>();
     sRouter->insert("/hello", [](asio_http::asio::io_service&, const asio_http::Request& aRequest, asio_http::Response& aResponse, asio_http::asio::yield_context yield) {
@@ -169,7 +169,7 @@ BOOST_AUTO_TEST_CASE(server2)
     for (auto& x : sResponse)
         BOOST_TEST_MESSAGE("\t" << x.name() << ": " << x.value());
 }
-BOOST_AUTO_TEST_CASE(server2_order)
+BOOST_AUTO_TEST_CASE(order)
 {
     auto sRouter = std::make_shared<asio_http::Router>();
     sRouter->insert("/sleep1", [](asio_http::asio::io_service&, const asio_http::Request& aRequest, asio_http::Response& aResponse, asio_http::asio::yield_context yield) {
@@ -193,7 +193,7 @@ BOOST_AUTO_TEST_CASE(server2_order)
     std::this_thread::sleep_for(100ms);
 
     std::atomic_bool sOrder = false;
-    std::thread sR1([&sPeer, &sOrder]() {
+    std::thread      sR1([&sPeer, &sOrder]() {
         auto sFuture = sPeer->async({.method  = asio_http::http::verb::get,
                                      .url     = "http://127.0.0.1:2081/sleep2",
                                      .headers = {
@@ -220,5 +220,41 @@ BOOST_AUTO_TEST_CASE(server2_order)
     BOOST_TEST_MESSAGE("wait ...");
     sR1.join();
     sR2.join();
+}
+BOOST_AUTO_TEST_CASE(multi_client)
+{
+    auto sRouter = std::make_shared<asio_http::Router>();
+    sRouter->insert("/hello", [](asio_http::asio::io_service&, const asio_http::Request& aRequest, asio_http::Response& aResponse, asio_http::asio::yield_context yield) {
+        if (aRequest.method() == asio_http::http::verb::post)
+            BOOST_TEST_MESSAGE("post with body size " << aRequest.body().size());
+        aResponse.result(asio_http::http::status::ok);
+        aResponse.set(asio_http::Headers::ContentType, "text/html");
+        while (aResponse.body().size() < 130 * 1024) {
+            aResponse.body() += "hello world";
+        }
+    });
+    Threads::Asio  sAsio;
+    Threads::Group sGroup;
+    asio_http::v2::startServer(sAsio, 2081, sRouter);
+    sAsio.start(sGroup);
+    std::this_thread::sleep_for(100ms);
+
+    auto sClient = std::make_shared<asio_http::v2::Client>(sAsio.service(), asio_http::v2::Params{});
+
+    std::string sRequestBody;
+    while (sRequestBody.size() < 130 * 1024)
+        sRequestBody += "request body";
+    auto sFuture = sClient->async({.method  = asio_http::http::verb::post,
+                                   .url     = "http://127.0.0.1:2081/hello",
+                                   .body    = sRequestBody,
+                                   .headers = {
+                                       {asio_http::Headers::UserAgent, "TestAgent"}}});
+    sFuture.wait();
+    auto sResponse = sFuture.get();
+    BOOST_TEST_MESSAGE("response status: " << sResponse.result());
+    BOOST_TEST_MESSAGE("response body size: " << sResponse.body().size());
+    for (auto& x : sResponse)
+        BOOST_TEST_MESSAGE("\t" << x.name() << ": " << x.value());
+    BOOST_CHECK_EQUAL(sResponse.result_int(), 200);
 }
 BOOST_AUTO_TEST_SUITE_END()

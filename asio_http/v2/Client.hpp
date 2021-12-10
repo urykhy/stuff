@@ -2,6 +2,7 @@
 
 #include <memory>
 
+#include "Alive.hpp"
 #include "Router.hpp"
 #include "Types.hpp"
 
@@ -9,8 +10,11 @@
 
 namespace asio_http::v2 {
 
-    class Peer : public std::enable_shared_from_this<Peer>
+    struct Peer : public std::enable_shared_from_this<Peer>
     {
+        using Notify = std::function<void(const std::string&)>;
+
+    private:
         asio::io_service&        m_Service;
         const std::string        m_Host;
         const std::string        m_Port;
@@ -40,44 +44,71 @@ namespace asio_http::v2 {
         };
         std::map<uint32_t, Stream> m_Streams;
 
-        Input  m_Input;
-        Output m_Output;
+        Input       m_Input;
+        Output      m_Output;
+        Notify      m_Notify;
+        std::string m_FailReason;
 
-        void send(RQ& aRQ)
+        void fail(const std::string& aMsg)
         {
+            ERROR(aMsg);
+            if (m_FailReason.empty()) {
+                m_FailReason = aMsg;
+                if (m_Notify)
+                    m_Notify(m_FailReason);
+            }
+            for (auto& sRQ : m_WriteQueue)
+                sRQ.promise->set_exception(std::make_exception_ptr(std::runtime_error(m_FailReason)));
+            m_WriteQueue.clear();
+            for (auto& [sId, sStream] : m_Streams)
+                sStream.promise->set_exception(std::make_exception_ptr(std::runtime_error(m_FailReason)));
+            m_Streams.clear();
+            m_Stream.cancel();
+        }
+
+        void fail(const std::exception& e)
+        {
+            fail(std::string("exception: ") + e.what());
+        }
+
+        void fail(const beast::error_code& e)
+        {
+            fail(std::string("beast error: ") + e.message());
+        }
+
+        void send_one()
+        {
+            assert(!m_WriteQueue.empty());
+
             const uint32_t sStreamId = m_Serial;
             m_Serial += 2; // odd-numbered stream identifiers
-
-            TRACE("create stream " << sStreamId << " for " << aRQ.request.url);
-
             Header sHeader;
             sHeader.type   = Type::HEADERS;
             sHeader.flags  = Flags::END_HEADERS;
             sHeader.stream = sStreamId;
+            auto& sStream  = m_Streams[sStreamId];
 
-            auto& sStream   = m_Streams[sStreamId];
-            sStream.promise = aRQ.promise;
+            auto sRQ = std::move(m_WriteQueue.front());
+            m_WriteQueue.pop_front();
+            sStream.promise = sRQ.promise;
+            TRACE("create stream " << sStreamId << " for " << sRQ.request.url);
 
-            if (aRQ.request.body.empty())
+            if (sRQ.request.body.empty())
                 sHeader.flags |= Flags::END_STREAM;
-            m_Output.send(sHeader, m_Pack.deflate(aRQ.request), m_WriteCoro.get());
-            if (!aRQ.request.body.empty())
-                m_Output.enqueue(sStreamId, std::move(aRQ.request.body));
-        }
-
-        void flush()
-        {
-            while (!m_WriteQueue.empty()) {
-                send(m_WriteQueue.front());
-                m_WriteQueue.pop_front();
-            }
-            m_Output.flush();
+            m_Output.send(sHeader, m_Pack.deflate(sRQ.request), m_WriteCoro.get());
+            if (!sRQ.request.body.empty())
+                m_Output.enqueue(sStreamId, std::move(sRQ.request.body));
         }
 
         //
 
         void async_i(RQ&& aRQ)
         {
+            if (!m_FailReason.empty()) {
+                aRQ.promise->set_exception(std::make_exception_ptr(std::runtime_error(m_FailReason)));
+                return;
+            }
+
             const bool sStart = m_WriteQueue.empty();
             m_WriteQueue.push_back(std::move(aRQ));
             if (sStart and !m_WriteCoro)
@@ -197,7 +228,7 @@ namespace asio_http::v2 {
         }
 
     public:
-        Peer(asio::io_service& aService, const std::string aHost, const std::string& aPort)
+        Peer(asio::io_service& aService, const std::string aHost, const std::string& aPort, Notify&& aNotify = {})
         : m_Service(aService)
         , m_Host(aHost)
         , m_Port(aPort)
@@ -206,6 +237,7 @@ namespace asio_http::v2 {
         , m_Timer(m_Service)
         , m_Input(m_Stream)
         , m_Output(m_Stream)
+        , m_Notify(std::move(aNotify))
         {
         }
 
@@ -236,6 +268,13 @@ namespace asio_http::v2 {
             return sPromise->get_future();
         }
 
+        void async(ClientRequest&& aRequest, Promise aPromise)
+        {
+            m_Strand.post([aRequest = std::move(aRequest), aPromise, p = shared_from_this()]() mutable {
+                p->async_i({std::move(aRequest), aPromise});
+            });
+        }
+
     private:
         void read_coro(asio::yield_context yield)
         {
@@ -246,24 +285,28 @@ namespace asio_http::v2 {
                 DEBUG("connected to " << m_Host << ':' << m_Port);
                 hello();
                 TRACE("http/2 negotiated");
-                while (true) {
+                if (m_Notify)
+                    m_Notify("connected");
+                while (m_FailReason.empty()) {
                     if (!process_frame())
                         break;
                 }
             } catch (const beast::error_code e) {
-                ERROR("beast error: " << e.message());
+                fail(e);
             } catch (const std::exception& e) {
-                ERROR("exception: " << e.what());
+                fail(e);
             }
         }
 
         void spawn_write_coro()
         {
-            asio::spawn(m_Strand, [p = shared_from_this()](asio::yield_context yield) mutable {
+            asio::spawn(m_Strand, [this, p = shared_from_this()](asio::yield_context yield) mutable {
                 try {
-                    p->write_coro(yield);
+                    write_coro(yield);
                 } catch (const beast::error_code e) {
-                    ERROR("beast error: " << e.message());
+                    fail(e);
+                } catch (const std::exception& e) {
+                    fail(e);
                 }
             });
         }
@@ -274,18 +317,145 @@ namespace asio_http::v2 {
             m_WriteCoro = std::make_unique<CoroState>(CoroState{{}, yield});
             m_Output.assign(m_WriteCoro.get());
 
+            Util::Raii sCleanup([&]() {
+                TRACE("write out coro finished");
+                m_WriteCoro.reset();
+                m_Output.assign(nullptr);
+            });
             auto sEnd = [this]() {
                 return m_ReadCoro->ec or (m_WriteQueue.empty() and m_Output.idle());
             };
             while (!sEnd()) {
                 m_Timer.expires_from_now(std::chrono::milliseconds(1));
                 m_Timer.async_wait(m_WriteCoro->yield[m_WriteCoro->ec]);
-                flush();
-            }
 
-            TRACE("write out coro finished");
-            m_WriteCoro.reset();
-            m_Output.assign(nullptr);
+                while (!m_WriteQueue.empty())
+                    send_one();
+                m_Output.flush();
+            }
+        }
+    };
+
+    struct Params
+    {
+        unsigned max_connections  = 32;
+        unsigned queue_timeout_ms = 1000;
+        time_t   delay            = 1;
+    };
+
+    class Client : public std::enable_shared_from_this<Client>
+    {
+        asio::io_service&        m_Service;
+        asio::deadline_timer     m_Timer;
+        asio::io_service::strand m_Strand;
+        const Params             m_Params;
+
+        // struct with host:port
+        using Addr = Alive::Connection::Peer;
+
+        struct RQ
+        {
+            ClientRequest request;
+            Promise       promise;
+        };
+
+        struct Data
+        {
+            std::shared_ptr<Peer> peer;
+            std::string           status = "not connected";
+            std::list<RQ>         requests;
+        };
+        using DataPtr = std::shared_ptr<Data>;
+        using WeakPtr = std::weak_ptr<Data>;
+        std::map<Addr, DataPtr> m_Data;
+
+    public:
+        Client(asio::io_service& aService, const Params& aParams)
+        : m_Service(aService)
+        , m_Timer(aService)
+        , m_Strand(aService)
+        , m_Params(aParams)
+        {
+        }
+
+        void start_cleaner()
+        {
+            m_Timer.expires_from_now(boost::posix_time::milliseconds(1000));
+            m_Timer.async_wait(m_Strand.wrap([this, p = this->shared_from_this()](boost::system::error_code ec) {
+                if (!ec) {
+                    // TODO: close failed connections too (once params.delay passed)
+                    TRACE("close idle connections ...");
+                    start_cleaner();
+                }
+            }));
+        }
+
+        std::future<Response> async(ClientRequest&& aRequest)
+        {
+            auto sPromise = std::make_shared<std::promise<Response>>();
+            m_Strand.post([aRequest = std::move(aRequest), sPromise, p = shared_from_this()]() mutable {
+                p->async_i({std::move(aRequest), sPromise});
+            });
+            return sPromise->get_future();
+        }
+
+    private:
+        void async_i(RQ&& aRQ)
+        {
+            auto sParsed = Parser::url(aRQ.request.url);
+            Addr sAddr{sParsed.host, sParsed.port};
+            auto sIter = m_Data.find(sAddr);
+            if (sIter == m_Data.end()) {
+                // TODO: check connection size limit -> set error to promise
+                auto    sDataPtr = std::make_shared<Data>();
+                WeakPtr sWeakPtr = sDataPtr;
+                auto    sPeer    = std::make_shared<Peer>(
+                    m_Service,
+                    sAddr.host,
+                    sAddr.port,
+                    m_Strand.wrap([sWeakPtr, p = shared_from_this()](const std::string& aMsg) {
+                        p->notify_i(sWeakPtr, aMsg);
+                    }));
+                sDataPtr->peer = sPeer;
+                sPeer->start();
+                auto sTmp = m_Data.insert(std::make_pair(sAddr, sDataPtr));
+                assert(sTmp.second);
+                sIter = sTmp.first;
+            }
+            auto& sData   = sIter->second;
+            auto& sStatus = sData->status;
+            if (sStatus == "not connected") {
+                sData->requests.push_back(std::move(aRQ));
+            } else if (sStatus == "connected") {
+                sData->peer->async(std::move(aRQ.request), aRQ.promise);
+            } else {
+                aRQ.promise->set_exception(std::make_exception_ptr(std::runtime_error(sData->status)));
+            }
+        }
+
+        void notify_i(const WeakPtr aPtr, const std::string& aMessage)
+        {
+            auto sPtr = aPtr.lock();
+            if (sPtr) {
+                sPtr->status = aMessage;
+                if (aMessage == "connected")
+                    on_connected(sPtr);
+                else
+                    on_error(sPtr);
+                sPtr->requests.clear();
+            }
+        }
+
+        void on_connected(DataPtr aPtr)
+        {
+            for (auto& x : aPtr->requests)
+                aPtr->peer->async(std::move(x.request), x.promise);
+        }
+
+        void on_error(DataPtr aPtr)
+        {
+            for (auto& x : aPtr->requests)
+                x.promise->set_exception(std::make_exception_ptr(std::runtime_error(aPtr->status)));
         }
     };
 
