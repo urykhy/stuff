@@ -112,9 +112,11 @@ namespace asio_http::v2 {
         void process_data(const Input::Frame& aFrame)
         {
             const uint32_t sStreamId = aFrame.header.stream;
-            assert(sStreamId != 0);
+            if (sStreamId == 0)
+                throw std::runtime_error("bad stream-id");
             auto sIt = m_Streams.find(sStreamId);
-            assert(sIt != m_Streams.end());
+            if (sIt == m_Streams.end())
+                throw std::runtime_error("stream not found");
 
             m_Input.append(sStreamId, aFrame.body, aFrame.header.flags ^ Flags::END_STREAM);
 
@@ -130,7 +132,8 @@ namespace asio_http::v2 {
         void process_headers(const Input::Frame& aFrame)
         {
             const uint32_t sStreamId = aFrame.header.stream;
-            assert(sStreamId != 0);
+            if (sStreamId == 0)
+                throw std::runtime_error("bad stream-id");
             // TODO: if continuation -> assert we already have seen headers frame
             auto& sStream  = m_Streams[sStreamId];
             auto& sRequest = sStream.m_Request;

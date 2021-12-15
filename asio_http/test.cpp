@@ -9,9 +9,10 @@
 #include "v2/Server.hpp"
 
 #include <curl/Curl.hpp>
-using namespace std::chrono_literals;
-
 #include <time/Meter.hpp>
+#include <unsorted/Process.hpp>
+
+using namespace std::chrono_literals;
 
 BOOST_AUTO_TEST_SUITE(asio_http)
 BOOST_AUTO_TEST_CASE(simple)
@@ -256,5 +257,24 @@ BOOST_AUTO_TEST_CASE(multi_client)
     for (auto& x : sResponse)
         BOOST_TEST_MESSAGE("\t" << x.name() << ": " << x.value());
     BOOST_CHECK_EQUAL(sResponse.result_int(), 200);
+}
+BOOST_AUTO_TEST_CASE(spec, *boost::unit_test::disabled())
+{
+    auto sRouter = std::make_shared<asio_http::Router>();
+    sRouter->insert("/", [](asio_http::asio::io_service&, const asio_http::Request& aRequest, asio_http::Response& aResponse, asio_http::asio::yield_context yield) {
+        aResponse.result(asio_http::http::status::ok);
+        aResponse.set(asio_http::Headers::ContentType, "text/html");
+    });
+    Threads::Asio  sAsio;
+    Threads::Group sGroup;
+    asio_http::v2::startServer(sAsio, 2081, sRouter);
+    sAsio.start(sGroup);
+    std::this_thread::sleep_for(100ms);
+
+    // unbuffer (from expect-dev) used to preserve colors
+    // https://github.com/summerwind/h2spec
+    auto sResult = Util::Perform("unbuffer", "h2spec", "--port", "2081", "-j", "h2spec.report");
+    BOOST_TEST_MESSAGE("return code: " << sResult.code);
+    std::cout << sResult.out;
 }
 BOOST_AUTO_TEST_SUITE_END()

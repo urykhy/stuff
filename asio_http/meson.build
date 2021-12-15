@@ -2,7 +2,7 @@ project('http', 'cpp', version : '0.1', default_options : ['cpp_std=c++2a'])
 add_languages('c')
 
 includes  = include_directories('..')
-boost     = dependency('boost', modules : ['unit_test_framework', 'system', 'coroutine'])
+boost     = dependency('boost', modules : ['unit_test_framework', 'system', 'coroutine', 'filesystem'])
 threads   = dependency('threads')
 curl      = dependency('libcurl')
 log4cxx   = dependency('liblog4cxx')

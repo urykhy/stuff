@@ -360,7 +360,8 @@ namespace asio_http::v2 {
 
         void window_update(const Header& aHeader, const std::string& aData)
         {
-            assert(aData.size() == 4);
+            if (aData.size() != 4)
+                throw std::runtime_error("invalid window update");
             Container::imemstream sData(aData);
 
             uint32_t sInc = 0;
