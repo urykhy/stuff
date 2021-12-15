@@ -277,4 +277,33 @@ BOOST_AUTO_TEST_CASE(spec, *boost::unit_test::disabled())
     BOOST_TEST_MESSAGE("return code: " << sResult.code);
     std::cout << sResult.out;
 }
+BOOST_AUTO_TEST_CASE(golang_server)
+{
+    Threads::Asio  sAsio;
+    Threads::Group sGroup;
+    sAsio.start(sGroup);
+
+    namespace bp = boost::process;
+    bp::ipstream sOut;
+
+    auto sServer = Util::Spawn(bp::std_in.close(), sAsio.service(), bp::std_out > sOut, "./server");
+
+    std::string sTmp;
+    std::getline(sOut, sTmp); // read `Listening` line
+
+    auto sClient = std::make_shared<asio_http::v2::Client>(sAsio.service(), asio_http::v2::Params{});
+    auto sFuture = sClient->async({.method = asio_http::http::verb::get,
+                                   .url    = "http://127.0.0.1:2081/"});
+    sFuture.wait();
+    auto sResponse = sFuture.get();
+    BOOST_TEST_MESSAGE("response status: " << sResponse.result());
+    BOOST_TEST_MESSAGE("response body size: " << sResponse.body().size());
+    for (auto& x : sResponse)
+        BOOST_TEST_MESSAGE("\t" << x.name() << ": " << x.value());
+    BOOST_CHECK_EQUAL(sResponse.result_int(), 200);
+    BOOST_CHECK_EQUAL(sResponse.body(), "hello from go");
+
+    sServer.terminate();
+    sServer.wait();
+}
 BOOST_AUTO_TEST_SUITE_END()
