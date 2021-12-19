@@ -17,8 +17,8 @@ namespace URing::http {
             "\r\n"
             "0123456789"};
 
-        httpd::Parser  m_Parser;
-        httpd::Request m_Request;
+        httpd::Parser<httpd::Request> m_Parser;
+        httpd::Request                m_Request;
 
         bool m_HaveRequest{false};
         int  m_FD;
@@ -61,7 +61,7 @@ namespace URing::http {
                 }
                 break;
             case IORING_OP_WRITE:
-                if (!m_Request.m_KeepAlive) {
+                if (!m_Request.keep_alive) {
                     //BOOST_TEST_MESSAGE("not keep-alive. closing ...");
                     m_Ring.close(m_FD, shared_from_base<Server>());
                 } else {

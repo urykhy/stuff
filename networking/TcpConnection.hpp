@@ -63,7 +63,7 @@ namespace Tcp {
                         self_close();
                     return;
                 }
-                if (!sItem->m_KeepAlive)
+                if (!sItem->keep_alive)
                     m_Closing = true;
                 auto sResult = m_Handler(this->shared_from_this(), *sItem);
                 // if async call -> return in busy state, wait for notify()

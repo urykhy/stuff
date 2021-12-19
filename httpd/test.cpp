@@ -34,20 +34,37 @@ BOOST_AUTO_TEST_CASE(request)
     bool sCalled = false;
 
     httpd::Request::Handler sHandler = [&sCalled](httpd::Request& aRequest) {
-        BOOST_CHECK_EQUAL(aRequest.m_Method, "POST");
-        BOOST_CHECK_EQUAL(aRequest.m_Url, "/joyent/http-parser");
-        const auto sHeaders = aRequest.m_Headers;
+        BOOST_CHECK_EQUAL(aRequest.method, "POST");
+        BOOST_CHECK_EQUAL(aRequest.url, "/joyent/http-parser");
+        const auto sHeaders = aRequest.headers;
         for (const auto& x : sHeaders) {
-            BOOST_TEST_MESSAGE("found header " << x.key << "=" << x.value);
-            if (x.key == "DNT")
-                BOOST_CHECK_EQUAL(x.value, "1");
+            BOOST_TEST_MESSAGE("found header " << x.first << "=" << x.second);
+            if (x.first == "DNT")
+                BOOST_CHECK_EQUAL(x.second, "1");
         }
-        BOOST_CHECK_EQUAL(aRequest.m_Body, "hello world");
+        BOOST_CHECK_EQUAL(aRequest.body, "hello world");
         sCalled = true;
     };
 
-    httpd::Parser sParser(sHandler);
-    sParser.consume(sData.data(), sData.size());
+    httpd::Parser<httpd::Request> sParser(sHandler);
+    BOOST_CHECK_EQUAL(sParser.consume(sData.data(), sData.size()), sData.size());
+    BOOST_CHECK(sCalled);
+}
+BOOST_AUTO_TEST_CASE(http2)
+{
+    const std::string sData = "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n";
+
+    bool sCalled = false;
+
+    httpd::Request::Handler sHandler = [&sCalled](httpd::Request& aRequest) {
+        BOOST_CHECK_EQUAL(aRequest.method, "PRI");
+        BOOST_CHECK_EQUAL(aRequest.url, "*");
+        BOOST_CHECK_EQUAL(aRequest.body, "2.0");
+        sCalled = true;
+    };
+
+    httpd::Parser<httpd::Request> sParser(sHandler);
+    BOOST_CHECK_EQUAL(sParser.consume(sData.data(), sData.size()), sData.size());
     BOOST_CHECK(sCalled);
 }
 BOOST_AUTO_TEST_CASE(response)
@@ -68,19 +85,19 @@ BOOST_AUTO_TEST_CASE(response)
     bool sCalled = false;
 
     httpd::Response::Handler sHandler = [&sCalled](httpd::Response& aResponse) {
-        BOOST_CHECK_EQUAL(aResponse.m_Status, 200);
-        const auto sHeaders = aResponse.m_Headers;
+        BOOST_CHECK_EQUAL(aResponse.status, 200);
+        const auto sHeaders = aResponse.headers;
         for (const auto& x : sHeaders) {
-            BOOST_TEST_MESSAGE("found header " << x.key << "=" << x.value);
-            if (x.key == "Server")
-                BOOST_CHECK_EQUAL(x.value, "nginx/1.14.2");
+            BOOST_TEST_MESSAGE("found header " << x.first << "=" << x.second);
+            if (x.first == "Server")
+                BOOST_CHECK_EQUAL(x.second, "nginx/1.14.2");
         }
-        BOOST_CHECK_EQUAL(aResponse.m_Body, "<?php\nphpinfo();\n?>\n");
+        BOOST_CHECK_EQUAL(aResponse.body, "<?php\nphpinfo();\n?>\n");
         sCalled = true;
     };
 
-    httpd::Parser sParser(sHandler);
-    sParser.consume(sData.data(), sData.size());
+    httpd::Parser<httpd::Response> sParser(sHandler);
+    BOOST_CHECK_EQUAL(sParser.consume(sData.data(), sData.size()), sData.size());
     BOOST_CHECK(sCalled);
 }
 BOOST_AUTO_TEST_SUITE_END()
@@ -176,10 +193,10 @@ BOOST_AUTO_TEST_CASE(raw)
     auto               sClient = std::make_shared<ClientConnection>(&sEPoll, [&sResponseCount](ClientConnection::SharedPtr aPeer, const Response& aResponse) {
         sResponseCount++;
         BOOST_TEST_MESSAGE("response " << sResponseCount);
-        BOOST_TEST_MESSAGE("status:  " << aResponse.m_Status);
-        for (const auto& x : aResponse.m_Headers)
-            BOOST_TEST_MESSAGE("found header " << x.key << "=" << x.value);
-        BOOST_TEST_MESSAGE("body:    " << aResponse.m_Body);
+        BOOST_TEST_MESSAGE("status:  " << aResponse.status);
+        for (const auto& x : aResponse.headers)
+            BOOST_TEST_MESSAGE("found header " << x.first << "=" << x.second);
+        BOOST_TEST_MESSAGE("body:    " << aResponse.body);
         return ClientConnection::UserResult::DONE;
     });
     Threads::WaitGroup sWait(1);
@@ -215,8 +232,8 @@ BOOST_AUTO_TEST_CASE(simple)
                      [&sResponseCount](int aCode, const Response& aResponse) {
                          sResponseCount++;
                          BOOST_CHECK_EQUAL(aCode, 0);
-                         BOOST_CHECK_EQUAL(aResponse.m_Status, 200);
-                         BOOST_CHECK_EQUAL(aResponse.m_Body, "0123456789");
+                         BOOST_CHECK_EQUAL(aResponse.status, 200);
+                         BOOST_CHECK_EQUAL(aResponse.body, "0123456789");
                      }});
     std::this_thread::sleep_for(20ms);
 
@@ -269,7 +286,7 @@ BOOST_AUTO_TEST_CASE(bench)
                          "\r\n",
                          [&](int aCode, const Response& aResponse) {
                              if (aCode == 0)
-                                 sSuccess++;
+                                sSuccess++;
                              sWait.release();
                          }});
     }

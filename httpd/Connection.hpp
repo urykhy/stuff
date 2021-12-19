@@ -11,7 +11,7 @@ namespace httpd {
     struct Server
     {
         using Request = httpd::Request;
-        using Parser  = httpd::Parser;
+        using Parser  = httpd::Parser<Request>;
 
         static constexpr size_t  WRITE_BUFFER_SIZE = 1 * 1024 * 1024; // output buffer size
         static constexpr size_t  TASK_LIMIT        = 100;             // max parsed tasks in queue
@@ -23,7 +23,7 @@ namespace httpd {
     struct Client
     {
         using Request = httpd::Response;
-        using Parser  = httpd::Parser;
+        using Parser  = httpd::Parser<Response>;
 
         static constexpr size_t  WRITE_BUFFER_SIZE = 1 * 1024 * 1024; // output buffer size
         static constexpr size_t  TASK_LIMIT        = 100;             // max parsed tasks in queue

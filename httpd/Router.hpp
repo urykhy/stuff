@@ -24,7 +24,7 @@ namespace httpd {
 
         bool match(const Location& aLoc, const Request& aReq) const
         {
-            return 0 == aReq.m_Url.compare(0, aLoc.prefix.size(), aLoc.prefix);
+            return 0 == aReq.url.compare(0, aLoc.prefix.size(), aLoc.prefix);
         }
 
         UserResult process(Connection::SharedPtr aConnection, const Request& aRequest, const Handler& aHandler, bool aAsync)

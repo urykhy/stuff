@@ -19,7 +19,14 @@ namespace Curl {
         friend struct Multi;
         using Error = std::runtime_error;
 
-        using Headers     = std::map<std::string, std::string>;
+        struct iless
+        {
+            bool operator()(const std::string& a, const std::string& b) const
+            {
+                return strcasecmp(a.data(), b.data()) < 0;
+            }
+        };
+        using Headers     = std::map<std::string, std::string, iless>;
         using RecvHandler = std::function<size_t(void*, size_t)>;
 
         enum class Method
@@ -274,7 +281,7 @@ namespace Curl {
             // set headers
             for (auto& [sName, sValue] : aRequest.headers) {
                 std::string sLine = sName + ": " + sValue;
-                auto sTmp = curl_slist_append(m_HeaderList, sLine.c_str()); // make a copy
+                auto        sTmp  = curl_slist_append(m_HeaderList, sLine.c_str()); // make a copy
                 if (sTmp == nullptr)
                     throw Error("Curl: fail to slist_append");
                 m_HeaderList = sTmp;

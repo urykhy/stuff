@@ -27,7 +27,14 @@ namespace asio_http {
 
     struct ClientRequest
     {
-        using Headers = std::map<std::string, std::string>;
+        struct iless
+        {
+            bool operator()(const std::string& a, const std::string& b) const
+            {
+                return strcasecmp(a.data(), b.data()) < 0;
+            }
+        };
+        using Headers = std::map<std::string, std::string, iless>;
 
         http::verb  method = http::verb::get;
         std::string url;
