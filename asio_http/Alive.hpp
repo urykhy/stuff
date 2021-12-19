@@ -64,7 +64,7 @@ namespace asio_http::Alive {
         unsigned queue_timeout_ms = 1000;
     };
 
-    class Manager : public std::enable_shared_from_this<Manager>
+    class Manager : public std::enable_shared_from_this<Manager>, public Client
     {
         Container::KeyPool<Connection::Peer, ConnectionPtr> m_Alive;
         asio::io_service&                                   m_Service;
@@ -105,7 +105,7 @@ namespace asio_http::Alive {
             }));
         }
 
-        std::future<Response> async(ClientRequest&& aRequest)
+        std::future<Response> async(ClientRequest&& aRequest) override
         {
             auto sPromise = std::make_shared<std::promise<Response>>();
             m_Strand.post([aRequest = std::move(aRequest), sPromise, p = shared_from_this()]() mutable {

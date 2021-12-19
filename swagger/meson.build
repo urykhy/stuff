@@ -9,6 +9,7 @@ curl      = dependency('libcurl')
 uuid      = dependency('uuid')
 thrift    = dependency('thrift')
 ssl       = dependency('openssl')
+nghttp2   = dependency('libnghttp2') # for hpack
 subdir('jaeger_proto')
 import('python').find_installation('python3', modules : ['jinja2'])
 
@@ -27,5 +28,5 @@ endforeach
 swagger_ui_get = find_program('get_swagger_ui.sh', required : true)
 swagger_ui_tar = custom_target('swagger_ui_tar', output: 'swagger_ui.tar', command: [swagger_ui_get])
 
-a = executable('a.out', 'test.cpp', api_src, swagger_ui_tar, dependencies : [boost, threads, json, log4cxx, curl, uuid, thrift, jaeger_proto, ssl], include_directories : includes)
+a = executable('a.out', 'test.cpp', api_src, swagger_ui_tar, dependencies : [boost, threads, json, log4cxx, curl, uuid, thrift, jaeger_proto, ssl, nghttp2], include_directories : includes)
 test('basic test', a, args : ['-l', 'all'])

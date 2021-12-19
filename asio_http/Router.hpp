@@ -4,21 +4,9 @@
 #include <mutex>
 #include <string>
 
-#include <boost/asio.hpp>
-#include <boost/asio/spawn.hpp>
-#include <boost/beast/core.hpp>
-#include <boost/beast/http.hpp>
+#include "API.hpp"
 
 namespace asio_http {
-    namespace asio  = boost::asio;
-    namespace beast = boost::beast;
-    namespace http  = beast::http;
-    namespace net   = boost::asio;
-    using tcp       = boost::asio::ip::tcp;
-
-    using Request  = http::request<http::string_body>;
-    using Response = http::response<http::string_body>;
-
     struct Router
     {
         using Handler = std::function<void(asio::io_service&, const Request&, Response&, asio::yield_context)>;

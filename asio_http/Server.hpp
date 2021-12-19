@@ -3,8 +3,6 @@
 // based on https://www.boost.org/doc/libs/master/libs/beast/example/http/server/small/http_server_small.cpp
 //          https://www.boost.org/doc/libs/master/libs/beast/example/http/server/coro/http_server_coro.cpp
 
-#include <boost/asio/spawn.hpp>
-
 #include "Router.hpp"
 
 #include <container/Session.hpp>
@@ -25,7 +23,7 @@ namespace asio_http {
                 break;
 
             Container::Session::Set sPeer("peer", aStream.socket().remote_endpoint().address().to_string());
-            Response sResponse;
+            Response                sResponse;
             aRouter->call(aService, sRequest, sResponse, yield[ec]);
             if (ec)
                 break;

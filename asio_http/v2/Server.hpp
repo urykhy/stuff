@@ -4,7 +4,7 @@
 #include <map>
 #include <memory>
 
-#include "Router.hpp"
+#include "../Router.hpp"
 #include "Types.hpp"
 
 #include <string/String.hpp>
@@ -75,11 +75,14 @@ namespace asio_http::v2 {
         {
             TRACE("spawn to perform call for stream " << aStreamId);
 
-            auto sCall = [p=shared_from_this(), aStreamId, aRequest = std::move(aRequest)](asio::yield_context yield) mutable {
+            std::string sClientAddr = m_Stream.socket().remote_endpoint().address().to_string();
+            auto sCall = [p = shared_from_this(), aStreamId, aRequest = std::move(aRequest), sClientAddr = std::move(sClientAddr)](asio::yield_context yield) mutable {
                 beast::error_code ec;
                 Response          sResponse;
 
+                Container::Session::Set sPeer("peer", sClientAddr);
                 p->m_Router->call(p->m_Service, aRequest, sResponse, yield[ec]);
+                // FIXME: handle ec
 
                 sResponse.prepare_payload();
                 if (0 == sResponse.count(http::field::server))
@@ -90,7 +93,7 @@ namespace asio_http::v2 {
                 });
             };
 
-            // FIXME: spawn synchronous without post
+            // FIXME: why spawn synchronous without post ?
             m_Service.post([p = shared_from_this(), sCall = std::move(sCall)]() {
                 asio::spawn(p->m_Service, sCall);
             });

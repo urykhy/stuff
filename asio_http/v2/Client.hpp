@@ -2,8 +2,7 @@
 
 #include <memory>
 
-#include "Alive.hpp"
-#include "Router.hpp"
+#include "../Router.hpp"
 #include "Types.hpp"
 
 #include <unsorted/Log4cxx.hpp>
@@ -322,7 +321,7 @@ namespace asio_http::v2 {
                 m_WriteCoro.reset();
                 m_Output.assign(nullptr);
             });
-            auto sEnd = [this]() {
+            auto       sEnd = [this]() {
                 return m_ReadCoro->ec or (m_WriteQueue.empty() and m_Output.idle());
             };
             while (!sEnd()) {
@@ -338,12 +337,11 @@ namespace asio_http::v2 {
 
     struct Params
     {
-        unsigned max_connections  = 32;
-        unsigned queue_timeout_ms = 1000;
-        time_t   delay            = 1;
+        //unsigned max_connections  = 32;
+        //time_t   delay            = 1;
     };
 
-    class Client : public std::enable_shared_from_this<Client>
+    class Manager : public std::enable_shared_from_this<Manager>, public Client
     {
         asio::io_service&        m_Service;
         asio::deadline_timer     m_Timer;
@@ -370,7 +368,7 @@ namespace asio_http::v2 {
         std::map<Addr, DataPtr> m_Data;
 
     public:
-        Client(asio::io_service& aService, const Params& aParams)
+        Manager(asio::io_service& aService, const Params& aParams)
         : m_Service(aService)
         , m_Timer(aService)
         , m_Strand(aService)
@@ -390,7 +388,7 @@ namespace asio_http::v2 {
             }));
         }
 
-        std::future<Response> async(ClientRequest&& aRequest)
+        std::future<Response> async(ClientRequest&& aRequest) override
         {
             auto sPromise = std::make_shared<std::promise<Response>>();
             m_Strand.post([aRequest = std::move(aRequest), sPromise, p = shared_from_this()]() mutable {

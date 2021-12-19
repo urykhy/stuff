@@ -8,8 +8,9 @@
 #include "tutorial.v1.hpp"
 
 #include <asio_http/Client.hpp>
-#include <asio_http/Router.hpp>
 #include <asio_http/Server.hpp>
+#include <asio_http/v2/Client.hpp>
+#include <asio_http/v2/Server.hpp>
 #include <format/Hex.hpp>
 #include <jwt/JWT.hpp>
 #include <resource/Get.hpp>
@@ -302,6 +303,25 @@ struct WithServer
     }
 };
 
+struct WithServerV2
+{
+    Threads::Asio                           m_Asio;
+    std::shared_ptr<asio_http::Router>      m_Router;
+    std::shared_ptr<asio_http::v2::Manager> m_HttpClient;
+    Threads::Group                          m_Group;
+
+    WithServerV2()
+    {
+        m_Router = std::make_shared<asio_http::Router>();
+
+        m_HttpClient = std::make_shared<asio_http::v2::Manager>(m_Asio.service(), asio_http::v2::Params{});
+        m_HttpClient->start_cleaner();
+
+        asio_http::v2::startServer(m_Asio, 3000, m_Router);
+        m_Asio.start(m_Group);
+    }
+};
+
 BOOST_AUTO_TEST_SUITE(rpc)
 BOOST_FIXTURE_TEST_CASE(simple, WithServer)
 {
@@ -482,7 +502,7 @@ BOOST_FIXTURE_TEST_CASE(redirect, WithServer)
     // permanent
     // redirect from server at 3000 to serverX at 3001
     {
-        RedirectServerX sRedirectServerX;
+        RedirectServerX                    sRedirectServerX;
         std::shared_ptr<asio_http::Router> sRouter = std::make_shared<asio_http::Router>();
         sRedirectServerX.configure(sRouter);
         asio_http::startServer(m_Asio, 3001, sRouter);
@@ -497,5 +517,23 @@ BOOST_FIXTURE_TEST_CASE(redirect, WithServer)
                    sR);
         sR = sClient.get_permanent({}); // 2nd call
     }
+}
+BOOST_AUTO_TEST_SUITE_END()
+
+BOOST_AUTO_TEST_SUITE(http2)
+BOOST_FIXTURE_TEST_CASE(simple, WithServerV2)
+{
+    Common sCommon;
+    sCommon.configure(m_Router);
+
+    api::common_1_0::client sClient(m_HttpClient, "http://127.0.0.1:3000");
+
+    auto sResponse = sClient.get_enum({});
+
+    const std::vector<std::string> sExpected = {{"one"}, {"two"}};
+    BOOST_CHECK_EQUAL_COLLECTIONS(sExpected.begin(),
+                                  sExpected.end(),
+                                  sResponse.body.begin(),
+                                  sResponse.body.end());
 }
 BOOST_AUTO_TEST_SUITE_END()

@@ -2,36 +2,12 @@
 
 // based on https://www.boost.org/doc/libs/master/libs/beast/example/http/client/coro/http_client_coro.cpp
 
-#include <boost/asio/spawn.hpp>
+#include "API.hpp"
 
 #include <parser/Url.hpp>
 #include <threads/Asio.hpp>
 
-#include "Router.hpp"
-
 namespace asio_http {
-
-    namespace Headers
-    {
-        static const std::string Accept = "Accept";
-        static const std::string ContentType = "Content-Type";
-        static const std::string Host = "Host";
-        static const std::string UserAgent = "User-Agent";
-    }
-
-    struct ClientRequest
-    {
-        using Headers = std::map<std::string, std::string>;
-
-        http::verb  method = http::verb::get;
-        std::string url;
-        std::string body = {};
-        Headers     headers = {};
-        time_t      connect = 100; // timeout in ms
-        time_t      total   = 3000;
-    };
-
-    using Promise = std::shared_ptr<std::promise<Response>>;
 
     inline void simple_client_session(asio::io_service& aService, ClientRequest&& aRequest, Promise aPromise, net::yield_context yield)
     {
