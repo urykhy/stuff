@@ -35,10 +35,12 @@ namespace MQ {
 
         Json::Value parseState(const std::string& aState)
         {
-            Json::Value  sResponse;
-            Json::Reader sReader;
-            if (!sReader.parse(aState, sResponse))
-                throw Error("mq.server: bad server response: " + sReader.getFormattedErrorMessages());
+            Json::Value sResponse;
+            try {
+                sResponse = Parser::Json::parse(aState);
+            } catch (const std::invalid_argument& e) {
+                throw Error(std::string("mq.server: bad server response: ") + e.what());
+            }
             if (!sResponse.isArray())
                 throw Error("mq.server: bad server response: array expected");
             return sResponse;

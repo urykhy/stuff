@@ -10,4 +10,4 @@ test('basic test', a, args : ['-l', 'all'])
 
 b  = executable('b.out',  'benchmark.cpp',  dependencies : [boost, threads, benchmark])
 benchmark('bench', b)
-run_target('bench', command : ['./build_release/b.out', '--benchmark_repetitions=5', '--benchmark_report_aggregates_only=true'])
+#run_target('bench', command : ['./build_release/b.out', '--benchmark_repetitions=5', '--benchmark_report_aggregates_only=true'])

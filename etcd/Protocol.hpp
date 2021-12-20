@@ -5,6 +5,7 @@
 #include <exception/Error.hpp>
 #include <format/Base64.hpp>
 #include <format/Json.hpp>
+#include <parser/Json.hpp>
 
 namespace Etcd {
     struct EtcdTag;
@@ -124,11 +125,11 @@ namespace Etcd::Protocol {
     inline Json::Value parseResponse(int aCode, const std::string& aBody)
     {
         if (aCode == 200) {
-            Json::Value  sJson;
-            Json::Reader sReader;
-            if (!sReader.parse(aBody, sJson))
-                throw Error("etcd: bad server response: " + sReader.getFormattedErrorMessages());
-            return sJson;
+            try {
+                return Parser::Json::parse(aBody);
+            } catch (const std::invalid_argument& e) {
+                throw Error(std::string("etcd: bad server response: ") + e.what());
+            }
         }
         throw Error("etcd: bad server response: http code: " + std::to_string(aCode) + ", message: " + aBody);
     }

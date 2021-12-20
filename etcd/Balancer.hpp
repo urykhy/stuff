@@ -2,9 +2,10 @@
 
 #include <mutex>
 
-#include <threads/Periodic.hpp>
-
 #include "Etcd.hpp"
+
+#include <parser/Json.hpp>
+#include <threads/Periodic.hpp>
 
 namespace Etcd {
     struct Balancer
@@ -45,10 +46,12 @@ namespace Etcd {
 
             for (auto&& x : sList) {
                 x.key.erase(0, m_Params.prefix.size());
-                Json::Value  sRoot;
-                Json::Reader sReader;
-                if (!sReader.parse(x.value, sRoot))
-                    throw Error("fail to parse server response: " + x.value);
+                Json::Value sRoot;
+                try {
+                    sRoot = Parser::Json::parse(x.value);
+                } catch (const std::invalid_argument& e) {
+                    throw Error(std::string("etcd: bad server response: ") + e.what());
+                }
                 if (sRoot.isObject() and sRoot.isMember("weight") and sRoot["weight"].isUInt64()) {
                     sState.push_back({x.key, sRoot["weight"].asUInt64()});
                     sWeight += sState.back().weight;

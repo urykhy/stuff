@@ -4,10 +4,10 @@
 #include <chrono>
 using namespace std::chrono_literals;
 
-#include <asio_http/Server.hpp>
-
 #include "Client.hpp"
 #include "Server.hpp"
+
+#include <asio_http/Server.hpp>
 
 BOOST_AUTO_TEST_SUITE(mq)
 BOOST_AUTO_TEST_CASE(simple)
@@ -82,9 +82,7 @@ BOOST_AUTO_TEST_CASE(simple)
         const auto           sState = sEtcd.get("mq:default");
 
         // ensure 10 last hashes in history
-        Json::Value  sJson;
-        Json::Reader sReader;
-        BOOST_REQUIRE_EQUAL(sReader.parse(sState, sJson), true);
+        Json::Value sJson = Parser::Json::parse(sState);
         BOOST_REQUIRE_EQUAL(sJson.isArray(), true);
         BOOST_REQUIRE_EQUAL(sJson.size(), 10);
         BOOST_REQUIRE_EQUAL(sJson[0].asString(), "2:abc");

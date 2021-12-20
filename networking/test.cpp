@@ -142,7 +142,7 @@ BOOST_AUTO_TEST_CASE(ping)
         PingHandler()
         : m_Socket(2092)
         {}
-        int get_fd() { return m_Socket.get_fd(); }
+        int get_fd() const override { return m_Socket.get_fd(); }
 
         Result on_read() override
         {
