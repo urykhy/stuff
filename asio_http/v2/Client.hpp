@@ -1,11 +1,10 @@
 #pragma once
 
-#include <memory>
+#include "HPack.hpp"
+#include "Input.hpp"
+#include "Output.hpp"
 
-#include "../Router.hpp"
-#include "Types.hpp"
-
-#include <unsorted/Log4cxx.hpp>
+#include <unsorted/Raii.hpp>
 
 namespace asio_http::v2 {
 
@@ -19,7 +18,8 @@ namespace asio_http::v2 {
         const std::string        m_Port;
         asio::io_service::strand m_Strand;
         beast::tcp_stream        m_Stream;
-        HPack                    m_Pack;
+        Inflate                  m_Inflate;
+        Deflate                  m_Deflate;
 
         std::unique_ptr<CoroState> m_ReadCoro;
         std::unique_ptr<CoroState> m_WriteCoro;
@@ -94,7 +94,7 @@ namespace asio_http::v2 {
 
             if (sRQ.request.body.empty())
                 sHeader.flags |= Flags::END_STREAM;
-            m_Output.send(sHeader, m_Pack.deflate(sRQ.request), m_WriteCoro.get());
+            m_Output.send(sHeader, m_Deflate(sRQ.request), m_WriteCoro.get());
             if (!sRQ.request.body.empty())
                 m_Output.enqueue(sStreamId, std::move(sRQ.request.body));
         }
@@ -146,7 +146,7 @@ namespace asio_http::v2 {
             auto& sStream   = sIt->second;
             auto& sResponse = sStream.response;
 
-            m_Pack.inflate(aFrame.header, aFrame.body, sResponse);
+            m_Inflate(aFrame.header, aFrame.body, sResponse);
 
             if (aFrame.header.flags & Flags::END_STREAM)
                 sStream.m_NoBody = true;

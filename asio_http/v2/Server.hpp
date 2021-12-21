@@ -1,15 +1,10 @@
 #pragma once
 
-#include <cassert>
-#include <map>
-#include <memory>
+#include "Input.hpp"
+#include "Output.hpp"
+#include "HPack.hpp"
 
-#include "../Router.hpp"
-#include "Types.hpp"
-
-#include <string/String.hpp>
 #include <threads/Asio.hpp>
-#include <unsorted/Log4cxx.hpp>
 
 namespace asio_http::v2 {
 
@@ -19,7 +14,8 @@ namespace asio_http::v2 {
         asio::io_service::strand m_Strand;
         beast::tcp_stream        m_Stream;
         RouterPtr                m_Router;
-        HPack                    m_Pack;
+        Inflate                  m_Inflate;
+        Deflate                  m_Deflate;
 
         std::unique_ptr<CoroState> m_ReadCoro;
         std::unique_ptr<CoroState> m_WriteCoro;
@@ -55,7 +51,7 @@ namespace asio_http::v2 {
 
             if (sResponse.body().empty())
                 sHeader.flags |= Flags::END_STREAM;
-            m_Output.send(sHeader, m_Pack.deflate(sResponse), m_WriteCoro.get());
+            m_Output.send(sHeader, m_Deflate(sResponse), m_WriteCoro.get());
             if (!sResponse.body().empty())
                 m_Output.enqueue(aResponse.stream_id, std::move(sResponse.body()));
         }
@@ -76,7 +72,7 @@ namespace asio_http::v2 {
             TRACE("spawn to perform call for stream " << aStreamId);
 
             std::string sClientAddr = m_Stream.socket().remote_endpoint().address().to_string();
-            auto sCall = [p = shared_from_this(), aStreamId, aRequest = std::move(aRequest), sClientAddr = std::move(sClientAddr)](asio::yield_context yield) mutable {
+            auto        sCall       = [p = shared_from_this(), aStreamId, aRequest = std::move(aRequest), sClientAddr = std::move(sClientAddr)](asio::yield_context yield) mutable {
                 beast::error_code ec;
                 Response          sResponse;
 
@@ -141,7 +137,7 @@ namespace asio_http::v2 {
             auto& sStream  = m_Streams[sStreamId];
             auto& sRequest = sStream.m_Request;
 
-            m_Pack.inflate(aFrame.header, aFrame.body, sRequest);
+            m_Inflate(aFrame.header, aFrame.body, sRequest);
 
             if (aFrame.header.flags & Flags::END_STREAM)
                 sStream.m_NoBody = true;
