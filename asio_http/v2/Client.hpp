@@ -8,7 +8,7 @@
 
 namespace asio_http::v2 {
 
-    struct Peer : public std::enable_shared_from_this<Peer>
+    struct Peer : public std::enable_shared_from_this<Peer>, InputFace
     {
         using Notify = std::function<void(const std::string&)>;
 
@@ -35,13 +35,7 @@ namespace asio_http::v2 {
         uint32_t      m_Serial = 1;
 
         // recv streams
-        struct Stream
-        {
-            Response response;
-            Promise  promise;
-            bool     m_NoBody = false;
-        };
-        std::map<uint32_t, Stream> m_Streams;
+        std::map<uint32_t, Promise> m_Streams;
 
         Input       m_Input;
         Output      m_Output;
@@ -59,8 +53,8 @@ namespace asio_http::v2 {
             for (auto& sRQ : m_WriteQueue)
                 sRQ.promise->set_exception(std::make_exception_ptr(std::runtime_error(m_FailReason)));
             m_WriteQueue.clear();
-            for (auto& [sId, sStream] : m_Streams)
-                sStream.promise->set_exception(std::make_exception_ptr(std::runtime_error(m_FailReason)));
+            for (auto& [sId, sPromise] : m_Streams)
+                sPromise->set_exception(std::make_exception_ptr(std::runtime_error(m_FailReason)));
             m_Streams.clear();
             m_Stream.cancel();
         }
@@ -85,11 +79,11 @@ namespace asio_http::v2 {
             sHeader.type   = Type::HEADERS;
             sHeader.flags  = Flags::END_HEADERS;
             sHeader.stream = sStreamId;
-            auto& sStream  = m_Streams[sStreamId];
+            auto& sPromise = m_Streams[sStreamId];
 
             auto sRQ = std::move(m_WriteQueue.front());
             m_WriteQueue.pop_front();
-            sStream.promise = sRQ.promise;
+            sPromise = sRQ.promise;
             TRACE("create stream " << sStreamId << " for " << sRQ.request.url);
 
             if (sRQ.request.body.empty())
@@ -114,50 +108,7 @@ namespace asio_http::v2 {
                 spawn_write_coro();
         }
 
-        // Wire protocol
-
-        void process_data(const Input::Frame& aFrame)
-        {
-            const uint32_t sStreamId = aFrame.header.stream;
-            assert(sStreamId != 0);
-            auto sIt = m_Streams.find(sStreamId);
-            assert(sIt != m_Streams.end());
-
-            m_Input.append(sStreamId, aFrame.body, aFrame.header.flags ^ Flags::END_STREAM);
-
-            if (aFrame.header.flags & Flags::END_STREAM) {
-                TRACE("got complete response");
-                auto& sStream   = sIt->second;
-                auto& sResponse = sStream.response;
-                sResponse.body().assign(m_Input.extract(sStreamId));
-                sStream.promise->set_value(std::move(sResponse));
-                m_Streams.erase(sIt);
-            }
-        }
-
-        void process_headers(const Input::Frame& aFrame)
-        {
-            const uint32_t sStreamId = aFrame.header.stream;
-            assert(sStreamId != 0);
-
-            auto sIt = m_Streams.find(sStreamId);
-            if (sIt == m_Streams.end())
-                throw std::logic_error("nx response stream");
-            auto& sStream   = sIt->second;
-            auto& sResponse = sStream.response;
-
-            m_Inflate(aFrame.header, aFrame.body, sResponse);
-
-            if (aFrame.header.flags & Flags::END_STREAM)
-                sStream.m_NoBody = true;
-            if (aFrame.header.flags & Flags::END_HEADERS and sStream.m_NoBody) {
-                TRACE("got complete response");
-                sStream.promise->set_value(std::move(sResponse));
-                m_Streams.erase(sIt);
-            }
-        }
-
-        void process_settings(const Input::Frame& aFrame)
+        void process_settings(const Frame& aFrame) override
         {
             if (aFrame.header.flags != 0) // filter out ACK_SETTINGS
                 return;
@@ -171,9 +122,19 @@ namespace asio_http::v2 {
             TRACE("ack settings");
         }
 
-        void process_window_update(const Input::Frame& aFrame)
+        void process_window_update(const Frame& aFrame) override
         {
             m_Output.window_update(aFrame.header, aFrame.body);
+        }
+
+        void process_response(uint32_t aStreamId, Response&& aResponse) override
+        {
+            TRACE("got complete response");
+
+            auto sIt = m_Streams.find(aStreamId);
+            assert (sIt != m_Streams.end());
+            sIt->second->set_value(std::move(aResponse));
+            m_Streams.erase(sIt);
         }
 
         void connect()
@@ -209,23 +170,6 @@ namespace asio_http::v2 {
             process_settings(sFrame);
         }
 
-        bool process_frame()
-        {
-            m_Stream.expires_after(std::chrono::seconds(30));
-            auto sFrame = m_Input.recv();
-
-            switch (sFrame.header.type) {
-            case Type::DATA: process_data(sFrame); break;
-            case Type::HEADERS: process_headers(sFrame); break;
-            case Type::SETTINGS: process_settings(sFrame); break;
-            case Type::WINDOW_UPDATE: process_window_update(sFrame); break;
-            case Type::CONTINUATION: process_headers(sFrame); break;
-            default: break;
-            }
-
-            return true;
-        }
-
     public:
         Peer(asio::io_service& aService, const std::string aHost, const std::string& aPort, Notify&& aNotify = {})
         : m_Service(aService)
@@ -234,7 +178,7 @@ namespace asio_http::v2 {
         , m_Strand(m_Service)
         , m_Stream(m_Service)
         , m_Timer(m_Service)
-        , m_Input(m_Stream)
+        , m_Input(m_Stream, this, false /* client */)
         , m_Output(m_Stream)
         , m_Notify(std::move(aNotify))
         {
@@ -286,10 +230,8 @@ namespace asio_http::v2 {
                 TRACE("http/2 negotiated");
                 if (m_Notify)
                     m_Notify("connected");
-                while (m_FailReason.empty()) {
-                    if (!process_frame())
-                        break;
-                }
+                while (m_FailReason.empty())
+                    m_Input.process_frame();
             } catch (const beast::error_code e) {
                 fail(e);
             } catch (const std::exception& e) {

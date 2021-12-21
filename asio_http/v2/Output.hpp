@@ -6,8 +6,6 @@
 
 namespace asio_http::v2 {
 
-    // output queue
-    // implement framing and flow control
     class Output
     {
         beast::tcp_stream& m_Stream;
@@ -107,18 +105,13 @@ namespace asio_http::v2 {
             sInc = be32toh(sInc);
             sInc &= 0x7FFFFFFFFFFFFFFF; // clear R bit
 
-            budget(aHeader.stream, sInc);
-        }
-
-        void budget(uint32_t aStreamId, uint32_t aInc)
-        {
-            if (aStreamId == 0) {
-                m_Budget += aInc;
-                TRACE("connection window increment " << aInc << ", now " << m_Budget);
+            if (aHeader.stream == 0) {
+                m_Budget += sInc;
+                TRACE("connection window increment " << sInc << ", now " << m_Budget);
             } else {
-                auto& sBudget = m_Info[aStreamId].budget;
-                sBudget += aInc;
-                TRACE("stream window increment " << aInc << ", now " << sBudget);
+                auto& sBudget = m_Info[aHeader.stream].budget;
+                sBudget += sInc;
+                TRACE("stream window increment " << sInc << ", now " << sBudget);
             }
         }
 

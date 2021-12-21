@@ -4,17 +4,36 @@
 
 namespace asio_http::v2 {
 
-    // input queue
-    // sent window updates as required
+    struct Frame
+    {
+        Header      header;
+        std::string body;
+    };
+
+    struct InputFace
+    {
+        virtual void process_settings(const Frame& aFrame)      = 0;
+        virtual void process_window_update(const Frame& aFrame) = 0;
+        virtual void process_request(uint32_t aStreamId, Request&& aRequest){};
+        virtual void process_response(uint32_t aStreamId, Response&& aResponse){};
+        virtual ~InputFace(){};
+    };
+
     class Input
     {
         beast::tcp_stream& m_Stream;
         CoroState*         m_Coro = nullptr;
+        InputFace*         m_Face;
+        Inflate            m_Inflate;
+        const bool         m_Server;
 
         struct Info
         {
+            Request     request;
+            Response    response;
             std::string body;
-            uint32_t    budget = DEFAULT_WINDOW_SIZE;
+            uint32_t    budget  = DEFAULT_WINDOW_SIZE;
+            bool        no_body = false;
         };
         std::map<uint32_t, Info> m_Info;
 
@@ -44,9 +63,73 @@ namespace asio_http::v2 {
             aCurrent += DEFAULT_WINDOW_SIZE;
         }
 
+        void data_cb(uint32_t aStreamId, Info& aInfo)
+        {
+            if (m_Server) {
+                aInfo.request.body() = std::move(aInfo.body);
+                m_Face->process_request(aStreamId, std::move(aInfo.request));
+            } else {
+                aInfo.response.body() = std::move(aInfo.body);
+                m_Face->process_response(aStreamId, std::move(aInfo.response));
+            }
+        }
+
+        void process_data(const Frame& aFrame)
+        {
+            const uint32_t sStreamId = aFrame.header.stream;
+            assert(sStreamId != 0);
+            auto sIt = m_Info.find(sStreamId);
+            assert(sIt != m_Info.end());
+            auto& sInfo = sIt->second;
+
+            // account budget
+            const bool sMore = aFrame.header.flags ^ Flags::END_STREAM;
+            assert(m_Budget >= aFrame.body.size());
+            assert(sIt->second.budget >= aFrame.body.size());
+            sInfo.body += aFrame.body;
+            sInfo.budget -= aFrame.body.size();
+            m_Budget -= aFrame.body.size();
+            if (m_Budget < DEFAULT_WINDOW_SIZE) {
+                window_update(0, m_Budget);
+            }
+            if (sInfo.budget < DEFAULT_WINDOW_SIZE and sMore) {
+                window_update(sStreamId, sInfo.budget);
+            }
+
+            // request(response) collected
+            if (aFrame.header.flags & Flags::END_STREAM) {
+                data_cb(sStreamId, sInfo);
+                m_Info.erase(sIt);
+            }
+        }
+
+        // FIXME: ensure stream already exists if CONTINUATION
+        //        ensure new stream if HEADERS
+        void process_headers(const Frame& aFrame)
+        {
+            const uint32_t sStreamId = aFrame.header.stream;
+            if (sStreamId == 0)
+                throw std::runtime_error("zero stream id");
+            auto& sInfo = m_Info[sStreamId];
+
+            if (m_Server)
+                m_Inflate(aFrame.header, aFrame.body, sInfo.request);
+            else
+                m_Inflate(aFrame.header, aFrame.body, sInfo.response);
+
+            if (aFrame.header.flags & Flags::END_STREAM)
+                sInfo.no_body = true;
+            if (aFrame.header.flags & Flags::END_HEADERS and sInfo.no_body) {
+                data_cb(sStreamId, sInfo);
+                m_Info.erase(sStreamId);
+            }
+        }
+
     public:
-        Input(beast::tcp_stream& aStream)
+        Input(beast::tcp_stream& aStream, InputFace* aFace, bool aServer)
         : m_Stream(aStream)
+        , m_Face(aFace)
+        , m_Server(aServer)
         {
         }
 
@@ -55,41 +138,6 @@ namespace asio_http::v2 {
             m_Coro = aCoro;
         }
 
-        void append(uint32_t aStreamId, const std::string& aData, bool aMore)
-        {
-            auto& sInfo = m_Info[aStreamId];
-
-            assert(m_Budget >= aData.size());
-            assert(sInfo.budget >= aData.size());
-
-            sInfo.body += aData;
-            sInfo.budget -= aData.size();
-            m_Budget -= aData.size();
-
-            if (m_Budget < DEFAULT_WINDOW_SIZE) {
-                window_update(0, m_Budget);
-            }
-            if (sInfo.budget < DEFAULT_WINDOW_SIZE and aMore) {
-                window_update(aStreamId, sInfo.budget);
-            }
-        }
-
-        std::string extract(uint32_t aStreamId)
-        {
-            auto sIt = m_Info.find(aStreamId);
-            if (sIt == m_Info.end())
-                throw std::runtime_error("Input: stream data not found");
-
-            std::string sTmp = std::move(sIt->second.body);
-            m_Info.erase(sIt);
-            return sTmp;
-        }
-
-        struct Frame
-        {
-            Header      header;
-            std::string body;
-        };
         Frame recv()
         {
             Frame sTmp;
@@ -112,5 +160,20 @@ namespace asio_http::v2 {
             }
             return sTmp;
         }
+
+        void process_frame()
+        {
+            m_Stream.expires_after(std::chrono::seconds(30)); // FIXME configurable timeout
+            auto sFrame = recv();
+
+            switch (sFrame.header.type) {
+            case Type::DATA: process_data(sFrame); break;
+            case Type::HEADERS: process_headers(sFrame); break;
+            case Type::SETTINGS: m_Face->process_settings(sFrame); break;
+            case Type::WINDOW_UPDATE: m_Face->process_window_update(sFrame); break;
+            case Type::CONTINUATION: process_headers(sFrame); break;
+            default: break;
+            }
+        }
     };
-}
+} // namespace asio_http::v2

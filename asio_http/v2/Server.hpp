@@ -1,14 +1,14 @@
 #pragma once
 
+#include "HPack.hpp"
 #include "Input.hpp"
 #include "Output.hpp"
-#include "HPack.hpp"
 
 #include <threads/Asio.hpp>
 
 namespace asio_http::v2 {
 
-    class Session : public std::enable_shared_from_this<Session>
+    class Session : public std::enable_shared_from_this<Session>, InputFace
     {
         asio::io_service&        m_Service;
         asio::io_service::strand m_Strand;
@@ -20,14 +20,6 @@ namespace asio_http::v2 {
         std::unique_ptr<CoroState> m_ReadCoro;
         std::unique_ptr<CoroState> m_WriteCoro;
         asio::steady_timer         m_Timer;
-
-        // recv streams
-        struct Stream
-        {
-            Request m_Request;
-            bool    m_NoBody = false;
-        };
-        std::map<uint32_t, Stream> m_Streams;
 
         // responses to send
         struct ResponseItem
@@ -106,49 +98,7 @@ namespace asio_http::v2 {
                 spawn_write_coro();
         }
 
-        // Wire protocol
-
-        void process_data(const Input::Frame& aFrame)
-        {
-            const uint32_t sStreamId = aFrame.header.stream;
-            if (sStreamId == 0)
-                throw std::runtime_error("bad stream-id");
-            auto sIt = m_Streams.find(sStreamId);
-            if (sIt == m_Streams.end())
-                throw std::runtime_error("stream not found");
-
-            m_Input.append(sStreamId, aFrame.body, aFrame.header.flags ^ Flags::END_STREAM);
-
-            if (aFrame.header.flags & Flags::END_STREAM) {
-                Request& sRequest = sIt->second.m_Request;
-                sRequest.body().assign(m_Input.extract(sStreamId));
-                TRACE("got complete request");
-                call(sStreamId, std::move(sRequest));
-                m_Streams.erase(sIt);
-            }
-        }
-
-        void process_headers(const Input::Frame& aFrame)
-        {
-            const uint32_t sStreamId = aFrame.header.stream;
-            if (sStreamId == 0)
-                throw std::runtime_error("bad stream-id");
-            // TODO: if continuation -> assert we already have seen headers frame
-            auto& sStream  = m_Streams[sStreamId];
-            auto& sRequest = sStream.m_Request;
-
-            m_Inflate(aFrame.header, aFrame.body, sRequest);
-
-            if (aFrame.header.flags & Flags::END_STREAM)
-                sStream.m_NoBody = true;
-            if (aFrame.header.flags & Flags::END_HEADERS and sStream.m_NoBody) {
-                TRACE("got complete request");
-                call(sStreamId, std::move(sRequest));
-                m_Streams.erase(sStreamId);
-            }
-        }
-
-        void process_settings(const Input::Frame& aFrame)
+        void process_settings(const Frame& aFrame) override
         {
             if (aFrame.header.flags != 0) // filter out ACK_SETTINGS
                 return;
@@ -167,9 +117,15 @@ namespace asio_http::v2 {
             TRACE("ack settings");
         }
 
-        void process_window_update(const Input::Frame& aFrame)
+        void process_window_update(const Frame& aFrame) override
         {
             m_Output.window_update(aFrame.header, aFrame.body);
+        }
+
+        void process_request(uint32_t aStreamId, Request&& aRequest) override
+        {
+            TRACE("got complete request");
+            call(aStreamId, std::move(aRequest));
         }
 
         void hello()
@@ -191,24 +147,6 @@ namespace asio_http::v2 {
             m_Output.send(sAck, {}, m_ReadCoro.get());
         }
 
-        bool process_frame()
-        {
-            m_Stream.expires_after(std::chrono::seconds(30));
-            auto sFrame = m_Input.recv();
-
-            switch (sFrame.header.type) {
-            case Type::DATA: process_data(sFrame); break;
-            case Type::HEADERS: process_headers(sFrame); break;
-            case Type::SETTINGS: process_settings(sFrame); break;
-            case Type::GOAWAY: return false; break;
-            case Type::WINDOW_UPDATE: process_window_update(sFrame); break;
-            case Type::CONTINUATION: process_headers(sFrame); break;
-            default: break;
-            }
-
-            return true;
-        }
-
     public:
         Session(asio::io_service& aService, beast::tcp_stream&& aStream, RouterPtr aRouter)
         : m_Service(aService)
@@ -217,7 +155,7 @@ namespace asio_http::v2 {
         , m_Router(aRouter)
         , m_Timer(m_Service)
         , m_Output(m_Stream)
-        , m_Input(m_Stream)
+        , m_Input(m_Stream, this, true /* server */)
         {}
 
         ~Session()
@@ -247,8 +185,7 @@ namespace asio_http::v2 {
                 TRACE("http/2 negotiated");
 
                 while (true) {
-                    if (!process_frame())
-                        break; // GO AWAY
+                    m_Input.process_frame();
                     if (m_WriteCoro and m_WriteCoro->ec)
                         throw m_WriteCoro->ec;
                 }
