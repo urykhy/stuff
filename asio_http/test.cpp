@@ -307,7 +307,7 @@ BOOST_AUTO_TEST_CASE(golang_server)
     sServer.terminate();
     sServer.wait();
 }
-BOOST_AUTO_TEST_CASE(dual_server, *boost::unit_test::expected_failures(1))
+BOOST_AUTO_TEST_CASE(dual_server)
 {
     auto sRouter = std::make_shared<asio_http::Router>();
     sRouter->insert("/hello", [](asio_http::asio::io_service&, const asio_http::Request& aRequest, asio_http::Response& aResponse, asio_http::asio::yield_context yield) {
@@ -325,6 +325,7 @@ BOOST_AUTO_TEST_CASE(dual_server, *boost::unit_test::expected_failures(1))
     auto sFuture = sClient->async({.method = asio_http::http::verb::get,
                                    .url    = "http://127.0.0.1:2081/hello"});
     sFuture.wait();
-    BOOST_CHECK_NO_THROW(sFuture.get());
+    auto sResponse = sFuture.get();
+    BOOST_CHECK_EQUAL(sResponse.result_int(), 200);
 }
 BOOST_AUTO_TEST_SUITE_END()

@@ -3,6 +3,7 @@
 #include "HPack.hpp"
 #include "Input.hpp"
 #include "Output.hpp"
+#include "../Server.hpp"
 
 #include <threads/Asio.hpp>
 
@@ -128,6 +129,20 @@ namespace asio_http::v2 {
             call(aStreamId, std::move(aRequest));
         }
 
+        bool legacy()
+        {
+            m_Stream.expires_after(std::chrono::seconds(30));
+            m_Stream.async_read_some(asio::null_buffers(), m_ReadCoro->yield[m_ReadCoro->ec]);
+            if (m_ReadCoro->ec)
+                throw m_ReadCoro->ec;
+            int sFd = m_Stream.socket().native_handle();
+            char sTmp[3];
+            int sRet = ::recv(sFd, sTmp, sizeof(sTmp), MSG_PEEK);
+            if (sRet == sizeof(sTmp) and 0 != strncasecmp(sTmp, "PRI", 3))
+                return true;
+            return false;
+        }
+
         void hello()
         {
             const std::string_view sExpected("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n");
@@ -180,6 +195,12 @@ namespace asio_http::v2 {
             try {
                 DEBUG("connection from " << m_Stream.socket().remote_endpoint());
                 m_ReadCoro = std::make_unique<CoroState>(CoroState{{}, yield});
+                if (legacy())
+                {
+                    DEBUG("legacy 1.1 client");
+                    session(m_Service, m_Stream, m_Router, yield);
+                    return;
+                }
                 m_Input.assign(m_ReadCoro.get());
                 hello();
                 TRACE("http/2 negotiated");

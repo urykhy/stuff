@@ -77,9 +77,11 @@ namespace asio_http::v2 {
         void process_data(const Frame& aFrame)
         {
             const uint32_t sStreamId = aFrame.header.stream;
-            assert(sStreamId != 0);
+            if (sStreamId == 0)
+                throw std::runtime_error("stream id = 0");
             auto sIt = m_Info.find(sStreamId);
-            assert(sIt != m_Info.end());
+            if (sIt == m_Info.end())
+                throw std::runtime_error("stream not found");
             auto& sInfo = sIt->second;
 
             // account budget
