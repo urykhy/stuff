@@ -132,7 +132,7 @@ namespace asio_http::v2 {
             TRACE("got complete response");
 
             auto sIt = m_Streams.find(aStreamId);
-            assert (sIt != m_Streams.end());
+            assert(sIt != m_Streams.end());
             sIt->second->set_value(std::move(aResponse));
             m_Streams.erase(sIt);
         }
@@ -289,9 +289,6 @@ namespace asio_http::v2 {
         asio::deadline_timer     m_Timer;
         asio::io_service::strand m_Strand;
         const Params             m_Params;
-
-        // struct with host:port
-        using Addr = Alive::Connection::Peer;
 
         struct RQ
         {

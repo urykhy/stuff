@@ -1,9 +1,9 @@
 #pragma once
 
+#include "../v1/Server.hpp"
 #include "HPack.hpp"
 #include "Input.hpp"
 #include "Output.hpp"
-#include "../Server.hpp"
 
 #include <threads/Asio.hpp>
 
@@ -135,9 +135,9 @@ namespace asio_http::v2 {
             m_Stream.async_read_some(asio::null_buffers(), m_ReadCoro->yield[m_ReadCoro->ec]);
             if (m_ReadCoro->ec)
                 throw m_ReadCoro->ec;
-            int sFd = m_Stream.socket().native_handle();
-            char sTmp[3];
-            int sRet = ::recv(sFd, sTmp, sizeof(sTmp), MSG_PEEK);
+            int  sFd     = m_Stream.socket().native_handle();
+            char sTmp[3] = {0, 0, 0};
+            int  sRet    = ::recv(sFd, sTmp, sizeof(sTmp), MSG_PEEK);
             if (sRet == sizeof(sTmp) and 0 != strncasecmp(sTmp, "PRI", 3))
                 return true;
             return false;
@@ -195,10 +195,9 @@ namespace asio_http::v2 {
             try {
                 DEBUG("connection from " << m_Stream.socket().remote_endpoint());
                 m_ReadCoro = std::make_unique<CoroState>(CoroState{{}, yield});
-                if (legacy())
-                {
+                if (legacy()) {
                     DEBUG("legacy 1.1 client");
-                    session(m_Service, m_Stream, m_Router, yield);
+                    v1::session(m_Service, m_Stream, m_Router, yield);
                     return;
                 }
                 m_Input.assign(m_ReadCoro.get());
@@ -249,7 +248,7 @@ namespace asio_http::v2 {
         }
     };
 
-    inline void server2(asio::io_service& aService, std::shared_ptr<tcp::acceptor> aAcceptor, std::shared_ptr<tcp::socket> aSocket, RouterPtr aRouter)
+    inline void server(asio::io_service& aService, std::shared_ptr<tcp::acceptor> aAcceptor, std::shared_ptr<tcp::socket> aSocket, RouterPtr aRouter)
     {
         aAcceptor->async_accept(*aSocket, [aService = std::ref(aService), aAcceptor, aSocket, aRouter](beast::error_code ec) {
             if (!ec) {
@@ -260,7 +259,7 @@ namespace asio_http::v2 {
                     aRouter);
                 sSession->spawn_read_coro();
             }
-            server2(aService, aAcceptor, aSocket, aRouter);
+            server(aService, aAcceptor, aSocket, aRouter);
         });
     }
 
@@ -269,6 +268,6 @@ namespace asio_http::v2 {
         auto const sAddress  = asio::ip::make_address("0.0.0.0");
         auto       sAcceptor = std::make_shared<tcp::acceptor>(aContext.service(), tcp::endpoint(sAddress, aPort));
         auto       sSocket   = std::make_shared<tcp::socket>(aContext.service());
-        server2(aContext.service(), sAcceptor, sSocket, aRouter);
+        server(aContext.service(), sAcceptor, sSocket, aRouter);
     }
 } // namespace asio_http::v2

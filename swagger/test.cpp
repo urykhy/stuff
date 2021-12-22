@@ -286,16 +286,16 @@ struct RedirectServerX : api::redirect_1_0::server
 
 struct WithServer
 {
-    Threads::Asio                              m_Asio;
-    std::shared_ptr<asio_http::Router>         m_Router;
-    std::shared_ptr<asio_http::Alive::Manager> m_HttpClient;
-    Threads::Group                             m_Group;
+    Threads::Asio                           m_Asio;
+    std::shared_ptr<asio_http::Router>      m_Router;
+    std::shared_ptr<asio_http::v1::Manager> m_HttpClient;
+    Threads::Group                          m_Group;
 
     WithServer()
     {
         m_Router = std::make_shared<asio_http::Router>();
 
-        m_HttpClient = std::make_shared<asio_http::Alive::Manager>(m_Asio.service(), asio_http::Alive::Params{});
+        m_HttpClient = std::make_shared<asio_http::v1::Manager>(m_Asio.service(), asio_http::v1::Params{});
         m_HttpClient->start_cleaner();
 
         asio_http::startServer(m_Asio, 3000, m_Router);

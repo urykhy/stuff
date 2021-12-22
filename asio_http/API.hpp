@@ -25,6 +25,21 @@ namespace asio_http {
         static const std::string UserAgent   = "User-Agent";
     } // namespace Headers
 
+    struct Addr
+    {
+        std::string host;
+        std::string port;
+
+        auto as_tuple() const
+        {
+            return std::tie(host, port);
+        }
+        bool operator<(const Addr& aOther) const
+        {
+            return as_tuple() < aOther.as_tuple();
+        }
+    };
+
     struct ClientRequest
     {
         struct iless

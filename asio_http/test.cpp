@@ -96,8 +96,7 @@ BOOST_AUTO_TEST_CASE(alive)
                                       .url     = "http://127.0.0.1:2081/hello",
                                       .headers = {{asio_http::Headers::Host, "127.0.0.1"}}};
 
-    asio_http::Alive::Params sParams;
-    auto                     sManager = std::make_shared<asio_http::Alive::Manager>(sAsio.service(), sParams);
+    auto                     sManager = std::make_shared<asio_http::v1::Manager>(sAsio.service(), asio_http::v1::Params{});
     sManager->start_cleaner();
     auto sResponse = sManager->async(std::move(sRequest)).get();
     BOOST_CHECK_EQUAL(sResponse.result(), http::status::ok);
@@ -321,7 +320,7 @@ BOOST_AUTO_TEST_CASE(dual_server)
     std::this_thread::sleep_for(100ms);
 
     // 1.0 client
-    auto sClient = std::make_shared<asio_http::Alive::Manager>(sAsio.service(), asio_http::Alive::Params{});
+    auto sClient = std::make_shared<asio_http::v1::Manager>(sAsio.service(), asio_http::v1::Params{});
     auto sFuture = sClient->async({.method = asio_http::http::verb::get,
                                    .url    = "http://127.0.0.1:2081/hello"});
     sFuture.wait();
