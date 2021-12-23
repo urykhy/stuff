@@ -1,5 +1,6 @@
 #pragma once
 
+#include "HPack.hpp"
 #include "Types.hpp"
 
 namespace asio_http::v2 {
@@ -12,8 +13,9 @@ namespace asio_http::v2 {
 
     struct InputFace
     {
-        virtual void process_settings(const Frame& aFrame)      = 0;
-        virtual void process_window_update(const Frame& aFrame) = 0;
+        virtual void process_settings(const Frame& aFrame)                 = 0;
+        virtual void process_window_update(const Frame& aFrame)            = 0;
+        virtual void emit_window_update(uint32_t aStreamId, uint32_t aInc) = 0;
         virtual void process_request(uint32_t aStreamId, Request&& aRequest){};
         virtual void process_response(uint32_t aStreamId, Response&& aResponse){};
         virtual ~InputFace(){};
@@ -39,27 +41,10 @@ namespace asio_http::v2 {
 
         uint32_t m_Budget = DEFAULT_WINDOW_SIZE; // connection budget
 
-        void send(Header aHeader, uint32_t aInc) // copy header here
+        void emit_window_update(uint32_t aStreamId, uint32_t& aCurrent)
         {
-            aHeader.size = sizeof(aInc);
-            aHeader.to_net();
-
-            std::array<asio::const_buffer, 2> sBuffer = {
-                asio::const_buffer(&aHeader, sizeof(aHeader)),
-                asio::const_buffer(&aInc, sizeof(aInc))};
-
-            asio::async_write(m_Stream, sBuffer, m_Coro->yield[m_Coro->ec]);
-            if (m_Coro->ec)
-                throw m_Coro->ec;
-        }
-
-        void window_update(uint32_t aStreamId, uint32_t& aCurrent)
-        {
-            Header sHeader;
-            sHeader.type   = Type::WINDOW_UPDATE;
-            sHeader.stream = aStreamId;
-            send(sHeader, htobe32(DEFAULT_WINDOW_SIZE));
-            TRACE("sent window update for " << aStreamId << ", was " << aCurrent);
+            TRACE("request window update for " << aStreamId << ", was " << aCurrent);
+            m_Face->emit_window_update(aStreamId, DEFAULT_WINDOW_SIZE);
             aCurrent += DEFAULT_WINDOW_SIZE;
         }
 
@@ -87,15 +72,15 @@ namespace asio_http::v2 {
             // account budget
             const bool sMore = aFrame.header.flags ^ Flags::END_STREAM;
             assert(m_Budget >= aFrame.body.size());
-            assert(sIt->second.budget >= aFrame.body.size());
+            assert(sInfo.budget >= aFrame.body.size());
             sInfo.body += aFrame.body;
             sInfo.budget -= aFrame.body.size();
             m_Budget -= aFrame.body.size();
             if (m_Budget < DEFAULT_WINDOW_SIZE) {
-                window_update(0, m_Budget);
+                emit_window_update(0, m_Budget);
             }
             if (sInfo.budget < DEFAULT_WINDOW_SIZE and sMore) {
-                window_update(sStreamId, sInfo.budget);
+                emit_window_update(sStreamId, sInfo.budget);
             }
 
             // request(response) collected

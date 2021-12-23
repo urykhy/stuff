@@ -202,6 +202,7 @@ namespace asio_http::v1 {
                 report(aRQ, aPtr, "connect: ", ec);
                 return;
             }
+            aPtr->stream.socket().set_option(tcp::no_delay(true));
 
             perform(std::move(aRQ), aInternal, aPtr, yield);
         }

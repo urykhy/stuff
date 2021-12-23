@@ -96,7 +96,7 @@ BOOST_AUTO_TEST_CASE(alive)
                                       .url     = "http://127.0.0.1:2081/hello",
                                       .headers = {{asio_http::Headers::Host, "127.0.0.1"}}};
 
-    auto                     sManager = std::make_shared<asio_http::v1::Manager>(sAsio.service(), asio_http::v1::Params{});
+    auto sManager = std::make_shared<asio_http::v1::Manager>(sAsio.service(), asio_http::v1::Params{});
     sManager->start_cleaner();
     auto sResponse = sManager->async(std::move(sRequest)).get();
     BOOST_CHECK_EQUAL(sResponse.result(), http::status::ok);
@@ -326,5 +326,50 @@ BOOST_AUTO_TEST_CASE(dual_server)
     sFuture.wait();
     auto sResponse = sFuture.get();
     BOOST_CHECK_EQUAL(sResponse.result_int(), 200);
+}
+BOOST_AUTO_TEST_CASE(mass)
+{
+    enum
+    {
+        REQUEST_COUNT = 5000,
+        BODY_SIZE     = 1420,
+    };
+
+    std::string sBody;
+    sBody.reserve(BODY_SIZE);
+    for (int i = 0; i < BODY_SIZE; i++)
+        sBody.push_back('x');
+
+    auto sRouter = std::make_shared<asio_http::Router>();
+    sRouter->insert("/hello", [&](asio_http::asio::io_service&, const asio_http::Request& aRequest, asio_http::Response& aResponse, asio_http::asio::yield_context yield) {
+        aResponse.result(asio_http::http::status::ok);
+        aResponse.body().assign(sBody);
+    });
+
+    Threads::Asio  sAsioClient;
+    Threads::Asio  sAsioServer;
+    Threads::Group sGroup;
+    asio_http::v2::startServer(sAsioServer, 2081, sRouter);
+    sAsioServer.start(sGroup);
+    std::this_thread::sleep_for(100ms);
+    auto sClient = std::make_shared<asio_http::v2::Manager>(sAsioClient.service(), asio_http::v2::Params{});
+    sAsioClient.start(sGroup);
+
+    std::vector<std::future<asio_http::Response>> sFuture;
+    sFuture.reserve(REQUEST_COUNT);
+
+    Time::Meter sMeter;
+    for (int i = 0; i < REQUEST_COUNT; i++) {
+        sFuture.push_back(sClient->async({.method = asio_http::http::verb::get,
+                                          .url    = "http://127.0.0.1:2081/hello"}));
+    }
+    for (int i = 0; i < REQUEST_COUNT; i++) {
+        sFuture[i].wait();
+        auto sResponse = sFuture[i].get();
+        BOOST_CHECK_EQUAL(sResponse.result_int(), 200);
+        BOOST_CHECK_EQUAL(sResponse.body().size(), BODY_SIZE);
+    }
+    auto sUsed = sMeter.get().to_double();
+    std::cerr << "make " << REQUEST_COUNT << " requests in " << sUsed << " seconds, rps: " << REQUEST_COUNT / sUsed << std::endl;
 }
 BOOST_AUTO_TEST_SUITE_END()

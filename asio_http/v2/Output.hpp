@@ -1,5 +1,6 @@
 #pragma once
 
+#include "HPack.hpp"
 #include "Types.hpp"
 
 #include <container/Stream.hpp>
@@ -8,9 +9,16 @@ namespace asio_http::v2 {
 
     class Output
     {
-        beast::tcp_stream& m_Stream;
-        CoroState*         m_Coro = nullptr;
+        beast::tcp_stream&        m_Stream;
+        asio::io_service::strand& m_Strand;
+        asio::steady_timer        m_Timer;
+        Deflate                   m_Deflate;
 
+        // send queue for not accountable frames (or we have budget)
+        std::list<std::string> m_PriorityQueue;
+        std::list<std::string> m_WriteQueue;
+
+        // responses body to send
         struct Info
         {
             std::string body;
@@ -20,7 +28,7 @@ namespace asio_http::v2 {
 
         uint32_t m_Budget = DEFAULT_WINDOW_SIZE; // connection budget
 
-        void send(uint32_t aStreamId, std::string_view aData, bool aLast)
+        void enqueue(uint32_t aStreamId, std::string_view aData, bool aLast)
         {
             while (!aData.empty()) {
                 const size_t sLen = std::min(aData.size(), DEFAULT_MAX_FRAME_SIZE);
@@ -30,34 +38,24 @@ namespace asio_http::v2 {
                 if (sLen == aData.size() and aLast)
                     sHeader.flags = Flags::END_STREAM;
                 sHeader.stream = aStreamId;
-                send(sHeader, aData.substr(0, sLen), m_Coro);
+                sHeader.size   = sLen;
+                sHeader.to_net();
+
+                std::string sTmp;
+                sTmp.append((const char*)&sHeader, sizeof(sHeader));
+                sTmp.append(aData.substr(0, sLen));
+                m_WriteQueue.push_back(std::move(sTmp));
+
                 aData.remove_prefix(sLen);
             }
-        }
-
-    public:
-        Output(beast::tcp_stream& aStream)
-        : m_Stream(aStream)
-        {
-        }
-
-        void assign(CoroState* aCoro)
-        {
-            m_Coro = aCoro;
-        }
-
-        void enqueue(uint32_t aStreamId, std::string&& aBody)
-        {
-            auto& sInfo = m_Info[aStreamId];
-            sInfo.body  = std::move(aBody);
         }
 
         void flush()
         {
             for (auto x = m_Info.begin(); x != m_Info.end();) {
-                auto& sStream = x->first;
-                auto& sData   = x->second;
-                auto& sBody   = sData.body;
+                auto& sStreamId = x->first;
+                auto& sData     = x->second;
+                auto& sBody     = sData.body;
 
                 if (sBody.size() == 0) { // no more data to send
                     x = m_Info.erase(x);
@@ -72,29 +70,45 @@ namespace asio_http::v2 {
                 const bool sNoBudget = sLen < MIN_FRAME_SIZE and sBody.size() > sLen;
 
                 if (sNoBudget) {
-                    TRACE("low budget " << sLen << " for stream " << sStream << " (" << sBody.size() << " bytes pending)");
+                    TRACE("low budget for stream " << sStreamId << " (" << sBody.size() << " bytes pending)"
+                                                   << "(connection: " << m_Budget << ", stream: " << sData.budget << ")");
                     x++;
                     continue;
                 }
 
                 const bool sLast = sLen == sBody.size();
-                send(sStream, std::string_view(sBody.data(), sLen), sLast);
+                enqueue(sStreamId, std::string_view(sBody.data(), sLen), sLast);
                 m_Budget -= sLen;
-                TRACE("sent " << sLen << " bytes for stream " << sStream);
+                TRACE("enqueue " << sLen << " bytes for stream " << sStreamId << ", connection budget: " << m_Budget);
 
                 if (sLast) {
-                    TRACE("stream " << sStream << " done");
+                    TRACE("stream " << sStreamId << " done");
                     x = m_Info.erase(x);
                 } else {
                     sData.budget -= sLen;
                     sBody.erase(0, sLen);
-                    TRACE("stream " << sStream << " have " << sBody.size() << " bytes pending");
+                    TRACE("stream " << sStreamId << " have " << sBody.size() << " bytes pending");
                     x++;
                 }
+                if (m_Budget < MIN_FRAME_SIZE)
+                    break;
             }
         }
 
-        void window_update(const Header& aHeader, const std::string& aData)
+    public:
+        Output(beast::tcp_stream& aStream, asio::io_service::strand& aStrand)
+        : m_Stream(aStream)
+        , m_Strand(aStrand)
+        , m_Timer(aStream.get_executor())
+        {
+        }
+
+        bool idle() const
+        {
+            return m_Info.empty() and m_WriteQueue.empty();
+        }
+
+        void recv_window_update(const Header& aHeader, const std::string& aData)
         {
             if (aData.size() != 4)
                 throw std::runtime_error("invalid window update");
@@ -113,25 +127,122 @@ namespace asio_http::v2 {
                 sBudget += sInc;
                 TRACE("stream window increment " << sInc << ", now " << sBudget);
             }
+
+            flush();
         }
 
-        bool idle() const
+        // input stream requests window
+        void emit_window_update(uint32_t aStreamId, uint32_t aInc)
         {
-            return m_Info.empty();
+            aInc = htobe32(DEFAULT_WINDOW_SIZE); // to network order
+            Header sHeader;
+            sHeader.type   = Type::WINDOW_UPDATE;
+            sHeader.stream = aStreamId;
+            sHeader.size   = sizeof(aInc);
+            sHeader.to_net();
+
+            std::string sTmp;
+            sTmp.append((const char*)&sHeader, sizeof(sHeader));
+            sTmp.append((const char*)&aInc, sizeof(aInc));
+            m_PriorityQueue.push_back(std::move(sTmp));
+
+            TRACE("queued window update for stream " << aStreamId);
+            m_Timer.cancel();
         }
 
-        void send(Header aHeader, std::string_view aStr, CoroState* aCoro) // copy header here
+        void enqueueSettings(bool sAck)
         {
-            aHeader.size = aStr.size();
-            aHeader.to_net();
+            Header sHeader;
+            sHeader.type = Type::SETTINGS;
+            if (sAck)
+                sHeader.flags = Flags::ACK_SETTINGS;
+            sHeader.to_net();
 
-            std::array<asio::const_buffer, 2> sBuffer = {
-                asio::const_buffer(&aHeader, sizeof(aHeader)),
-                asio::const_buffer(aStr.data(), aStr.size())};
+            std::string sTmp;
+            sTmp.append((const char*)&sHeader, sizeof(sHeader));
+            m_WriteQueue.push_back(std::move(sTmp));
+            m_Timer.cancel();
+        }
 
-            asio::async_write(m_Stream, sBuffer, aCoro->yield[aCoro->ec]);
-            if (aCoro->ec)
-                throw aCoro->ec;
+        void enqueue(uint32_t aStreamId, Response& aResponse)
+        {
+            Header sHeader;
+            sHeader.type   = Type::HEADERS;
+            sHeader.flags  = Flags::END_HEADERS;
+            sHeader.stream = aStreamId;
+            if (aResponse.body().empty())
+                sHeader.flags |= Flags::END_STREAM;
+            auto sDeflated = m_Deflate(aResponse);
+            sHeader.size   = sDeflated.size();
+            sHeader.to_net();
+
+            std::string sTmp;
+            sTmp.append((const char*)&sHeader, sizeof(sHeader));
+            sTmp.append(sDeflated);
+            m_WriteQueue.push_back(std::move(sTmp));
+
+            if (!aResponse.body().empty()) {
+                auto& sInfo = m_Info[aStreamId];
+                sInfo.body  = std::move(aResponse.body());
+            }
+
+            TRACE("queued response for stream " << aStreamId);
+            m_Timer.cancel();
+        }
+
+        void enqueue(uint32_t aStreamId, ClientRequest& aRequest)
+        {
+            Header sHeader;
+            sHeader.type   = Type::HEADERS;
+            sHeader.flags  = Flags::END_HEADERS;
+            sHeader.stream = aStreamId;
+            if (aRequest.body.empty())
+                sHeader.flags |= Flags::END_STREAM;
+            auto sDeflated = m_Deflate(aRequest);
+            sHeader.size   = sDeflated.size();
+            sHeader.to_net();
+
+            std::string sTmp;
+            sTmp.append((const char*)&sHeader, sizeof(sHeader));
+            sTmp.append(sDeflated);
+            m_WriteQueue.push_back(std::move(sTmp));
+
+            if (!aRequest.body.empty()) {
+                auto& sInfo = m_Info[aStreamId];
+                sInfo.body  = std::move(aRequest.body);
+            }
+
+            TRACE("queued request for stream " << aStreamId);
+            m_Timer.cancel();
+        }
+
+        void coro(asio::yield_context yield)
+        {
+            beast::error_code ec;
+
+            while (true) {
+                if (m_WriteQueue.empty()) {
+                    using namespace std::chrono_literals;
+                    m_Timer.expires_from_now(1ms);
+                    m_Timer.async_wait(yield[ec]);
+                }
+                if (!m_PriorityQueue.empty())
+                    m_WriteQueue.splice(m_WriteQueue.begin(), m_PriorityQueue, m_PriorityQueue.begin(), m_PriorityQueue.end());
+                if (!m_WriteQueue.empty()) {
+                    const auto&        sStr = m_WriteQueue.front();
+                    asio::const_buffer sBuffer(sStr.data(), sStr.size());
+                    asio::async_write(m_Stream, sBuffer, yield[ec]);
+                    if (ec)
+                        throw ec;
+                    m_WriteQueue.pop_front();
+
+                    if (m_Budget > MIN_FRAME_SIZE)
+                        flush();
+                    else
+                        TRACE("write out: low connection budget");
+                    TRACE("write out: write_queue size: " << m_WriteQueue.size() << ", body_queue size: " << m_Info.size());
+                }
+            }
         }
     };
 } // namespace asio_http::v2

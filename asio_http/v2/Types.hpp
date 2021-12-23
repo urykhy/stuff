@@ -13,7 +13,11 @@ namespace asio_http::v2 {
     {
         DATA          = 0,
         HEADERS       = 1,
+        PRIORITY      = 2,
+        RST           = 3,
         SETTINGS      = 4,
+        PUSH_PROMISE  = 5,
+        PING          = 6,
         GOAWAY        = 7,
         WINDOW_UPDATE = 8,
         CONTINUATION  = 9,
@@ -21,7 +25,11 @@ namespace asio_http::v2 {
     static const std::map<Type, std::string> sTypeNames = {
         {Type::DATA, "data"},
         {Type::HEADERS, "headers"},
+        {Type::PRIORITY, "priority"},
+        {Type::RST, "rst"},
         {Type::SETTINGS, "settings"},
+        {Type::PUSH_PROMISE, "push_promise"},
+        {Type::PING, "ping"},
         {Type::GOAWAY, "goaway"},
         {Type::WINDOW_UPDATE, "window"},
         {Type::CONTINUATION, "continuation"}};

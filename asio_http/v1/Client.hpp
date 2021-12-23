@@ -37,6 +37,7 @@ namespace asio_http::v1 {
             sReport("connect: ");
             return;
         }
+        sStream.socket().set_option(tcp::no_delay(true));
 
         sStream.expires_after(std::chrono::milliseconds(aRequest.total));
         if (!sInternal.body().empty())

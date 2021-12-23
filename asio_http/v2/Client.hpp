@@ -1,6 +1,5 @@
 #pragma once
 
-#include "HPack.hpp"
 #include "Input.hpp"
 #include "Output.hpp"
 
@@ -18,21 +17,9 @@ namespace asio_http::v2 {
         const std::string        m_Port;
         asio::io_service::strand m_Strand;
         beast::tcp_stream        m_Stream;
-        Inflate                  m_Inflate;
-        Deflate                  m_Deflate;
 
         std::unique_ptr<CoroState> m_ReadCoro;
-        std::unique_ptr<CoroState> m_WriteCoro;
-        asio::steady_timer         m_Timer;
-
-        // request from user
-        struct RQ
-        {
-            ClientRequest request;
-            Promise       promise;
-        };
-        std::list<RQ> m_WriteQueue;
-        uint32_t      m_Serial = 1;
+        uint32_t                   m_Serial = 1;
 
         // recv streams
         std::map<uint32_t, Promise> m_Streams;
@@ -50,9 +37,6 @@ namespace asio_http::v2 {
                 if (m_Notify)
                     m_Notify(m_FailReason);
             }
-            for (auto& sRQ : m_WriteQueue)
-                sRQ.promise->set_exception(std::make_exception_ptr(std::runtime_error(m_FailReason)));
-            m_WriteQueue.clear();
             for (auto& [sId, sPromise] : m_Streams)
                 sPromise->set_exception(std::make_exception_ptr(std::runtime_error(m_FailReason)));
             m_Streams.clear();
@@ -69,62 +53,39 @@ namespace asio_http::v2 {
             fail(std::string("beast error: ") + e.message());
         }
 
-        void send_one()
-        {
-            assert(!m_WriteQueue.empty());
-
-            const uint32_t sStreamId = m_Serial;
-            m_Serial += 2; // odd-numbered stream identifiers
-            Header sHeader;
-            sHeader.type   = Type::HEADERS;
-            sHeader.flags  = Flags::END_HEADERS;
-            sHeader.stream = sStreamId;
-            auto& sPromise = m_Streams[sStreamId];
-
-            auto sRQ = std::move(m_WriteQueue.front());
-            m_WriteQueue.pop_front();
-            sPromise = sRQ.promise;
-            TRACE("create stream " << sStreamId << " for " << sRQ.request.url);
-
-            if (sRQ.request.body.empty())
-                sHeader.flags |= Flags::END_STREAM;
-            m_Output.send(sHeader, m_Deflate(sRQ.request), m_WriteCoro.get());
-            if (!sRQ.request.body.empty())
-                m_Output.enqueue(sStreamId, std::move(sRQ.request.body));
-        }
-
         //
 
-        void async_i(RQ&& aRQ)
+        void async_i(ClientRequest& aRequest, Promise aPromise)
         {
             if (!m_FailReason.empty()) {
-                aRQ.promise->set_exception(std::make_exception_ptr(std::runtime_error(m_FailReason)));
+                aPromise->set_exception(std::make_exception_ptr(std::runtime_error(m_FailReason)));
                 return;
             }
 
-            const bool sStart = m_WriteQueue.empty();
-            m_WriteQueue.push_back(std::move(aRQ));
-            if (sStart and !m_WriteCoro)
-                spawn_write_coro();
+            const uint32_t sStreamId = m_Serial;
+            m_Serial += 2; // odd-numbered stream identifiers
+
+            TRACE("create stream " << sStreamId << " for " << aRequest.url);
+            m_Output.enqueue(sStreamId, aRequest);
+            m_Streams[sStreamId] = aPromise;
         }
 
         void process_settings(const Frame& aFrame) override
         {
             if (aFrame.header.flags != 0) // filter out ACK_SETTINGS
                 return;
-
-            // ignore setting body
-
-            Header sAck;
-            sAck.type  = Type::SETTINGS;
-            sAck.flags = Flags::ACK_SETTINGS;
-            m_Output.send(sAck, {}, m_ReadCoro.get());
+            m_Output.enqueueSettings(true);
             TRACE("ack settings");
         }
 
         void process_window_update(const Frame& aFrame) override
         {
-            m_Output.window_update(aFrame.header, aFrame.body);
+            m_Output.recv_window_update(aFrame.header, aFrame.body);
+        }
+
+        void emit_window_update(uint32_t aStreamId, uint32_t aInc) override
+        {
+            m_Output.emit_window_update(aStreamId, aInc);
         }
 
         void process_response(uint32_t aStreamId, Response&& aResponse) override
@@ -149,6 +110,20 @@ namespace asio_http::v2 {
             m_Stream.async_connect(sAddr, m_ReadCoro->yield[m_ReadCoro->ec]);
             if (m_ReadCoro->ec)
                 throw m_ReadCoro->ec;
+            m_Stream.socket().set_option(tcp::no_delay(true));
+        }
+
+        void spawn_write_coro()
+        {
+            asio::spawn(m_Strand, [this, p = shared_from_this()](asio::yield_context yield) mutable {
+                try {
+                    m_Output.coro(yield);
+                } catch (const beast::error_code e) {
+                    fail(e);
+                } catch (const std::exception& e) {
+                    fail(e);
+                }
+            });
         }
 
         void hello()
@@ -158,11 +133,8 @@ namespace asio_http::v2 {
             asio::async_write(m_Stream, asio::const_buffer(sRequest.data(), sRequest.size()), m_ReadCoro->yield[m_ReadCoro->ec]);
             if (m_ReadCoro->ec)
                 throw m_ReadCoro->ec;
-
-            Header sSettings;
-            sSettings.type = Type::SETTINGS;
-            m_Output.send(sSettings, {}, m_ReadCoro.get());
-            TRACE("sent hello settings");
+            TRACE("sent http/2 connection preface");
+            m_Output.enqueueSettings(false);
 
             auto sFrame = m_Input.recv();
             if (sFrame.header.type != Type::SETTINGS)
@@ -177,9 +149,8 @@ namespace asio_http::v2 {
         , m_Port(aPort)
         , m_Strand(m_Service)
         , m_Stream(m_Service)
-        , m_Timer(m_Service)
         , m_Input(m_Stream, this, false /* client */)
-        , m_Output(m_Stream)
+        , m_Output(m_Stream, m_Strand)
         , m_Notify(std::move(aNotify))
         {
         }
@@ -206,7 +177,7 @@ namespace asio_http::v2 {
         {
             auto sPromise = std::make_shared<std::promise<Response>>();
             m_Strand.post([aRequest = std::move(aRequest), sPromise, p = shared_from_this()]() mutable {
-                p->async_i({std::move(aRequest), sPromise});
+                p->async_i(aRequest, sPromise);
             });
             return sPromise->get_future();
         }
@@ -214,7 +185,7 @@ namespace asio_http::v2 {
         void async(ClientRequest&& aRequest, Promise aPromise)
         {
             m_Strand.post([aRequest = std::move(aRequest), aPromise, p = shared_from_this()]() mutable {
-                p->async_i({std::move(aRequest), aPromise});
+                p->async_i(aRequest, aPromise);
             });
         }
 
@@ -226,53 +197,18 @@ namespace asio_http::v2 {
                 m_Input.assign(m_ReadCoro.get());
                 connect();
                 DEBUG("connected to " << m_Host << ':' << m_Port);
+                spawn_write_coro();
                 hello();
                 TRACE("http/2 negotiated");
                 if (m_Notify)
                     m_Notify("connected");
                 while (m_FailReason.empty())
                     m_Input.process_frame();
+                // FIXME: check write error
             } catch (const beast::error_code e) {
                 fail(e);
             } catch (const std::exception& e) {
                 fail(e);
-            }
-        }
-
-        void spawn_write_coro()
-        {
-            asio::spawn(m_Strand, [this, p = shared_from_this()](asio::yield_context yield) mutable {
-                try {
-                    write_coro(yield);
-                } catch (const beast::error_code e) {
-                    fail(e);
-                } catch (const std::exception& e) {
-                    fail(e);
-                }
-            });
-        }
-
-        void write_coro(asio::yield_context yield)
-        {
-            TRACE("write out coro started");
-            m_WriteCoro = std::make_unique<CoroState>(CoroState{{}, yield});
-            m_Output.assign(m_WriteCoro.get());
-
-            Util::Raii sCleanup([&]() {
-                TRACE("write out coro finished");
-                m_WriteCoro.reset();
-                m_Output.assign(nullptr);
-            });
-            auto       sEnd = [this]() {
-                return m_ReadCoro->ec or (m_WriteQueue.empty() and m_Output.idle());
-            };
-            while (!sEnd()) {
-                m_Timer.expires_from_now(std::chrono::milliseconds(1));
-                m_Timer.async_wait(m_WriteCoro->yield[m_WriteCoro->ec]);
-
-                while (!m_WriteQueue.empty())
-                    send_one();
-                m_Output.flush();
             }
         }
     };
