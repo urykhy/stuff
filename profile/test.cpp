@@ -1,10 +1,11 @@
 #define BOOST_TEST_MODULE Suites
 #include <boost/test/unit_test.hpp>
 
+#include "Catapult.hpp"
+#include "Profile.hpp"
+
 #include <threads/Group.hpp>
 #include <time/Meter.hpp>
-
-#include "Profile.hpp"
 
 static void sleep_load()
 {
@@ -66,3 +67,48 @@ BOOST_AUTO_TEST_CASE(spin)
 BOOST_AUTO_TEST_SUITE_END() // cpu
 
 BOOST_AUTO_TEST_SUITE_END() // profile
+
+BOOST_AUTO_TEST_SUITE(catapult)
+BOOST_AUTO_TEST_CASE(simple)
+{
+    using namespace std::chrono_literals;
+
+    Profile::Catapult::Manager sManager("/tmp/__profile.json");
+    {
+        auto sData = sManager.start("step 1", "first level");
+        {
+            std::this_thread::sleep_for(50ms);
+            auto sData = sManager.start("step 1", "second level");
+            std::this_thread::sleep_for(50ms);
+            {
+                std::this_thread::sleep_for(50ms);
+                auto sData = sManager.start("step 1", "third level");
+                sManager.counter("step 1", "time", ::time(nullptr));
+                std::this_thread::sleep_for(50ms);
+
+                std::this_thread::sleep_for(50ms);
+            }
+            std::this_thread::sleep_for(50ms);
+        }
+        {
+            auto sData = sManager.start("step 2", "start thread");
+            std::thread([&]() {
+                auto sData = sManager.start("step 2", "just wait");
+                std::this_thread::sleep_for(50ms);
+                sManager.instant("step 2", "in the middle");
+                std::this_thread::sleep_for(50ms);
+            }).join();
+        }
+/*
+        {
+            sManager.async_start("async", "test-a", "id");
+            sManager.async_start("async", "test-b", "id");
+            std::this_thread::sleep_for(50ms);
+            sManager.async_stop("async", "test-a", "id");
+            sManager.async_stop("async", "test-b", "id");
+        }
+*/
+    }
+    sManager.dump();
+}
+BOOST_AUTO_TEST_SUITE_END() // catapult
