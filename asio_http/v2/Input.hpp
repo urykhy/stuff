@@ -129,6 +129,12 @@ namespace asio_http::v2 {
         {
             Frame sTmp;
 
+            //asio::socket_base::bytes_readable sGetReadable(true);
+            //m_Stream.socket().io_control(sGetReadable);
+            //std::size_t sReadable = sGetReadable.get();
+            //g_Profiler.counter("input", "readable", sReadable);
+            //auto sHolder = g_Profiler.start("input", "read");
+
             asio::async_read(m_Stream, asio::buffer(&sTmp.header, sizeof(Header)), m_Coro->yield[m_Coro->ec]);
             sTmp.header.to_host();
 
@@ -145,6 +151,7 @@ namespace asio_http::v2 {
                 if (m_Coro->ec)
                     throw m_Coro->ec;
             }
+
             return sTmp;
         }
 
@@ -152,6 +159,8 @@ namespace asio_http::v2 {
         {
             m_Stream.expires_after(std::chrono::seconds(30)); // FIXME configurable timeout
             auto sFrame = recv();
+
+            //auto sHolder = g_Profiler.start("input", "process");
 
             switch (sFrame.header.type) {
             case Type::DATA: process_data(sFrame); break;

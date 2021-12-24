@@ -371,5 +371,7 @@ BOOST_AUTO_TEST_CASE(mass)
     }
     auto sUsed = sMeter.get().to_double();
     std::cerr << "make " << REQUEST_COUNT << " requests in " << sUsed << " seconds, rps: " << REQUEST_COUNT / sUsed << std::endl;
+
+    //asio_http::v2::g_Profiler.dump();
 }
 BOOST_AUTO_TEST_SUITE_END()

@@ -4,9 +4,11 @@
 
 #include <unsorted/Enum.hpp>
 #include <unsorted/Log4cxx.hpp>
+//#include <profile/Catapult.hpp>
 
 namespace asio_http::v2 {
 
+    //inline Profile::Catapult::Manager g_Profiler;
     inline log4cxx::LoggerPtr sLogger = Logger::Get("http");
 
     enum class Type : uint8_t
@@ -44,6 +46,7 @@ namespace asio_http::v2 {
         MAX_HEADER_LIST_SIZE   = 0x6,
     };
 
+    constexpr size_t CONCURRENT_STREAMS        = 100;
     constexpr size_t MIN_FRAME_SIZE            = 4096;
     constexpr size_t MAX_STREAM_EXCLUSIVE      = 131072;
     constexpr size_t DEFAULT_HEADER_TABLE_SIZE = 4096;

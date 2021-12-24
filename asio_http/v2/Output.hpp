@@ -28,6 +28,14 @@ namespace asio_http::v2 {
 
         uint32_t m_Budget = DEFAULT_WINDOW_SIZE; // connection budget
 
+        enum
+        {
+            MAX_MERGE = 16
+        };
+        std::vector<asio::const_buffer> m_Buffer;
+
+        //std::optional<Profile::Catapult::Holder> m_LowBudget;
+
         void enqueue(uint32_t aStreamId, std::string_view aData, bool aLast)
         {
             while (!aData.empty()) {
@@ -52,6 +60,11 @@ namespace asio_http::v2 {
 
         void flush()
         {
+            //g_Profiler.counter("output", "streams", m_Info.size());
+            //auto sHolder = g_Profiler.start("output", "flush");
+            //if (m_LowBudget)
+            //    m_LowBudget.reset();
+
             for (auto x = m_Info.begin(); x != m_Info.end();) {
                 auto& sStreamId = x->first;
                 auto& sData     = x->second;
@@ -90,8 +103,11 @@ namespace asio_http::v2 {
                     TRACE("stream " << sStreamId << " have " << sBody.size() << " bytes pending");
                     x++;
                 }
-                if (m_Budget < MIN_FRAME_SIZE)
+                if (m_Budget < MIN_FRAME_SIZE) {
+                    //m_LowBudget.emplace(g_Profiler.start("output", "low connection budget"));
+                    TRACE("write out: low connection budget");
                     break;
+                }
             }
         }
 
@@ -101,6 +117,7 @@ namespace asio_http::v2 {
         , m_Strand(aStrand)
         , m_Timer(aStream.get_executor())
         {
+            m_Buffer.reserve(MAX_MERGE);
         }
 
         bool idle() const
@@ -129,6 +146,7 @@ namespace asio_http::v2 {
             }
 
             flush();
+            m_Timer.cancel();
         }
 
         // input stream requests window
@@ -187,6 +205,7 @@ namespace asio_http::v2 {
             }
 
             TRACE("queued response for stream " << aStreamId);
+            //g_Profiler.counter("output", "streams", m_Info.size());
             m_Timer.cancel();
         }
 
@@ -213,6 +232,7 @@ namespace asio_http::v2 {
             }
 
             TRACE("queued request for stream " << aStreamId);
+            //g_Profiler.counter("output", "streams", m_Info.size());
             m_Timer.cancel();
         }
 
@@ -223,23 +243,34 @@ namespace asio_http::v2 {
             while (true) {
                 if (m_WriteQueue.empty()) {
                     using namespace std::chrono_literals;
+                    //auto sHolder = g_Profiler.start("output", "idle");
                     m_Timer.expires_from_now(1ms);
                     m_Timer.async_wait(yield[ec]);
                 }
                 if (!m_PriorityQueue.empty())
                     m_WriteQueue.splice(m_WriteQueue.begin(), m_PriorityQueue, m_PriorityQueue.begin(), m_PriorityQueue.end());
                 if (!m_WriteQueue.empty()) {
-                    const auto&        sStr = m_WriteQueue.front();
-                    asio::const_buffer sBuffer(sStr.data(), sStr.size());
-                    asio::async_write(m_Stream, sBuffer, yield[ec]);
-                    if (ec)
-                        throw ec;
-                    m_WriteQueue.pop_front();
-
+                    {
+                        //auto sHolder = g_Profiler.start("output", "write");
+                        size_t sLength = 0;
+                        size_t sCount  = 0;
+                        for (auto sIt = m_WriteQueue.begin();
+                             sIt != m_WriteQueue.end() and sCount < MAX_MERGE and sLength < MAX_STREAM_EXCLUSIVE;
+                             sIt++, sCount++) {
+                            auto& sStr = *sIt;
+                            m_Buffer.push_back(asio::const_buffer(sStr.data(), sStr.size()));
+                            sLength += sStr.size();
+                        }
+                        asio::async_write(m_Stream, m_Buffer, yield[ec]);
+                        if (ec)
+                            throw ec;
+                        for (size_t i = 0; i < sCount; i++)
+                            m_WriteQueue.pop_front();
+                        m_Buffer.clear();
+                    }
+                    //g_Profiler.counter("output", "queue", m_WriteQueue.size());
                     if (m_Budget > MIN_FRAME_SIZE)
                         flush();
-                    else
-                        TRACE("write out: low connection budget");
                     TRACE("write out: write_queue size: " << m_WriteQueue.size() << ", body_queue size: " << m_Info.size());
                 }
             }

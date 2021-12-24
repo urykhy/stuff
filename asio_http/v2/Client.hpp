@@ -21,7 +21,15 @@ namespace asio_http::v2 {
         std::unique_ptr<CoroState> m_ReadCoro;
         uint32_t                   m_Serial = 1;
 
-        // recv streams
+        // pending requests
+        struct PendingStream
+        {
+            ClientRequest request;
+            Promise       promise;
+        };
+        std::list<PendingStream> m_Pending;
+
+        // active streams
         std::map<uint32_t, Promise> m_Streams;
 
         Input       m_Input;
@@ -37,9 +45,13 @@ namespace asio_http::v2 {
                 if (m_Notify)
                     m_Notify(m_FailReason);
             }
+            auto sPtr = std::make_exception_ptr(std::runtime_error(m_FailReason));
             for (auto& [sId, sPromise] : m_Streams)
-                sPromise->set_exception(std::make_exception_ptr(std::runtime_error(m_FailReason)));
+                sPromise->set_exception(sPtr);
             m_Streams.clear();
+            for (auto& x : m_Pending)
+                x.promise->set_exception(sPtr);
+            m_Pending.clear();
             m_Stream.cancel();
         }
 
@@ -61,7 +73,15 @@ namespace asio_http::v2 {
                 aPromise->set_exception(std::make_exception_ptr(std::runtime_error(m_FailReason)));
                 return;
             }
+            if (m_Streams.size() >= CONCURRENT_STREAMS) {
+                m_Pending.push_back({std::move(aRequest), aPromise});
+                return;
+            }
+            initiate(aRequest, aPromise);
+        }
 
+        void initiate(ClientRequest& aRequest, Promise aPromise)
+        {
             const uint32_t sStreamId = m_Serial;
             m_Serial += 2; // odd-numbered stream identifiers
 
@@ -80,11 +100,13 @@ namespace asio_http::v2 {
 
         void process_window_update(const Frame& aFrame) override
         {
+            //g_Profiler.instant("client", "recv window update");
             m_Output.recv_window_update(aFrame.header, aFrame.body);
         }
 
         void emit_window_update(uint32_t aStreamId, uint32_t aInc) override
         {
+            //g_Profiler.instant("client", "emit window update");
             m_Output.emit_window_update(aStreamId, aInc);
         }
 
@@ -96,6 +118,12 @@ namespace asio_http::v2 {
             assert(sIt != m_Streams.end());
             sIt->second->set_value(std::move(aResponse));
             m_Streams.erase(sIt);
+
+            if (!m_Pending.empty()) {
+                auto& [sRequest, sPromise] = m_Pending.front();
+                initiate(sRequest, sPromise);
+                m_Pending.pop_front();
+            }
         }
 
         void connect()
@@ -192,6 +220,7 @@ namespace asio_http::v2 {
     private:
         void read_coro(asio::yield_context yield)
         {
+            //g_Profiler.meta("client");
             try {
                 m_ReadCoro = std::make_unique<CoroState>(CoroState{{}, yield});
                 m_Input.assign(m_ReadCoro.get());

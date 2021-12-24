@@ -7,6 +7,8 @@ threads   = dependency('threads')
 curl      = dependency('libcurl')
 log4cxx   = dependency('liblog4cxx')
 nghttp2   = dependency('libnghttp2') # for hpack
+#json      = dependency('jsoncpp') # catapult
+
 golang    = find_program('go')
 go_env    = environment()
 go_env.set('GO111MODULE', 'off')
