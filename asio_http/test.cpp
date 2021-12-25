@@ -143,6 +143,8 @@ BOOST_AUTO_TEST_SUITE_END()
 BOOST_AUTO_TEST_SUITE(asio_http_v2)
 BOOST_AUTO_TEST_CASE(simple)
 {
+    std::this_thread::sleep_for(100ms); // sleep to avoid possible adress already in use
+
     auto sRouter = std::make_shared<asio_http::Router>();
     sRouter->insert("/hello", [](asio_http::asio::io_service&, const asio_http::Request& aRequest, asio_http::Response& aResponse, asio_http::asio::yield_context yield) {
         if (aRequest.method() == asio_http::http::verb::post)
@@ -178,6 +180,8 @@ BOOST_AUTO_TEST_CASE(simple)
 }
 BOOST_AUTO_TEST_CASE(out_of_order)
 {
+    std::this_thread::sleep_for(100ms); // sleep to avoid possible adress already in use
+
     auto sRouter = std::make_shared<asio_http::Router>();
     sRouter->insert("/sleep1", [](asio_http::asio::io_service&, const asio_http::Request& aRequest, asio_http::Response& aResponse, asio_http::asio::yield_context yield) {
         std::this_thread::sleep_for(1s);
@@ -226,6 +230,8 @@ BOOST_AUTO_TEST_CASE(out_of_order)
 }
 BOOST_AUTO_TEST_CASE(manager)
 {
+    std::this_thread::sleep_for(100ms); // sleep to avoid possible adress already in use
+
     auto sRouter = std::make_shared<asio_http::Router>();
     sRouter->insert("/hello", [](asio_http::asio::io_service&, const asio_http::Request& aRequest, asio_http::Response& aResponse, asio_http::asio::yield_context yield) {
         if (aRequest.method() == asio_http::http::verb::post)
@@ -258,6 +264,7 @@ BOOST_AUTO_TEST_CASE(manager)
         BOOST_TEST_MESSAGE("\t" << x.name() << ": " << x.value());
     BOOST_CHECK_EQUAL(sResponse.result_int(), 200);
 }
+#if 0
 BOOST_AUTO_TEST_CASE(h2spec, *boost::unit_test::disabled())
 {
     auto sRouter = std::make_shared<asio_http::Router>();
@@ -277,8 +284,11 @@ BOOST_AUTO_TEST_CASE(h2spec, *boost::unit_test::disabled())
     BOOST_TEST_MESSAGE("return code: " << sResult.code);
     std::cout << sResult.out;
 }
+#endif
 BOOST_AUTO_TEST_CASE(golang_server)
 {
+    std::this_thread::sleep_for(100ms); // sleep to avoid possible adress already in use
+
     Threads::Asio  sAsio;
     Threads::Group sGroup;
     sAsio.start(sGroup);
@@ -308,6 +318,8 @@ BOOST_AUTO_TEST_CASE(golang_server)
 }
 BOOST_AUTO_TEST_CASE(dual_server)
 {
+    std::this_thread::sleep_for(100ms); // sleep to avoid possible adress already in use
+
     auto sRouter = std::make_shared<asio_http::Router>();
     sRouter->insert("/hello", [](asio_http::asio::io_service&, const asio_http::Request& aRequest, asio_http::Response& aResponse, asio_http::asio::yield_context yield) {
         aResponse.result(asio_http::http::status::ok);
@@ -329,6 +341,8 @@ BOOST_AUTO_TEST_CASE(dual_server)
 }
 BOOST_AUTO_TEST_CASE(mass)
 {
+    std::this_thread::sleep_for(100ms); // sleep to avoid possible adress already in use
+
     enum
     {
         REQUEST_COUNT = 5000,
