@@ -244,7 +244,7 @@ namespace asio_http::v2 {
                 if (m_WriteQueue.empty()) {
                     using namespace std::chrono_literals;
                     //auto sHolder = g_Profiler.start("output", "idle");
-                    m_Timer.expires_from_now(1ms);
+                    m_Timer.expires_from_now(1s);
                     m_Timer.async_wait(yield[ec]);
                 }
                 if (!m_PriorityQueue.empty())
