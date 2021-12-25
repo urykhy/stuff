@@ -14,6 +14,7 @@ namespace asio_http::v2 {
         asio::io_service::strand m_Strand;
         beast::tcp_stream        m_Stream;
         RouterPtr                m_Router;
+        std::string              m_PeerName;
 
         std::unique_ptr<CoroState> m_ReadCoro;
 
@@ -51,13 +52,12 @@ namespace asio_http::v2 {
         {
             TRACE("got complete request");
 
-            std::string sClientAddr = m_Stream.socket().remote_endpoint().address().to_string();
-            auto        sCall       = [p = shared_from_this(), aStreamId, aRequest = std::move(aRequest), sClientAddr = std::move(sClientAddr)](asio::yield_context yield) mutable {
+            auto sCall = [p = shared_from_this(), aStreamId, aRequest = std::move(aRequest)](asio::yield_context yield) mutable {
                 beast::error_code ec;
                 Response          sResponse;
 
                 //auto sHolder = g_Profiler.start("input", "call");
-                Container::Session::Set sPeer("peer", sClientAddr);
+                Container::Session::Set sPeer("peer", p->m_PeerName);
                 p->m_Router->call(p->m_Service, aRequest, sResponse, yield[ec]);
                 // FIXME: handle ec
 
@@ -153,7 +153,11 @@ namespace asio_http::v2 {
         {
             //g_Profiler.meta("server");
             try {
-                DEBUG("connection from " << m_Stream.socket().remote_endpoint());
+                m_PeerName = m_Stream.socket().remote_endpoint().address().to_string() +
+                             ':' +
+                             std::to_string(m_Stream.socket().remote_endpoint().port());
+                DEBUG("connection from " << m_PeerName);
+
                 m_ReadCoro = std::make_unique<CoroState>(CoroState{{}, yield});
                 if (legacy()) {
                     DEBUG("legacy 1.1 client");
