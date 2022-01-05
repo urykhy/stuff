@@ -1,6 +1,7 @@
 #define BOOST_TEST_MODULE Suites
 #include <boost/test/unit_test.hpp>
 
+#define CATAPULT_PROFILE
 #include "Catapult.hpp"
 #include "Profile.hpp"
 
@@ -73,42 +74,39 @@ BOOST_AUTO_TEST_CASE(simple)
 {
     using namespace std::chrono_literals;
 
-    Profile::Catapult::Manager sManager("/tmp/__profile.json");
+    Threads::Group sGroup;
+
+    CATAPULT_MANAGER("/tmp/__profile.json")
+    CATAPULT_START(sGroup);
+    CATAPULT_THREAD("main")
     {
-        auto sData = sManager.start("step 1", "first level");
+        CATAPULT_EVENT("step 1", "level 1");
         {
             std::this_thread::sleep_for(50ms);
-            auto sData = sManager.start("step 1", "second level");
+            CATAPULT_EVENT("step 1", "level 2")
             std::this_thread::sleep_for(50ms);
             {
                 std::this_thread::sleep_for(50ms);
-                auto sData = sManager.start("step 1", "third level");
-                sManager.counter("step 1", "time", ::time(nullptr));
+                CATAPULT_EVENT("step 1", "level 3")
+                CATAPULT_COUNTER("step 1", "time", ::time(nullptr))
                 std::this_thread::sleep_for(50ms);
-
                 std::this_thread::sleep_for(50ms);
             }
             std::this_thread::sleep_for(50ms);
         }
         {
-            auto sData = sManager.start("step 2", "start thread");
+            CATAPULT_EVENT("step 2", "wait thread")
             std::thread([&]() {
-                auto sData = sManager.start("step 2", "just wait");
+                CATAPULT_THREAD("thread");
+                CATAPULT_EVENT("step 2", "work in thread")
                 std::this_thread::sleep_for(50ms);
-                sManager.instant("step 2", "in the middle");
+                CATAPULT_MARK("step 2", "in the middle")
                 std::this_thread::sleep_for(50ms);
             }).join();
         }
-/*
-        {
-            sManager.async_start("async", "test-a", "id");
-            sManager.async_start("async", "test-b", "id");
-            std::this_thread::sleep_for(50ms);
-            sManager.async_stop("async", "test-a", "id");
-            sManager.async_stop("async", "test-b", "id");
-        }
-*/
     }
-    sManager.dump();
+    CATAPULT_DONE()
+
+    sGroup.wait();
 }
 BOOST_AUTO_TEST_SUITE_END() // catapult
