@@ -10,6 +10,7 @@
 #include "ListArray.hpp"
 #include "RequestQueue.hpp"
 #include "Session.hpp"
+#include "Collect.hpp"
 
 using namespace std::chrono_literals;
 
@@ -115,5 +116,37 @@ BOOST_AUTO_TEST_CASE(is_uniq)
     BOOST_CHECK_EQUAL(Container::is_unique(std::vector({1})), true);
     BOOST_CHECK_EQUAL(Container::is_unique(std::vector({1,2})), true);
     BOOST_CHECK_EQUAL(Container::is_unique(std::vector({1,2,3,4})), true);
+}
+BOOST_AUTO_TEST_CASE(collect)
+{
+    using Data          = std::string;
+    unsigned   sCounter = 0;
+
+    const std::vector<Data> sTestData({"abc", "def", "ghi", "jkl", "mno", "pqr", "stu", "vwx", "yz", "123"});
+
+    Container::Collect<Data> c(3, [&sCounter, &sTestData](std::vector<Data>& aData) {
+        std::vector<Data> sExpected;
+        switch (sCounter) {
+        case 0: sExpected.assign(sTestData.begin(), sTestData.begin() + 3); break;
+        case 1: sExpected.assign(sTestData.begin() + 3, sTestData.begin() + 6); break;
+        case 2: sExpected.assign(sTestData.begin() + 6, sTestData.begin() + 9); break;
+        case 3: sExpected.assign(sTestData.begin() + 9, sTestData.end()); break;
+        }
+        BOOST_CHECK_EQUAL_COLLECTIONS(aData.begin(), aData.end(), sExpected.begin(), sExpected.end());
+        sCounter++;
+    });
+
+    for (auto& x : sTestData)
+        c.insert(Data(x));
+
+    BOOST_CHECK_EQUAL(sCounter, 3);
+    BOOST_CHECK_EQUAL(c.size(), 1);
+    BOOST_CHECK_EQUAL(c.idle(), false);
+
+    c.flush();
+
+    BOOST_CHECK_EQUAL(sCounter, 4);
+    BOOST_CHECK_EQUAL(c.size(), 0);
+    BOOST_CHECK_EQUAL(c.idle(), true);
 }
 BOOST_AUTO_TEST_SUITE_END()

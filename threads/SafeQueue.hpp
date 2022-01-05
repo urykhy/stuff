@@ -154,7 +154,7 @@ namespace Threads
         , m_Params(aParams)
         { }
 
-        void start(Group& aGroup, unsigned count = 1)
+        void start(Group& aGroup, unsigned aCount = 1)
         {
             aGroup.start([this]() {
                 while (!m_Queue.exiting())
@@ -166,7 +166,7 @@ namespace Threads
                         m_Done++;
                     }
                 }
-            }, count);
+            }, aCount);
             aGroup.at_stop([this](){ m_Queue.stop(); });
         }
 
