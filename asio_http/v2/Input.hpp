@@ -228,8 +228,6 @@ namespace asio_http::v2 {
             m_Stream.expires_after(std::chrono::seconds(30)); // FIXME configurable timeout
             auto sFrame = recv();
 
-            //auto sHolder = g_Profiler.start("input", "process");
-
             switch (sFrame.header.type) {
             case Type::DATA: process_data(sFrame); break;
             case Type::HEADERS: process_headers(sFrame); break;

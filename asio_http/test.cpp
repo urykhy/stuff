@@ -1,6 +1,8 @@
 #define BOOST_TEST_MODULE Suites
 #include <boost/test/unit_test.hpp>
 
+#define CATAPULT_PROFILE
+
 #include "Alive.hpp"
 #include "Client.hpp"
 #include "Server.hpp"
@@ -8,6 +10,7 @@
 #include "v2/Server.hpp"
 
 #include <curl/Curl.hpp>
+#include <profile/Catapult.hpp>
 #include <time/Meter.hpp>
 #include <unsorted/Process.hpp>
 
@@ -360,6 +363,9 @@ BOOST_AUTO_TEST_CASE(mass)
         aResponse.body().assign(sBody);
     });
 
+    CATAPULT_MANAGER(Util::getEnv("CATAPULT_PROFILE"));
+    CATAPULT_THREAD("main")
+
     Threads::Asio  sAsioClient;
     Threads::Asio  sAsioServer;
     Threads::Group sGroup;
@@ -373,19 +379,23 @@ BOOST_AUTO_TEST_CASE(mass)
     sFuture.reserve(REQUEST_COUNT);
 
     Time::Meter sMeter;
+    CATAPULT_START(sGroup);
+    CATAPULT_MARK("test", "begin")
     for (int i = 0; i < REQUEST_COUNT; i++) {
         sFuture.push_back(sClient->async({.method = asio_http::http::verb::get,
                                           .url    = "http://127.0.0.1:2081/hello"}));
     }
+    CATAPULT_MARK("test", "requests sent")
     for (int i = 0; i < REQUEST_COUNT; i++) {
         sFuture[i].wait();
         auto sResponse = sFuture[i].get();
         BOOST_CHECK_EQUAL(sResponse.result_int(), 200);
         BOOST_CHECK_EQUAL(sResponse.body().size(), BODY_SIZE);
     }
+    CATAPULT_MARK("test", "end")
     auto sUsed = sMeter.get().to_double();
     std::cerr << "make " << REQUEST_COUNT << " requests in " << sUsed << " seconds, rps: " << REQUEST_COUNT / sUsed << std::endl;
 
-    //asio_http::v2::g_Profiler.dump();
+    CATAPULT_DONE()
 }
 BOOST_AUTO_TEST_SUITE_END()

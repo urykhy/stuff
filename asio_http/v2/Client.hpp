@@ -100,13 +100,13 @@ namespace asio_http::v2 {
 
         void process_window_update(const Frame& aFrame) override
         {
-            //g_Profiler.instant("client", "recv window update");
+            CATAPULT_MARK("client", "recv window update");
             m_Output.recv_window_update(aFrame.header, aFrame.body);
         }
 
         void emit_window_update(uint32_t aStreamId, uint32_t aInc) override
         {
-            //g_Profiler.instant("client", "emit window update");
+            CATAPULT_MARK("client", "emit window update");
             m_Output.emit_window_update(aStreamId, aInc);
         }
 
@@ -220,7 +220,7 @@ namespace asio_http::v2 {
     private:
         void read_coro(asio::yield_context yield)
         {
-            //g_Profiler.meta("client");
+            CATAPULT_THREAD("client")
             try {
                 m_ReadCoro = std::make_unique<CoroState>(CoroState{{}, yield});
                 m_Input.assign(m_ReadCoro.get());

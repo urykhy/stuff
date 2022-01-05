@@ -2,13 +2,12 @@
 
 #include "../Router.hpp" // asio types
 
+#include <profile/Catapult.hpp>
 #include <unsorted/Enum.hpp>
 #include <unsorted/Log4cxx.hpp>
-//#include <profile/Catapult.hpp>
 
 namespace asio_http::v2 {
 
-    //inline Profile::Catapult::Manager g_Profiler;
     inline log4cxx::LoggerPtr sLogger = Logger::Get("http");
 
     enum class Type : uint8_t

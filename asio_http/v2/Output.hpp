@@ -34,8 +34,9 @@ namespace asio_http::v2 {
         };
         std::vector<asio::const_buffer> m_Buffer;
 
-        //std::optional<Profile::Catapult::Holder> m_LowBudget;
-
+#ifdef CATAPULT_PROFILE
+        std::optional<Profile::Catapult::Holder> m_LowBudget;
+#endif
         void enqueue(uint32_t aStreamId, std::string_view aData, bool aLast)
         {
             while (!aData.empty()) {
@@ -60,10 +61,11 @@ namespace asio_http::v2 {
 
         void flush()
         {
-            //g_Profiler.counter("output", "streams", m_Info.size());
-            //auto sHolder = g_Profiler.start("output", "flush");
-            //if (m_LowBudget)
-            //    m_LowBudget.reset();
+            CATAPULT_COUNTER("output", "streams", m_Info.size());
+#ifdef CATAPULT_PROFILE
+            if (m_LowBudget)
+                m_LowBudget.reset();
+#endif
 
             for (auto x = m_Info.begin(); x != m_Info.end();) {
                 auto& sStreamId = x->first;
@@ -104,7 +106,10 @@ namespace asio_http::v2 {
                     x++;
                 }
                 if (m_Budget < MIN_FRAME_SIZE) {
-                    //m_LowBudget.emplace(g_Profiler.start("output", "low connection budget"));
+#ifdef CATAPULT_PROFILE
+                    CATAPULT_EVENT("output", "low connection budget");
+                    m_LowBudget.emplace(std::move(sCatapultHolder));
+#endif
                     TRACE("write out: low connection budget");
                     break;
                 }
@@ -205,7 +210,7 @@ namespace asio_http::v2 {
             }
 
             TRACE("queued response for stream " << aStreamId);
-            //g_Profiler.counter("output", "streams", m_Info.size());
+            CATAPULT_COUNTER("output", "streams", m_Info.size())
             m_Timer.cancel();
         }
 
@@ -232,7 +237,7 @@ namespace asio_http::v2 {
             }
 
             TRACE("queued request for stream " << aStreamId);
-            //g_Profiler.counter("output", "streams", m_Info.size());
+            CATAPULT_COUNTER("output", "streams", m_Info.size())
             m_Timer.cancel();
         }
 
@@ -241,9 +246,9 @@ namespace asio_http::v2 {
             beast::error_code ec;
 
             while (true) {
-                if (m_WriteQueue.empty()) {
+                if (m_WriteQueue.empty() and m_PriorityQueue.empty()) {
                     using namespace std::chrono_literals;
-                    //auto sHolder = g_Profiler.start("output", "idle");
+                    CATAPULT_EVENT("output", "idle")
                     m_Timer.expires_from_now(1s);
                     m_Timer.async_wait(yield[ec]);
                 }
@@ -251,7 +256,7 @@ namespace asio_http::v2 {
                     m_WriteQueue.splice(m_WriteQueue.begin(), m_PriorityQueue, m_PriorityQueue.begin(), m_PriorityQueue.end());
                 if (!m_WriteQueue.empty()) {
                     {
-                        //auto sHolder = g_Profiler.start("output", "write");
+                        CATAPULT_EVENT("output", "write")
                         size_t sLength = 0;
                         size_t sCount  = 0;
                         for (auto sIt = m_WriteQueue.begin();
@@ -268,7 +273,7 @@ namespace asio_http::v2 {
                             m_WriteQueue.pop_front();
                         m_Buffer.clear();
                     }
-                    //g_Profiler.counter("output", "queue", m_WriteQueue.size());
+                    CATAPULT_COUNTER("output", "queue", m_WriteQueue.size())
                     if (m_Budget > MIN_FRAME_SIZE)
                         flush();
                     TRACE("write out: write_queue size: " << m_WriteQueue.size() << ", body_queue size: " << m_Info.size());

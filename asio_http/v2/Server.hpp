@@ -38,13 +38,13 @@ namespace asio_http::v2 {
 
         void process_window_update(const Frame& aFrame) override
         {
-            //g_Profiler.instant("server", "recv window update");
+            CATAPULT_MARK("server", "recv window update");
             m_Output.recv_window_update(aFrame.header, aFrame.body);
         }
 
         void emit_window_update(uint32_t aStreamId, uint32_t aInc) override
         {
-            //g_Profiler.instant("server", "emit window update");
+            CATAPULT_MARK("server", "emit window update");
             m_Output.emit_window_update(aStreamId, aInc);
         }
 
@@ -56,7 +56,6 @@ namespace asio_http::v2 {
                 beast::error_code ec;
                 Response          sResponse;
 
-                //auto sHolder = g_Profiler.start("input", "call");
                 Container::Session::Set sPeer("peer", p->m_PeerName);
                 p->m_Router->call(p->m_Service, aRequest, sResponse, yield[ec]);
                 // FIXME: handle ec
@@ -151,7 +150,7 @@ namespace asio_http::v2 {
     private:
         void read_coro(asio::yield_context yield)
         {
-            //g_Profiler.meta("server");
+            CATAPULT_THREAD("server")
             try {
                 m_PeerName = m_Stream.socket().remote_endpoint().address().to_string() +
                              ':' +
