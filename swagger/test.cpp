@@ -2,6 +2,7 @@
 #include <boost/test/unit_test.hpp>
 
 #include "common.v1.hpp"
+#include "discovery.v1.hpp"
 #include "jsonParam.v1.hpp"
 #include "keyValue.v1.hpp"
 #include "redirect.v1.hpp"
@@ -47,6 +48,19 @@ struct Common : api::common_1_0::server
         return sResult;
     }
     virtual ~Common() {}
+};
+
+struct Discovery : api::discovery_1_0::server
+{
+    get_discovery_response_v
+    get_discovery_i(asio_http::asio::io_service&   aService,
+               const get_discovery_parameters&     aRequest,
+               asio_http::asio::yield_context yield) override
+    {
+        get_discovery_response_200 sResult;
+        sResult.body = "success";
+        return sResult;
+    }
 };
 
 struct KeyValue : api::keyValue_1_0::server
@@ -518,7 +532,29 @@ BOOST_FIXTURE_TEST_CASE(redirect, WithServer)
         sR = sClient.get_permanent({}); // 2nd call
     }
 }
-BOOST_AUTO_TEST_SUITE_END()
+BOOST_FIXTURE_TEST_CASE(discovery, WithServer)
+{
+    Discovery sDiscovery;
+    sDiscovery.with_discovery(m_Asio.service(), "127.0.0.1:3000");
+    sDiscovery.configure(m_Router);
+    sDiscovery.with_weight(20);
+    Threads::sleep(0.1); // wait until etcd updated
+
+    {
+        Etcd::Client::Params sParams;
+        Etcd::Client         sClient(m_Asio.service(), sParams);
+        auto                 sList = sClient.list("discovery/swagger");
+        BOOST_REQUIRE_EQUAL(1, sList.size());
+        BOOST_CHECK_EQUAL(sList[0].key, "discovery/swagger/api:discovery/version:1.0/127.0.0.1:3000");
+        BOOST_CHECK_EQUAL(sList[0].value, R"({"weight": 20})");
+    }
+
+    api::discovery_1_0::client sClient(m_HttpClient, m_Asio.service());
+    Threads::sleep(0.1); // wait until we collect peers from etcd
+    auto sResponse = sClient.get_discovery({});
+    BOOST_CHECK_EQUAL(sResponse.body, "success");
+}
+BOOST_AUTO_TEST_SUITE_END() // rpc
 
 BOOST_AUTO_TEST_SUITE(http2)
 BOOST_FIXTURE_TEST_CASE(simple, WithServerV2)

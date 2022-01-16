@@ -53,6 +53,9 @@ class server
         return sClaim;
     }
 {% endif %}
+{% if x_discovery %}
+    std::shared_ptr<Etcd::Notify> m_Notify;
+{% endif %}
 
 public:
 
@@ -74,7 +77,20 @@ public:
     {
         m_Jwt = aManager;
     }
-
+{% endif %}
+{% if x_discovery %}
+    void with_discovery(boost::asio::io_service& aService, const std::string& aAddr)
+    {
+        Etcd::Notify::Params sParams;
+        sParams.key        = "discovery/swagger/api:{{ doc['info']['title'] }}/version:{{ doc['info']['version'] }}/" + aAddr;
+        std::string sValue = R"({"weight": 10})";
+        m_Notify = std::make_shared<Etcd::Notify>(aService, sParams, sValue);
+        m_Notify->start();
+    }
+    void with_weight(unsigned aWeight)
+    {
+        m_Notify->update("{\"weight\": " + std::to_string(aWeight) + "}");
+    }
 {% endif %}
 
 {% call(doc, path, method, name) _for_every_method(doc) %}

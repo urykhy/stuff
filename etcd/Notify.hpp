@@ -11,8 +11,8 @@ namespace Etcd {
         {
             Client::Params addr;
             std::string    key;
-            int            ttl      = 60;
-            int            period   = 20;
+            int            ttl      = 30;
+            int            period   = 10;
             bool           no_clear = false;
         };
 

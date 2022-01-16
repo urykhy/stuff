@@ -38,6 +38,12 @@
     #include <jaeger/Helper.hpp>
 {% endif %}
 
+{% set x_discovery = doc['info'].get('x-discovery', false) %}
+{% if x_discovery %}
+    #include <etcd/Balancer.hpp>
+    #include <etcd/Notify.hpp>
+{% endif %}
+
 {% set bearer_schemas = [] %}
 {% for sc, val in doc.get('components',{}).get('securitySchemes',{}).items() if val['scheme'] == 'bearer' %}
     {% do bearer_schemas.append(sc) %}

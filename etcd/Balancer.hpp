@@ -14,7 +14,7 @@ namespace Etcd {
         {
             Client::Params addr;
             std::string    prefix;
-            int            period = 60;
+            int            period = 10;
         };
 
         struct Entry

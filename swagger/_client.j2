@@ -1,7 +1,11 @@
 class client
 {
     asio_http::ClientPtr m_HttpClient;
+{%- if x_discovery %}
+    std::shared_ptr<Etcd::Balancer> m_Balancer;
+{%- else %}
     const std::string m_Base;
+{%- endif %}
     log4cxx::LoggerPtr sLogger = Logger::Get("http");
     {% if x_bearer %}
     std::string m_Token;
@@ -9,15 +13,30 @@ class client
 
     using Lock = std::unique_lock<std::mutex>;
     std::mutex m_Mutex;
-    {% call(doc, path, method, name) _for_every_method(doc) %}
-    std::string m_{{ name }}_redirect = {};
-    {% endcall %}
+    {%- call(doc, path, method, name) _for_every_method(doc) %}
+    {%- if x_discovery %}
+        std::map<std::string, std::string> m_{{ name }}_redirect = {};
+    {%- else %}
+        std::string m_{{ name }}_redirect = {};
+    {%- endif %}
+    {%- endcall %}
 
 public:
+{% if x_discovery %}
+    client(asio_http::ClientPtr aHttpClient, boost::asio::io_service& aService)
+    : m_HttpClient(aHttpClient)
+    {
+        Etcd::Balancer::Params sBalancerParams;
+        sBalancerParams.prefix = "discovery/swagger/api:{{ doc['info']['title'] }}/version:{{ doc['info']['version'] }}/";
+        m_Balancer = std::make_shared<Etcd::Balancer>(aService, sBalancerParams);
+        m_Balancer->start();
+    }
+{% else %}
     client(asio_http::ClientPtr aHttpClient, const std::string& aBase)
     : m_HttpClient(aHttpClient)
     , m_Base(aBase)
     {}
+{% endif %}
 
     {% if x_bearer %}
     void __with_token(const std::string& aToken)
@@ -50,15 +69,35 @@ public:
         {
             namespace http = boost::beast::http;
             asio_http::ClientRequest sRequest = aRequest.__format();
-            if (Lock sLock(m_Mutex); m_{{ name }}_redirect.empty())
+            auto sPick = [this]()
             {
-                sRequest.url = m_Base + sRequest.url;
-            }
-            else
-            {
-                DEBUG("permanent redirected to " << m_{{ name }}_redirect);
-                sRequest.url = m_{{ name }}_redirect + sRequest.url;
-            }
+                Lock sLock(m_Mutex);
+                {%- if x_discovery %}
+                    std::string sPeer = "http://" + m_Balancer->random().key;
+                    auto sIt = m_{{ name }}_redirect.find(sPeer);
+                    if (sIt == m_{{ name }}_redirect.end())
+                    {
+                        return sPeer;
+                    }
+                    else
+                    {
+                        DEBUG("permanent redirected to " << sIt->second);
+                        return sIt->second;
+                    }
+                {%- else %}
+                    if (m_{{ name }}_redirect.empty())
+                    {
+                        return m_Base;
+                    }
+                    else
+                    {
+                        DEBUG("permanent redirected to " << m_{{ name }}_redirect);
+                        return m_{{ name }}_redirect;
+                    }
+                {%- endif %}
+            };
+            const std::string sPeer = sPick();
+            sRequest.url = sPeer + sRequest.url;
 
             {% if x_jaeger %}
             std::unique_ptr<Jaeger::Metric::Step> sTraceCall;
@@ -106,7 +145,11 @@ public:
                     sRequest.url = sLocation.to_string();
                     const auto sParsed = Parser::url(sLocation.to_string());
                     Lock sLock(m_Mutex);
-                    m_{{ name }}_redirect = "http://" + sParsed.host + ":" + sParsed.port;
+                    {%- if x_discovery %}
+                        m_{{ name }}_redirect[sPeer] = "http://" + sParsed.host + ":" + sParsed.port;
+                    {%- else %}
+                        m_{{ name }}_redirect = "http://" + sParsed.host + ":" + sParsed.port;
+                    {%- endif %}
                 }
                 else
                 {
