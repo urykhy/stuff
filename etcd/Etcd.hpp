@@ -4,24 +4,26 @@
 
 #include "Protocol.hpp"
 
-#include <curl/Curl.hpp>
+#include <asio_http/Client.hpp>
 #include <format/Hex.hpp>
 #include <parser/Atoi.hpp>
 #include <parser/Base64.hpp>
 #include <parser/Json.hpp>
 #include <unsorted/Env.hpp>
 
-#ifndef BOOST_TEST_MESSAGE
-#define BOOST_TEST_MESSAGE(x)
-#endif
-
 namespace Etcd {
+
+    namespace asio  = boost::asio;
+    namespace beast = boost::beast;
+    namespace http  = beast::http;
+
     struct Client : boost::noncopyable
     {
         struct Params
         {
-            std::string url    = Util::getEnv("ETCD_HOST");
-            std::string prefix = Util::getEnv("ETCD_PREFIX");
+            std::string host    = Util::getEnv("ETCD_HOST");
+            std::string prefix  = Util::getEnv("ETCD_PREFIX");
+            time_t      timeout = 3; // seconds
         };
 
         struct Pair
@@ -38,27 +40,41 @@ namespace Etcd {
             }
         };
         using List = std::vector<Pair>;
+        using Coro = std::optional<boost::asio::yield_context>;
 
     private:
-        const Params m_Params;
-        Curl::Client m_Client;
+        asio::io_service& m_Service;
+        const Params      m_Params;
+        Coro              m_Coro;
 
         Json::Value request(const std::string& aAPI, const std::string& aBody)
         {
             //BOOST_TEST_MESSAGE("etcd <- " << aAPI << ' ' << aBody);
-            const Curl::Client::Request sRequest{
-                .method  = Curl::Client::Method::POST,
-                .url     = m_Params.url + "/v3/" + aAPI,
+            asio_http::ClientRequest sRequest{
+                .method  = http::verb::post,
+                .url     = m_Params.host + "/v3/" + aAPI,
                 .body    = aBody,
                 .headers = {{"Accept", "application/json"}, {"Content-Type", "application/json"}}};
-            auto sResult = m_Client(sRequest);
+
+            std::future<asio_http::Response> sFuture;
+            if (m_Coro.has_value())
+                sFuture = asio_http::async(m_Service, std::move(sRequest), *m_Coro);
+            else
+                sFuture = asio_http::async(m_Service, std::move(sRequest));
+
+            if (sFuture.wait_for(std::chrono::seconds(m_Params.timeout)) != std::future_status::ready)
+                throw std::runtime_error("etcd timeout");
+
+            auto sResult = sFuture.get();
             //BOOST_TEST_MESSAGE("etcd -> " << sResult);
-            return Protocol::parseResponse(sResult.status, sResult.body);
+            return Protocol::parseResponse(sResult.result_int(), sResult.body());
         }
 
     public:
-        Client(const Params& aParams)
-        : m_Params(aParams)
+        Client(asio::io_service& aService, const Params& aParams, Coro aCoro = {})
+        : m_Service(aService)
+        , m_Params(aParams)
+        , m_Coro(aCoro)
         {}
 
         std::string get(const std::string& aKey)

@@ -8,7 +8,7 @@
 #include <threads/Periodic.hpp>
 
 namespace Etcd {
-    struct Balancer
+    struct Balancer : public std::enable_shared_from_this<Balancer>
     {
         struct Params
         {
@@ -26,9 +26,12 @@ namespace Etcd {
         using List = std::vector<Entry>;
 
     private:
-        const Params      m_Params;
-        Etcd::Client      m_Client;
-        Threads::Periodic m_Periodic;
+        const Params                  m_Params;
+        asio::io_service&             m_Service;
+        std::unique_ptr<Etcd::Client> m_Client;
+
+        std::atomic<bool>  m_Stop{false};
+        asio::steady_timer m_Timer;
 
         using Lock = std::unique_lock<std::mutex>;
         mutable std::mutex m_Mutex;
@@ -38,9 +41,10 @@ namespace Etcd {
 
         using Error = std::runtime_error;
 
-        void read_i()
+        void read_i(asio::yield_context yield)
         {
-            auto     sList = m_Client.list(m_Params.prefix);
+            Client   sClient(m_Service, m_Params.addr, yield);
+            auto     sList = sClient.list(m_Params.prefix, 0);
             List     sState;
             uint64_t sWeight = 0;
 
@@ -65,10 +69,10 @@ namespace Etcd {
             lk.unlock();
         }
 
-        void read()
+        void read(asio::yield_context yield)
         {
             try {
-                read_i();
+                read_i(yield);
             } catch (const std::exception& e) {
                 Lock lk(m_Mutex);
                 m_LastError = e.what();
@@ -83,9 +87,10 @@ namespace Etcd {
         }
 
     public:
-        Balancer(const Params& aParams)
+        Balancer(asio::io_service& aService, const Params& aParams)
         : m_Params(aParams)
-        , m_Client(m_Params.addr)
+        , m_Service(aService)
+        , m_Timer(aService)
         {}
 
         List state() const
@@ -114,13 +119,23 @@ namespace Etcd {
             return m_LastError;
         }
 
-        void start(Threads::Group& aGroup)
+        void start()
         {
-            m_Periodic.start(
-                aGroup,
-                m_Params.period,
-                [this]() { read(); },
-                [this]() { clear(); });
+            asio::spawn(m_Timer.get_executor(), [this, p = shared_from_this()](asio::yield_context yield) {
+                beast::error_code ec;
+                while (!m_Stop) {
+                    read(yield);
+                    m_Timer.expires_from_now(std::chrono::seconds(m_Params.period));
+                    m_Timer.async_wait(yield[ec]);
+                }
+                clear();
+            });
+        }
+
+        void stop()
+        {
+            m_Stop = true;
+            m_Timer.cancel();
         }
     };
 } // namespace Etcd

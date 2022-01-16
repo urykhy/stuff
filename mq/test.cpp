@@ -77,8 +77,12 @@ BOOST_AUTO_TEST_CASE(simple)
     Threads::sleep(0.1);
 
     {
+        Threads::Asio  sAsio;
+        Threads::Group sGroup;
+        sAsio.start(sGroup);
+
         Etcd::Client::Params sParams;
-        Etcd::Client         sEtcd(sParams);
+        Etcd::Client         sEtcd(sAsio.service(), sParams);
         const auto           sState = sEtcd.get("mq:default");
 
         // ensure 10 last hashes in history

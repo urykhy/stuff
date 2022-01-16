@@ -52,28 +52,13 @@ namespace MQ {
             return Json::writeString(sBuilder, aJson);
         }
 
-        Json::Value etcd_request(asio_http::asio::io_service& aService, const std::string& aAPI, std::string&& aBody, asio_http::asio::yield_context yield)
-        {
-            auto sResult = asio_http::async(
-                               aService,
-                               {.method  = asio_http::http::verb::post,
-                                .url     = m_Params.etcd.url + "/v3/" + aAPI,
-                                .body    = std::move(aBody),
-                                .headers = {
-                                    {asio_http::Headers::Accept, "application/json"},
-                                    {asio_http::Headers::ContentType, "application/json"}}},
-                               yield)
-                               .get();
-            return Etcd::Protocol::parseResponse(static_cast<unsigned>(sResult.result()), sResult.body());
-        }
-
         void process_i(asio_http::asio::io_service& aService, const std::string& aClient, const std::string& aHash, const std::string& aBody, asio_http::asio::yield_context yield)
         {
-            const std::string sKey     = m_Params.etcd.prefix + aClient;
+            Etcd::Client sClient(aService, m_Params.etcd, yield);
+
             bool              sInitial = true;
             Json::Value       sState;
-            Json::Value       sResponse = etcd_request(aService, "kv/range", Etcd::Protocol::get(sKey), yield);
-            const std::string sOld      = Parser::Base64(sResponse["kvs"][0]["value"].asString());
+            const std::string sOld = sClient.get(aClient);
 
             if (!sOld.empty()) {
                 sInitial = false;
@@ -93,15 +78,12 @@ namespace MQ {
                 sState.removeIndex(0, &sTmp);
             }
 
-            if (sInitial) {
-                auto sResponse = etcd_request(aService, "kv/txn", Etcd::Protocol::atomicPut(sKey, formatState(sState)), yield);
-                Etcd::Protocol::checkTxnResponse(sResponse);
-            } else {
-                auto sResponse = etcd_request(aService, "kv/txn", Etcd::Protocol::atomicUpdate(sKey, sOld, formatState(sState)), yield);
-                Etcd::Protocol::checkTxnResponse(sResponse);
-            }
-            DEBUG("accept block " << aHash);
+            if (sInitial)
+                sClient.atomicPut(aClient, formatState(sState));
+            else
+                sClient.atomicUpdate(aClient, sOld, formatState(sState));
 
+            DEBUG("accept block " << aHash);
             m_Queue.insert(aBody);
         }
 
