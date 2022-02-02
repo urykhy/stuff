@@ -24,26 +24,28 @@ namespace MySQL::TaskQueue {
 
     struct Task
     {
-        uint64_t    id = 0;
-        std::string task;
-        std::string worker;
-        std::string cookie;
+        uint64_t                   id = 0;
+        std::string                task;
+        std::string                worker;
+        std::optional<std::string> cookie;
 
         Task(const MySQL::Row& aRow)
         : id(aRow[0].as_uint64())
         , task(aRow[1].as_string())
         , worker(aRow[2].as_string())
-        , cookie(aRow[3].as_string())
-        {}
+        {
+            if (!aRow[3].is_null())
+                cookie = aRow[3].as_string();
+        }
     };
 
     // data must be quoted
-    using updateCookieCB = std::function<void(const std::string&)>;
+    using updateCookie = std::function<void(const std::string&)>;
 
     struct HandlerFace
     {
-        virtual bool process(const Task& task, updateCookieCB&& api) = 0; // true = success
-        virtual void report(const char* msg) noexcept                = 0; // report exceptions
+        virtual bool process(const Task& task, updateCookie&& api) = 0; // true = success
+        virtual void report(const char* msg) noexcept              = 0; // report exceptions
         virtual ~HandlerFace() {}
     };
 

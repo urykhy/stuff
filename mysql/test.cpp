@@ -215,9 +215,9 @@ BOOST_AUTO_TEST_CASE(simple)
         : m_Count(aCount)
         {}
 
-        bool process(const MySQL::TaskQueue::Task& task, MySQL::TaskQueue::updateCookieCB&& api) override
+        bool process(const MySQL::TaskQueue::Task& task, MySQL::TaskQueue::updateCookie&& api) override
         {
-            BOOST_TEST_MESSAGE("process task " << task.task << " with cookie " << task.cookie);
+            BOOST_TEST_MESSAGE("process task " << task.task);
             m_Count++;
             return true;
         }
@@ -252,11 +252,11 @@ BOOST_AUTO_TEST_CASE(mock)
         : m_Count(aCount)
         {}
 
-        bool process(const MySQL::TaskQueue::Task& task, MySQL::TaskQueue::updateCookieCB&& api) override
+        bool process(const MySQL::TaskQueue::Task& task, MySQL::TaskQueue::updateCookie&& api) override
         {
             BOOST_CHECK_EQUAL(task.id, 12);
             BOOST_CHECK_EQUAL(task.task, "mock task");
-            BOOST_CHECK_EQUAL(task.cookie, "existing cookie");
+            BOOST_CHECK_EQUAL(*task.cookie, "existing cookie");
             api("updated cookie");
             m_Count++;
             return true;
