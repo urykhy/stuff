@@ -94,7 +94,7 @@ namespace MySQL::TaskQueue {
             });
 
             if (!sTask) {
-                m_Connection->Query("ROLLBACK");
+                m_Connection->Query("COMMIT");
                 return {};
             }
 
@@ -124,8 +124,7 @@ namespace MySQL::TaskQueue {
             }
 
             auto sStatusCode = m_Handler->process(*sTask, [this, &sTask](const std::string& aValue) {
-                m_Connection->ensure();
-                m_Connection->Query(fmt::format(
+                safe(fmt::format(
                     "UPDATE {0} "
                     "SET cookie = '{2}' "
                     "WHERE id = {1}",
@@ -134,7 +133,7 @@ namespace MySQL::TaskQueue {
                     aValue));
             });
 
-            m_Connection->Query(fmt::format(
+            safe(fmt::format(
                 "UPDATE {0} "
                 "SET status = '{2}' "
                 "WHERE id = {1}",
@@ -151,6 +150,24 @@ namespace MySQL::TaskQueue {
                 m_Connection->close();
                 m_Handler->report(e.what());
                 wait(m_Config.sleep); // do not flood with errors
+            }
+        }
+
+        // retry query until success
+        // throw if error and we must terminate
+        void safe(const std::string& aQuery)
+        {
+            while (true) {
+                try {
+                    m_Connection->ensure();
+                    m_Connection->Query(aQuery);
+                    break;
+                } catch (const std::exception& e) {
+                    if (m_Exit)
+                        throw;
+                    m_Handler->report(e.what());
+                    sleep(1);
+                }
             }
         }
 

@@ -280,7 +280,7 @@ BOOST_AUTO_TEST_CASE(mock)
         {"UPDATE task_queue SET status = 'done' WHERE id = 12", {}},
         {"BEGIN", {}},
         {"SELECT id, task, worker, cookie FROM task_queue WHERE status = 'new' OR (status = 'started' AND updated < DATE_SUB(NOW(), INTERVAL 1 HOUR)) ORDER BY id ASC LIMIT 1 FOR UPDATE", {}},
-        {"ROLLBACK", {}}};
+        {"COMMIT", {}}};
     MySQL::Mock sMock(sExpectedSQL);
 
     MySQL::TaskQueue::Config  sQueueCfg;
