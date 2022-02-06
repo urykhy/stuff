@@ -1,75 +1,62 @@
 #pragma once
 #include <functional>
-#include <list>
 #include <queue>
 
-#include <SafeQueue.hpp>
+#include "SafeQueue.hpp"
 
-namespace Threads {
-    template <class T>
-    struct Pipeline
+namespace Threads::Pipeline {
+
+    struct Task
     {
-        using Stages = std::list<std::function<void(T& t)>>;
+        using Step = std::function<void()>;
+        using Wrap = std::function<void(Step&&)>;
 
+        virtual void operator()(Wrap&& aWrap) = 0;
+        virtual ~Task(){};
+    };
+
+    class Manager
+    {
         struct Node
         {
-            T                         data;
-            typename Stages::iterator current;
-            uint64_t                  serial = 0;
-            uint16_t                  step   = 0;
-
-            template <class XT>
-            Node(XT&& t, typename Stages::iterator it, uint64_t s, uint16_t st = 0)
-            : data(t)
-            , current(it)
-            , serial(s)
-            , step(st)
-            {}
-            Node() {}
+            uint64_t              serial = {};
+            std::shared_ptr<Task> task   = {};
+            Task::Step            step   = {};
         };
 
         struct NodeCmp
         {
             bool operator()(const Node& l, const Node& r) const
             {
-                return l.step < r.step ? true : l.serial > r.serial;
+                return l.serial > r.serial;
             }
         };
 
-        using PriorityList = std::priority_queue<Node, std::vector<Node>, NodeCmp>;
+        using PriorityQueue = std::priority_queue<Node, std::vector<Node>, NodeCmp>;
+        using Queue         = SafeQueueThread<Node, PriorityQueue>;
+        Queue                 m_Queue;
+        std::atomic<uint64_t> m_Serial{0};
 
-    private:
-        Stages                              m_Stages;
-        SafeQueueThread<Node, PriorityList> m_Queue;
-        std::atomic<uint64_t>               m_Serial{0};
-
-        void one_step(Node& n)
+        void step(Node& aNode)
         {
-            (*n.current)(n.data);
-            n.current++;
-            n.step++;
-            if (n.current != m_Stages.end()) {
-                m_Queue.insert(n);
-            }
+            if (aNode.step)
+                aNode.step();
+            aNode.task->operator()([this, &aNode](auto&& aStep) {
+                m_Queue.insert(Node{aNode.serial, aNode.task, std::move(aStep)});
+            });
         }
 
     public:
-        Pipeline()
-        : m_Queue([this](auto& a) { this->one_step(a); })
+        Manager()
+        : m_Queue([this](auto& a) { this->step(a); }, Queue::Params{.retry = true})
         {}
 
-        template <class F>
-        void stage(F&& f) { m_Stages.push_back(f); }
-
-        template <class F>
-        Pipeline& operator|(F&& f)
+        void start(Group& aGroup, unsigned aCount = 1) { m_Queue.start(aGroup, aCount); }
+        void insert(std::shared_ptr<Task> aTask)
         {
-            stage(std::move(f));
-            return *this;
+            uint64_t sSerial = m_Serial++;
+            m_Queue.insert(Node{sSerial, aTask});
         }
-
-        void start(Group& tg, unsigned count = 1) { m_Queue.start(tg, count); }
-        void insert(T& t) { m_Queue.insert(Node{t, m_Stages.begin(), m_Serial++}); }
         bool idle() const { return m_Queue.idle(); }
     };
-} // namespace Threads
+} // namespace Threads::Pipeline

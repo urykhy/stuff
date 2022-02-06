@@ -6,6 +6,8 @@
 #include <chrono>
 #include <iostream>
 
+#include <boost/asio/coroutine.hpp> // for pipeline::task
+
 #include "Asio.hpp"
 #include "ForEach.hpp"
 #include "MapReduce.hpp"
@@ -16,55 +18,53 @@
 
 using namespace std::chrono_literals;
 
-BOOST_AUTO_TEST_SUITE(Threads)
 BOOST_AUTO_TEST_SUITE(pipeline)
-BOOST_AUTO_TEST_CASE(sort)
+BOOST_AUTO_TEST_CASE(simple)
 {
-    using PL = Threads::Pipeline<int>;
-    PL::Stages stages;
-
+#include <boost/asio/yield.hpp>
+    struct Task : public Threads::Pipeline::Task, public boost::asio::coroutine
     {
-        PL::PriorityList list;
-        list.push(PL::Node(1, stages.end(), 1, 1)); // serial 1, step 1
-        list.push(PL::Node(2, stages.end(), 1, 2)); // serial 1, step 2
-        list.push(PL::Node(3, stages.end(), 1, 3)); // serial 1, step 3
-        BOOST_CHECK_EQUAL(list.top().data, 3);      // max step
-    }
-    {
-        PL::PriorityList list;
-        list.push(PL::Node(1, stages.end(), 1, 2)); // serial 1, step 2
-        list.push(PL::Node(2, stages.end(), 2, 2)); // serial 2, step 2
-        list.push(PL::Node(3, stages.end(), 3, 2)); // serial 3, step 2
-        BOOST_CHECK_EQUAL(list.top().data, 1);      // min serial
-    }
-}
-BOOST_AUTO_TEST_CASE(impl)
-{
-    std::vector<int>       data = {1, 2, 3, 4, 5, 6, 7, 8, 9};
-    Threads::Pipeline<int> p;
+        const uint64_t m_ID;
+        Task(uint64_t aID)
+        : m_ID(aID)
+        {}
 
-    p | [](int a) {
-        BOOST_TEST_MESSAGE("stage1 " << a);
-        Threads::sleep(drand48());
-    } | [](int a) {
-        BOOST_TEST_MESSAGE("stage2 " << a);
-        Threads::sleep(drand48());
-    } | [](int a) {
-        BOOST_TEST_MESSAGE("stage3 " << a);
+        virtual void operator()(Wrap&& aWrap)
+        {
+            reenter(this)
+            {
+                BOOST_TEST_MESSAGE("task " << m_ID << ": enter");
+                yield aWrap([this, counter = 0]() mutable {
+                    BOOST_TEST_MESSAGE("task " << m_ID << ": make step 1");
+                    counter++;
+                    if (m_ID == 2 and counter < 3)
+                        throw std::runtime_error("task error");
+                });
+                BOOST_TEST_MESSAGE("task " << m_ID << ": after step 1");
+                yield aWrap([this]() { BOOST_TEST_MESSAGE("task " << m_ID << ": make step 2"); });
+                BOOST_TEST_MESSAGE("task " << m_ID << ": after step 2");
+                BOOST_TEST_MESSAGE("task " << m_ID << ": leave");
+            }
+        }
     };
+#include <boost/asio/unyield.hpp>
 
-    for (auto a : data)
-        p.insert(a);
+    Threads::Pipeline::Manager sManager;
+    sManager.insert(std::make_shared<Task>(1));
+    sManager.insert(std::make_shared<Task>(2));
+    sManager.insert(std::make_shared<Task>(3));
 
     Threads::Group tg;
-    p.start(tg, 3);
+    sManager.start(tg);
 
-    while (!p.idle())
+    while (!sManager.idle())
         Threads::sleep(0.1);
+
     tg.wait(); // call stop in Pipeline/SafeQueueThread
 }
 BOOST_AUTO_TEST_SUITE_END() // pipeline
 
+BOOST_AUTO_TEST_SUITE(Threads)
 BOOST_AUTO_TEST_CASE(wg)
 {
     Threads::Group tg;
