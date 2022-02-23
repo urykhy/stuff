@@ -51,19 +51,15 @@ BOOST_AUTO_TEST_CASE(simple)
     });
     BOOST_CHECK_EQUAL(sAttr, true);
 
-    try
-    {
+    try {
         c.Query("select 123 from");
-    }
-    catch (const MySQL::Error& e)
-    {
+    } catch (const MySQL::Error& e) {
         BOOST_TEST_MESSAGE("exception: " << e.what());
         BOOST_CHECK_EQUAL(e.decode(), MySQL::Error::BAD_QUERY);
     }
 
     c.close();
     BOOST_CHECK_EQUAL(c.ping(), false); // not connected
-
 }
 BOOST_AUTO_TEST_CASE(pool)
 {
@@ -143,8 +139,8 @@ BOOST_AUTO_TEST_CASE(upload)
 BOOST_AUTO_TEST_CASE(prepare)
 {
     MySQL::Connection c(cfg);
-    //MySQL::Statment s=c.Prepare("select * from departments limit 6");
-    //s.Execute();
+    // MySQL::Statment s=c.Prepare("select * from departments limit 6");
+    // s.Execute();
     MySQL::Statment s = c.Prepare("select * from departments where dept_no > ? and dept_no < ? order by dept_no");
     s.Execute("d004", "d007");
     s.Use([i = 0](const auto& aRow) mutable {
@@ -200,6 +196,45 @@ BOOST_AUTO_TEST_CASE(format)
         {"INSERT INTO newdata (id, name) VALUES (4, 'four') ON DUPLICATE KEY UPDATE name=name"}};
     const auto sResult = MySQL::Format<FormatPolicy>(sData);
     BOOST_CHECK_EQUAL_COLLECTIONS(sResult.begin(), sResult.end(), sExpected.begin(), sExpected.end());
+}
+BOOST_AUTO_TEST_CASE(mock)
+{
+    MySQL::Mock::SqlSet sExpectedSQL{
+        {"SELECT id, task FROM task_queue1"},
+        {"SELECT id, task FROM task_queue2",
+         MySQL::Mock::Rows{
+             {"12", "mock task"},
+             {"12", "mock task"},
+         }},
+        {"COMMIT",
+         MySQL::Error{"mock generated error", CR_SERVER_LOST}},
+    };
+    MySQL::Mock sMock(sExpectedSQL);
+
+    MySQL::ConnectionFace* sClient = sMock;
+
+    unsigned sCount = 0;
+    sClient->Query("SELECT id, task FROM task_queue1");
+    sClient->Use([&sCount](const MySQL::Row& aRow) {
+        sCount++;
+    });
+    BOOST_CHECK_EQUAL(0, sCount);
+
+    sClient->Query("SELECT id, task FROM task_queue2");
+    sClient->Use([&sCount](const MySQL::Row& aRow) {
+        BOOST_CHECK_EQUAL(12, aRow[0].as_uint64());
+        BOOST_CHECK_EQUAL("mock task", aRow[1].as_string());
+        sCount++;
+    });
+    BOOST_CHECK_EQUAL(2, sCount);
+
+    try {
+        sClient->Query("COMMIT");
+        BOOST_CHECK(false);
+    } catch (const MySQL::Error& e) {
+        BOOST_CHECK_EQUAL(CR_SERVER_LOST, e.m_Errno);
+        BOOST_CHECK_EQUAL(MySQL::Error::NETWORK, e.decode());
+    }
 }
 BOOST_AUTO_TEST_SUITE_END()
 
@@ -271,16 +306,16 @@ BOOST_AUTO_TEST_CASE(mock)
     TestHandler sHandler(sCount);
 
     MySQL::Mock::SqlSet sExpectedSQL{
-        {"BEGIN", {}},
+        {"BEGIN"},
         {"SELECT id, task, worker, cookie FROM task_queue WHERE status = 'new' OR (status = 'started' AND updated < DATE_SUB(NOW(), INTERVAL 1 HOUR)) ORDER BY id ASC LIMIT 1 FOR UPDATE",
-         {{"12", "mock task", "", "existing cookie"}}},
-        {"UPDATE task_queue SET status = 'started', worker = 'test' WHERE id = 12", {}},
-        {"COMMIT", {}},
-        {"UPDATE task_queue SET cookie = 'updated cookie' WHERE id = 12", {}},
-        {"UPDATE task_queue SET status = 'done' WHERE id = 12", {}},
-        {"BEGIN", {}},
-        {"SELECT id, task, worker, cookie FROM task_queue WHERE status = 'new' OR (status = 'started' AND updated < DATE_SUB(NOW(), INTERVAL 1 HOUR)) ORDER BY id ASC LIMIT 1 FOR UPDATE", {}},
-        {"COMMIT", {}}};
+         MySQL::Mock::Rows{{"12", "mock task", "", "existing cookie"}}},
+        {"UPDATE task_queue SET status = 'started', worker = 'test' WHERE id = 12"},
+        {"COMMIT"},
+        {"UPDATE task_queue SET cookie = 'updated cookie' WHERE id = 12"},
+        {"UPDATE task_queue SET status = 'done' WHERE id = 12"},
+        {"BEGIN"},
+        {"SELECT id, task, worker, cookie FROM task_queue WHERE status = 'new' OR (status = 'started' AND updated < DATE_SUB(NOW(), INTERVAL 1 HOUR)) ORDER BY id ASC LIMIT 1 FOR UPDATE"},
+        {"COMMIT"}};
     MySQL::Mock sMock(sExpectedSQL);
 
     MySQL::TaskQueue::Config  sQueueCfg;
