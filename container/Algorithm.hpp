@@ -38,7 +38,7 @@ namespace Container {
         dest.insert(it2, source.end());
     }
 
-    template<class T>
+    template <class T>
     bool is_unique(const std::vector<T>& aData)
     {
         for (size_t i = 0; i < aData.size(); i++)
@@ -47,4 +47,12 @@ namespace Container {
                     return false;
         return true;
     }
+
+    template <class T>
+    void sort_unique(T& aData)
+    {
+        std::sort(aData.begin(), aData.end());
+        aData.erase(std::unique(aData.begin(), aData.end()), aData.end());
+    }
+
 } // namespace Container

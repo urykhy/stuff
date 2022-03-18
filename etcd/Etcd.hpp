@@ -49,7 +49,7 @@ namespace Etcd {
 
         Json::Value request(const std::string& aAPI, const std::string& aBody)
         {
-            //BOOST_TEST_MESSAGE("etcd <- " << aAPI << ' ' << aBody);
+            // BOOST_TEST_MESSAGE("etcd <- " << aAPI << ' ' << aBody);
             asio_http::ClientRequest sRequest{
                 .method  = http::verb::post,
                 .url     = m_Params.host + "/v3/" + aAPI,
@@ -66,7 +66,7 @@ namespace Etcd {
                 throw std::runtime_error("etcd timeout");
 
             auto sResult = sFuture.get();
-            //BOOST_TEST_MESSAGE("etcd -> " << sResult);
+            // BOOST_TEST_MESSAGE("etcd -> " << sResult);
             return Protocol::parseResponse(sResult.result_int(), sResult.body());
         }
 
@@ -95,9 +95,9 @@ namespace Etcd {
             request("kv/deleterange", Protocol::remove(m_Params.prefix + aKey, aRange));
         }
 
-        List list(const std::string& aKey, int64_t aLimit = 0)
+        List list(const std::string& aKey, int64_t aLimit = 0, bool aKeysOnly = false)
         {
-            const auto sResult = request("kv/range", Protocol::list(m_Params.prefix + aKey, aLimit));
+            const auto sResult = request("kv/range", Protocol::list(m_Params.prefix + aKey, aLimit, aKeysOnly));
 
             List sList;
             if (sResult.isObject()) {

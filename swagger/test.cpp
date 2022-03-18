@@ -1,6 +1,7 @@
 #define BOOST_TEST_MODULE Suites
 #include <boost/test/unit_test.hpp>
 
+#include "MetricsDiscovery.hpp"
 #include "common.v1.hpp"
 #include "discovery.v1.hpp"
 #include "jsonParam.v1.hpp"
@@ -14,6 +15,7 @@
 #include <asio_http/v2/Server.hpp>
 #include <format/Hex.hpp>
 #include <jwt/JWT.hpp>
+#include <prometheus/API.hpp>
 #include <resource/Get.hpp>
 #include <resource/Server.hpp>
 #include <sentry/Client.hpp>
@@ -53,9 +55,9 @@ struct Common : api::common_1_0::server
 struct Discovery : api::discovery_1_0::server
 {
     get_discovery_response_v
-    get_discovery_i(asio_http::asio::io_service&   aService,
-               const get_discovery_parameters&     aRequest,
-               asio_http::asio::yield_context yield) override
+    get_discovery_i(asio_http::asio::io_service&    aService,
+                    const get_discovery_parameters& aRequest,
+                    asio_http::asio::yield_context  yield) override
     {
         get_discovery_response_200 sResult;
         sResult.body = "success";
@@ -553,6 +555,24 @@ BOOST_FIXTURE_TEST_CASE(discovery, WithServer)
     Threads::sleep(0.1); // wait until we collect peers from etcd
     auto sResponse = sClient.get_discovery({});
     BOOST_CHECK_EQUAL(sResponse.body, "success");
+
+    // test prometheus exporter
+
+    Prometheus::configure(m_Router);
+    Prometheus::start(m_Group);
+
+    auto sMD = std::make_shared<Swagger::MetricsDiscovery>(m_Asio.service(), Etcd::Balancer::Params{});
+    sMD->start();
+    sMD->configure(m_Router);
+    Threads::sleep(0.1); // wait until MD make a step
+    BOOST_CHECK_EQUAL(R"([{"targets":["127.0.0.1:3000"]}])", sMD->to_string());
+
+    // log metrics
+    const auto sActual = Prometheus::Manager::instance().toPrometheus();
+    for (auto x : sActual)
+        BOOST_TEST_MESSAGE(x);
+
+    // sleep(600);
 }
 BOOST_AUTO_TEST_SUITE_END() // rpc
 

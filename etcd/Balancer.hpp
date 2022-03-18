@@ -5,7 +5,6 @@
 #include "Etcd.hpp"
 
 #include <parser/Json.hpp>
-#include <threads/Periodic.hpp>
 
 namespace Etcd {
     struct Balancer : public std::enable_shared_from_this<Balancer>
@@ -26,10 +25,8 @@ namespace Etcd {
         using List = std::vector<Entry>;
 
     private:
-        const Params                  m_Params;
-        asio::io_service&             m_Service;
-        std::unique_ptr<Etcd::Client> m_Client;
-
+        const Params       m_Params;
+        asio::io_service&  m_Service;
         std::atomic<bool>  m_Stop{false};
         asio::steady_timer m_Timer;
 

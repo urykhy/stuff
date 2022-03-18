@@ -48,13 +48,15 @@ namespace Etcd::Protocol {
         return to_string(sRoot);
     }
 
-    inline std::string list(const std::string& aKey, int64_t aLimit)
+    inline std::string list(const std::string& aKey, int64_t aLimit, bool aKeysOnly)
     {
         Json::Value sRoot;
         sRoot["key"]       = Format::Base64(aKey);
         sRoot["range_end"] = Format::Base64(aKey + "\xFF");
         if (aLimit > 0)
             sRoot["limit"] = Json::Value::Int64(aLimit);
+        if (aKeysOnly)
+            sRoot["keys_only"] = true;
         return to_string(sRoot);
     }
 
