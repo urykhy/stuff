@@ -39,15 +39,17 @@ namespace resource {
         {
             namespace http = boost::beast::http;
 
-            aRouter->insert(m_Path,
-                            [this](asio_http::asio::io_service& aService, const asio_http::Request& aRequest, asio_http::Response& aResponse, asio_http::asio::yield_context yield) {
-                                switch (aRequest.method()) {
-                                case http::verb::get:
-                                    serve(aRequest, aResponse);
-                                    break;
-                                default: aResponse.result(http::status::method_not_allowed);
-                                }
-                            });
+            aRouter->insert(
+                m_Path,
+                [this](asio_http::asio::io_service& aService, const asio_http::Request& aRequest, asio_http::Response& aResponse, asio_http::asio::yield_context yield) {
+                    switch (aRequest.method()) {
+                    case http::verb::get:
+                        serve(aRequest, aResponse);
+                        break;
+                    default: aResponse.result(http::status::method_not_allowed);
+                    }
+                },
+                true /* prefix match */);
         }
     };
 } // namespace resource

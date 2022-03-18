@@ -245,7 +245,7 @@ public:
                             }
                             if (0 == aResponse.count(http::field::server))
                                 aResponse.set(http::field::server, "Swagger/cxx");
-                        });
+                        }, true /* prefix match */);
         {% endfor %}
     }
 
