@@ -55,6 +55,12 @@ namespace String {
             x = std::tolower(x);
     }
 
+    inline void toupper(std::string& s)
+    {
+        for (auto& x : s)
+            x = std::toupper(x);
+    }
+
     inline bool starts_with(const std::string_view& s, const std::string_view& pa)
     {
         return s.compare(0, pa.size(), pa) == 0;
@@ -70,9 +76,27 @@ namespace String {
     inline std::string replace(const std::string& aSrc, std::string_view aFrom, std::string aTo)
     {
         std::string sResult = aSrc;
-        const auto sPos = aSrc.find(aFrom);
+        const auto  sPos    = sResult.find(aFrom);
         if (sPos != std::string::npos)
             sResult.replace(sPos, aFrom.size(), aTo);
+        return sResult;
+    }
+
+    inline std::string replace_all(const std::string& aSrc, std::string_view aFrom, std::string aTo)
+    {
+        std::string sResult = aSrc;
+        size_t      sFrom   = 0;
+
+        while (true) {
+            const auto sPos = sResult.find(aFrom, sFrom);
+            if (sPos == std::string::npos)
+                break;
+            else {
+                sResult.replace(sPos, aFrom.size(), aTo);
+                sFrom = sPos + aTo.size();
+            }
+        }
+
         return sResult;
     }
 } // namespace String

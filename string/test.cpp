@@ -16,5 +16,6 @@ BOOST_AUTO_TEST_CASE(utils)
     BOOST_CHECK(String::starts_with(sTmp, "a"));
     BOOST_CHECK(String::ends_with(sTmp, " b"));
     BOOST_CHECK_EQUAL(String::replace("foo", "foo", "long bar"), "long bar");
+    BOOST_CHECK_EQUAL(String::replace_all("foo bar foo bar foo no more bar foo", "foo", "x"), "x bar x bar x no more bar x");
 }
 BOOST_AUTO_TEST_SUITE_END()
