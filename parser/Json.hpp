@@ -88,7 +88,7 @@ namespace Parser::Json {
 
     // helper to get object fields
     template <class T>
-    void from_value(const Value& aJson, const std::string& aName, T& aValue)
+    void from_object(const Value& aJson, const std::string& aName, T& aValue)
     {
         if (!aJson.isObject())
             throw std::invalid_argument("not object value");

@@ -25,19 +25,36 @@ namespace Swagger {
         struct Entry
         {
             std::string addr;
+            std::string service;
+            std::string location;
 
             bool operator<(const Entry& aOther) const { return addr < aOther.addr; }
             bool operator==(const Entry& aOther) const { return addr == aOther.addr; }
 
+            // from etcd balancer data
+            void from_json(const ::Json::Value& aJson)
+            {
+                Parser::Json::from_object(aJson, "service", service);
+                Parser::Json::from_object(aJson, "location", location);
+            }
+
+            // to prometheus sd
             Format::Json::Value to_json() const
             {
                 using namespace Format::Json;
+
+                Value sLabels(::Json::objectValue);
+                if (!service.empty())
+                    write(sLabels, "service", service);
+                if (!location.empty())
+                    write(sLabels, "location", location);
 
                 Value sTargets(::Json::arrayValue);
                 sTargets.append(to_value(addr));
 
                 Value sValue(::Json::objectValue);
                 sValue["targets"] = std::move(sTargets);
+                sValue["labels"]  = std::move(sLabels);
                 return sValue;
             }
         };
@@ -59,7 +76,7 @@ namespace Swagger {
         void on_timer_i(boost::asio::yield_context yield)
         {
             Etcd::Client sClient(m_Service, m_Params.addr, yield);
-            auto         sEtcd = sClient.list(m_Params.prefix, 0, true /* keys only */);
+            auto         sEtcd = sClient.list(m_Params.prefix);
             List         sList;
 
             for (auto&& x : sEtcd) {
@@ -70,6 +87,14 @@ namespace Swagger {
                     continue;
                 Entry sTmp;
                 sTmp.addr = sKey.substr(sPos + 1);
+
+                try {
+                    auto sRoot = Parser::Json::parse(x.value);
+                    Parser::Json::from_value(sRoot, sTmp);
+                } catch (const std::invalid_argument& e) {
+                    continue;
+                }
+
                 sList.push_back(std::move(sTmp));
             }
 

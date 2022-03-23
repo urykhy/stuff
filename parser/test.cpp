@@ -223,8 +223,8 @@ BOOST_AUTO_TEST_CASE(json)
 
         void from_json(const ::Json::Value& aJson)
         {
-            Parser::Json::from_value(aJson, "base", base);
-            Parser::Json::from_value(aJson, "index", index);
+            Parser::Json::from_object(aJson, "base", base);
+            Parser::Json::from_object(aJson, "index", index);
         }
 
         auto as_tuple() const { return std::tie(base, index); }

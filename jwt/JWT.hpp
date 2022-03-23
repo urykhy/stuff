@@ -20,8 +20,8 @@ namespace Jwt {
 
         void from_json(const ::Json::Value& aJson)
         {
-            Parser::Json::from_value(aJson, "typ", typ);
-            Parser::Json::from_value(aJson, "alg", alg);
+            Parser::Json::from_object(aJson, "typ", typ);
+            Parser::Json::from_object(aJson, "alg", alg);
         }
         Format::Json::Value to_json() const
         {
@@ -42,11 +42,11 @@ namespace Jwt {
 
         void from_json(const ::Json::Value& aJson)
         {
-            Parser::Json::from_value(aJson, "exp", exp);
-            Parser::Json::from_value(aJson, "nbf", nbf);
-            Parser::Json::from_value(aJson, "iss", iss);
-            Parser::Json::from_value(aJson, "aud", aud);
-            Parser::Json::from_value(aJson, "sub", sub);
+            Parser::Json::from_object(aJson, "exp", exp);
+            Parser::Json::from_object(aJson, "nbf", nbf);
+            Parser::Json::from_object(aJson, "iss", iss);
+            Parser::Json::from_object(aJson, "aud", aud);
+            Parser::Json::from_object(aJson, "sub", sub);
         }
         Format::Json::Value to_json() const
         {

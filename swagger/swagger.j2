@@ -67,7 +67,7 @@
                 return sValue;
             }
             void from_json(const ::Json::Value& aJson) {
-                {%- for t in schema.properties | sort %}Parser::Json::from_value(aJson, "{{ t }}", {{ t }});{%- endfor %}
+                {%- for t in schema.properties | sort %}Parser::Json::from_object(aJson, "{{ t }}", {{ t }});{%- endfor %}
             }
             void cbor_write(cbor::ostream& aOut) const {
                 cbor::write(aOut, {{ schema.properties | sort | join(',') }});
