@@ -10,5 +10,5 @@ agent_src = custom_target('agent.thrift',
                input   : 'agent.thrift',
                command : [thriftgen, '-out', 'jaeger_proto', '--gen', 'cpp:no_ostream_operators,no_skeleton', '@INPUT@'],
 )
-jaeger_lib = static_library('jaeger_lib', jaeger_src, agent_src)
+jaeger_lib = static_library('jaeger_lib', jaeger_src, agent_src, cpp_args : '-Wno-float-equal')
 jaeger_proto = declare_dependency(link_with : jaeger_lib, include_directories: jaeger_lib.private_dir_include())

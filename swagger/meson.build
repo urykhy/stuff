@@ -12,15 +12,16 @@ ssl       = dependency('openssl')
 nghttp2   = dependency('libnghttp2') # for hpack
 subdir('jaeger_proto')
 import('python').find_installation('python3', modules : ['jinja2'])
+fs        = import('fs')
 
-api_gen   = find_program('swagger.sh', required : true)
+api_gen   = find_program('j2/swagger.sh', required : true)
 api_src   = []
 foreach name : ['common.v1.yaml', 'jsonParam.v1.yaml', 'keyValue.v1.yaml', 'mq.v1.yaml', 'tutorial.v1.yaml', 'redirect.v1.yaml', 'discovery.v1.yaml']
-    hpp_name = name.replace('.yaml','.hpp')
+    hpp_name = fs.replace_suffix(name, '.hpp')
     api_src += custom_target(hpp_name,
-               depend_files : files('swagger.py', '_client.j2',  '_params.j2', '_response.j2', '_server.j2', 'swagger.j2'),
+               depend_files : files('j2/swagger.py', 'j2/_client.j2',  'j2/_params.j2', 'j2/_response.j2', 'j2/_server.j2', 'j2/swagger.j2'),
                output       : hpp_name,
-               input        : name,
+               input        : 'api/' + name,
                command      : [api_gen, '@INPUT@', '@OUTPUT@'])
 endforeach
 
