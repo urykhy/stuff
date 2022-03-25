@@ -2,6 +2,8 @@
 
 #include <stdlib.h>
 
+#include <cassert>
+#include <regex>
 #include <string>
 #include <string_view>
 
@@ -23,6 +25,20 @@ namespace Util {
         if (auto sPtr = getenv(aName); sPtr != nullptr)
             return Parser::Atoi<T>(sPtr);
         return aDefault;
+    }
+
+    inline std::string expandEnv(const std::string& aStr)
+    {
+        static std::regex           sExpr("\\$\\{([^}]+)\\}");
+        std::string                 sResult;
+        std::string::const_iterator sIt = aStr.begin(), sEnd = aStr.end();
+        for (std::smatch sMatch; std::regex_search(sIt, sEnd, sMatch, sExpr); sIt = sMatch[0].second) {
+            assert(sMatch.size() == 2);
+            sResult += sMatch.prefix();
+            sResult += getEnv(sMatch[1].str().c_str());
+        }
+        sResult.append(sIt, sEnd);
+        return sResult;
     }
 
 } // namespace Util

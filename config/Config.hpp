@@ -7,6 +7,7 @@
 #define FILE_NO_ARCHIVE
 
 #include <file/File.hpp>
+#include <parser/Parser.hpp>
 #include <string/String.hpp>
 #include <unsorted/Env.hpp>
 #include <unsorted/Log4cxx.hpp>
@@ -25,8 +26,12 @@ namespace Config {
             INFO("read properties from " << aFilename);
             File::by_string(aFilename, [this](std::string_view aStr) {
                 auto [sParam, sValue] = parse(aStr);
-                if (!sParam.empty() and !sValue.empty())
-                    m_Params[std::string(sParam)] = sValue;
+                if (!sParam.empty() and !sValue.empty()) {
+                    std::string sExpanded = Util::expandEnv(std::string(sValue));
+                    if (sValue != sExpanded)
+                        DEBUG("expand via environment: " << sParam << " (" << sValue << ") to " << sExpanded);
+                    m_Params[std::string(sParam)] = std::move(sExpanded);
+                }
             });
         }
 
@@ -54,7 +59,11 @@ namespace Config {
         {
             if (aFilename.empty())
                 return;
-            read_file(aFilename);
+            Parser::simple(
+                aFilename, [this](auto sFilename) {
+                    read_file(std::string(sFilename));
+                },
+                ':');
         }
         std::string get(const std::string& aName) const
         {
@@ -158,14 +167,22 @@ namespace Config {
                 sPropertyName.append(aName);
                 std::string sEnvName = envName(sPropertyName);
 
-                std::string sEnvVal = Util::getEnv(sEnvName.c_str());
-                DEBUG("lookup environment: " << sEnvName << " = " << sEnvVal);
-                if (!sEnvVal.empty())
-                    return sEnvVal;
-                std::string sPropertyVal = m_Properties.get(sPropertyName);
-                DEBUG("lookup properties: " << sPropertyName << " = " << sPropertyVal);
-                if (!sPropertyVal.empty())
-                    return sPropertyVal;
+                std::string sVal = Util::getEnv(sEnvName.c_str());
+
+                if (!sVal.empty()) {
+                    DEBUG("lookup environment: " << sEnvName << " = " << sVal);
+                    return sVal;
+                } else {
+                    DEBUG("lookup environment: " << sEnvName << " = <not found>");
+                }
+
+                sVal = m_Properties.get(sPropertyName);
+                if (!sVal.empty()) {
+                    DEBUG("lookup properties: " << sPropertyName << " = " << sVal);
+                    return sVal;
+                } else {
+                    DEBUG("lookup properties: " << sPropertyName << " = <not found>");
+                }
 
                 if (sCtxName.empty())
                     break;
