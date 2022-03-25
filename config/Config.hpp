@@ -24,11 +24,29 @@ namespace Config {
         {
             INFO("read properties from " << aFilename);
             File::by_string(aFilename, [this](std::string_view aStr) {
-                // TODO: support `.include` ?
                 auto [sParam, sValue] = parse(aStr);
                 if (!sParam.empty() and !sValue.empty())
                     m_Params[std::string(sParam)] = sValue;
             });
+        }
+
+        std::string wild_get(const std::string& aName) const
+        {
+            size_t sPos = 0;
+            while (true) {
+                size_t sSep = aName.find_first_of(":.", sPos);
+                if (sSep == std::string::npos)
+                    break;
+                std::string sTmp = aName;
+                sTmp.replace(sPos, sSep - sPos, "*");
+                DEBUG("try wildcard match " << sTmp);
+                auto sIt = m_Params.find(sTmp);
+                if (sIt != m_Params.end()) {
+                    return sIt->second;
+                }
+                sPos = sSep + 1;
+            }
+            return {};
         }
 
     public:
@@ -41,8 +59,9 @@ namespace Config {
         std::string get(const std::string& aName) const
         {
             auto sIt = m_Params.find(aName);
-            if (sIt == m_Params.end())
-                return {};
+            if (sIt == m_Params.end()) {
+                return wild_get(aName);
+            }
             return sIt->second;
         }
 

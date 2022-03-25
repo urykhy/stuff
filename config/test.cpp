@@ -40,4 +40,16 @@ BOOST_AUTO_TEST_CASE(ctx)
     }
     BOOST_CHECK_EQUAL(Config::Context::get(), "");
 }
+BOOST_AUTO_TEST_CASE(wildcard)
+{
+    Config::Manager sManager;
+    sManager.properties().set("*.timeout", "wild");
+    {
+        Config::Context sCtx1("main");
+        {
+            Config::Context sCtx1("master");
+            BOOST_CHECK_EQUAL("wild", sManager.get("mysql.timeout"));
+        }
+    }
+}
 BOOST_AUTO_TEST_SUITE_END()
