@@ -4,6 +4,7 @@
 #include <container/Algorithm.hpp>
 #include <etcd/Balancer.hpp>
 #include <parser/Json.hpp>
+#include <parser/Parser.hpp>
 #include <prometheus/Metrics.hpp>
 
 namespace Swagger {
@@ -34,7 +35,6 @@ namespace Swagger {
             // from etcd balancer data
             void from_json(const ::Json::Value& aJson)
             {
-                Parser::Json::from_object(aJson, "service", service);
                 Parser::Json::from_object(aJson, "location", location);
             }
 
@@ -75,18 +75,31 @@ namespace Swagger {
 
         void on_timer_i(boost::asio::yield_context yield)
         {
+            constexpr std::string_view X_PREFIX = "discovery/swagger/";
+
             Etcd::Client sClient(m_Service, m_Params.addr, yield);
-            auto         sEtcd = sClient.list(m_Params.prefix);
+            auto         sEtcd = sClient.list(m_Params.prefix + std::string(X_PREFIX));
             List         sList;
 
             for (auto&& x : sEtcd) {
-                // x.key like <m_Params.prefix>discovery/swagger/api:discovery/version:1.0/127.0.0.1:3000
+                // x.key like <m_Params.prefix>discovery/swagger/svc/api/version/127.0.0.1:3000
                 std::string_view sKey = x.key;
-                size_t           sPos = sKey.rfind('/');
-                if (sPos == std::string_view::npos)
+                sKey.remove_prefix(m_Params.prefix.size());
+                sKey.remove_prefix(X_PREFIX.size());
+
+                constexpr unsigned X_SIZE = 4; // number of elements in key
+                constexpr unsigned X_SVC  = 0; // service position
+                constexpr unsigned X_ADDR = 3; // address position
+
+                std::vector<std::string_view> sParts;
+                sParts.reserve(X_SIZE);
+                Parser::simple(sKey, sParts, '/');
+                if (sParts.size() != X_SIZE)
                     continue;
+
                 Entry sTmp;
-                sTmp.addr = sKey.substr(sPos + 1);
+                sTmp.addr    = sParts[X_ADDR];
+                sTmp.service = sParts[X_SVC];
 
                 try {
                     auto sRoot = Parser::Json::parse(x.value);
@@ -98,6 +111,7 @@ namespace Swagger {
                 sList.push_back(std::move(sTmp));
             }
 
+            // uniq by addr
             Container::sort_unique(sList);
 
             Lock lk(m_Mutex);

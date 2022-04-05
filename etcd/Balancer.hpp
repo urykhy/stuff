@@ -14,7 +14,6 @@ namespace Etcd {
             Client::Params addr;
             std::string    prefix;
             int            period = 10;
-            std::string    service; // exact match
             std::string    location;
         };
 
@@ -22,13 +21,11 @@ namespace Etcd {
         {
             std::string key;
             uint64_t    weight = 0;
-            std::string service;
             std::string location;
 
             void from_json(const ::Json::Value& aJson)
             {
                 Parser::Json::from_object(aJson, "weight", weight);
-                Parser::Json::from_object(aJson, "service", service);
                 Parser::Json::from_object(aJson, "location", location);
             }
         };
@@ -67,8 +64,6 @@ namespace Etcd {
                 Entry sTmp;
                 sTmp.key = x.key;
                 Parser::Json::from_value(sRoot, sTmp);
-                if (!m_Params.service.empty() and m_Params.service != sTmp.service)
-                    continue;
                 if (!m_Params.location.empty() and m_Params.location != sTmp.location)
                     continue;
                 sState.push_back(std::move(sTmp));

@@ -537,7 +537,7 @@ BOOST_FIXTURE_TEST_CASE(redirect, WithServer)
 BOOST_FIXTURE_TEST_CASE(discovery, WithServer)
 {
     Discovery sDiscovery;
-    sDiscovery.with_discovery(m_Asio.service(), "127.0.0.1:3000", 10, "test-service", "test-location");
+    sDiscovery.with_discovery(m_Asio.service(), "127.0.0.1:3000", "test-service", "test-location", 10);
     sDiscovery.configure(m_Router);
     Threads::sleep(0.1); // wait until etcd updated
 
@@ -546,11 +546,11 @@ BOOST_FIXTURE_TEST_CASE(discovery, WithServer)
         Etcd::Client         sClient(m_Asio.service(), sParams);
         auto                 sList = sClient.list("discovery/swagger");
         BOOST_REQUIRE_EQUAL(1, sList.size());
-        BOOST_CHECK_EQUAL(sList[0].key, "discovery/swagger/api:discovery/version:1.0/127.0.0.1:3000");
-        BOOST_CHECK_EQUAL(sList[0].value, R"({"location":"test-location","service":"test-service","weight":10})");
+        BOOST_CHECK_EQUAL(sList[0].key, "discovery/swagger/test-service/discovery/1.0/127.0.0.1:3000");
+        BOOST_CHECK_EQUAL(sList[0].value, R"({"location":"test-location","weight":10})");
     }
 
-    api::discovery_1_0::client sClient(m_HttpClient, m_Asio.service(), "test-service", "test-location");
+    api::discovery_1_0::client sClient(m_HttpClient, m_Asio.service(), "test-service");
     Threads::sleep(0.1); // wait until we collect peers from etcd
     auto sResponse = sClient.get_discovery({});
     BOOST_CHECK_EQUAL(sResponse.body, "success");

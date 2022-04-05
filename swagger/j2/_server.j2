@@ -79,13 +79,12 @@ public:
     }
 {% endif %}
 {% if x_discovery %}
-    void with_discovery(boost::asio::io_service& aAsio, const std::string& aAddr, unsigned aWeight = 10, const std::string& aService = {}, const std::string& aLocation = {})
+    void with_discovery(boost::asio::io_service& aAsio, const std::string& aAddr, const std::string& aService, const std::string& aLocation, unsigned aWeight)
     {
         Etcd::Notify::Params sParams;
-        sParams.key        = "discovery/swagger/api:{{ doc['info']['title'] }}/version:{{ doc['info']['version'] }}/" + aAddr;
+        sParams.key        = "discovery/swagger/" + aService + "/{{ doc['info']['title'] }}/{{ doc['info']['version'] }}/" + aAddr;
         Format::Json::Value sJson(::Json::objectValue);
         Format::Json::write(sJson, "weight", aWeight);
-        Format::Json::write(sJson, "service", aService);
         Format::Json::write(sJson, "location", aLocation);
         std::string sValue = Format::Json::to_string(sJson, false /* indent */);
         m_Notify = std::make_shared<Etcd::Notify>(aAsio, sParams, sValue);
