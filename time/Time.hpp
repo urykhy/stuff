@@ -26,7 +26,8 @@ namespace Time {
         RFC1123,
         ISO,
         ISO8601_TZ,  // with T and Z
-        ISO8601_LTZ, // with -T: and Z
+        ISO8601_LTZ, // with -,T and Z
+        ISO8601_F,   // with -, T, Z and fractional seconds
         FORMAT_MAX
     };
 
@@ -39,7 +40,9 @@ namespace Time {
             "%a, %d %b %E4Y %H:%M:%S %Z", // RFC1123
             "%E4Y%m%d%H%M%S",             // ISO
             "%E4Y%m%dT%H%M%SZ",           // ISO8601_TZ
-            "%E4Y-%m-%dT%H:%M:%SZ"};      // ISO8601_LTZ
+            "%E4Y-%m-%dT%H:%M:%SZ",       // ISO8601_LTZ
+            "%E4Y-%m-%dT%H:%M:%E*SZ",     // ISO8601_F
+        };
         if (aFormat >= FORMAT_MAX)
             throw std::invalid_argument("formatString");
         return sDict[aFormat];
@@ -86,9 +89,30 @@ namespace Time {
             return -1;
         }
 
-        std::string format(time_t sPoint, fmt aFormat) const
+        SC::time_point parse64(const std::string& aValue) const
         {
-            return cctz::format(formatString(aFormat), SC::from_time_t(sPoint), m_Zone);
+            SC::time_point sPoint;
+            if (!cctz::parse(formatString(ISO8601_F), aValue, m_Zone, &sPoint))
+                throw std::invalid_argument("Time::Zone::parse64 " + aValue);
+            return sPoint;
+        }
+
+        template <class S = std::chrono::seconds, class F = std::chrono::milliseconds>
+        static auto split(const SC::time_point& aPoint)
+        {
+            auto sSecond   = std::chrono::duration_cast<S>(aPoint.time_since_epoch());
+            auto sFraction = std::chrono::duration_cast<F>(aPoint.time_since_epoch()) - std::chrono::duration_cast<F>(sSecond);
+            return std::make_tuple(sSecond.count(), sFraction.count());
+        }
+
+        std::string format(SC::time_point aPoint, fmt aFormat) const
+        {
+            return cctz::format(formatString(aFormat), aPoint, m_Zone);
+        }
+
+        std::string format(time_t aPoint, fmt aFormat) const
+        {
+            return format(SC::from_time_t(aPoint), aFormat);
         }
 
         std::string format(const cctz::civil_second& aTime, fmt aFormat) const

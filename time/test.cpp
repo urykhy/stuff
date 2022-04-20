@@ -35,6 +35,17 @@ BOOST_AUTO_TEST_CASE(simple)
     BOOST_CHECK_EQUAL(t.format(t.parse("1970-01-01 01:02:03"), Time::DATETIME), "1970-01-01 01:02:03");
     BOOST_CHECK_EQUAL(t.parse("Sun, 06 Nov 1994 08:49:37 GMT"), 784100977);
 }
+BOOST_AUTO_TEST_CASE(simple64)
+{
+    Time::Zone t(Time::load("Europe/Moscow"));
+
+    const std::string sTime    = "2022-04-05T06:07:08.123456789Z";
+    auto              sParsed  = t.parse64(sTime);
+    auto [sSeconds, sUSeconds] = Time::Zone::split<std::chrono::seconds, std::chrono::microseconds>(sParsed);
+    BOOST_CHECK_EQUAL(1649128028, sSeconds);
+    BOOST_CHECK_EQUAL(123456, sUSeconds);
+    BOOST_CHECK_EQUAL(sTime, t.format(sParsed, Time::ISO8601_F));
+}
 BOOST_AUTO_TEST_CASE(period)
 {
     Time::Zone   t(cctz::utc_time_zone());
