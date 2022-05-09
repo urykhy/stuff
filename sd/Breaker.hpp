@@ -3,7 +3,7 @@
 #include <array>
 #include <memory>
 
-namespace Etcd {
+namespace SD {
 
     struct PeerState
     {
@@ -171,4 +171,4 @@ namespace Etcd {
             return m_Duration;
         }
     };
-} // namespace Etcd
+} // namespace SD

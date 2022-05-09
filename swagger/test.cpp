@@ -560,7 +560,7 @@ BOOST_FIXTURE_TEST_CASE(discovery, WithServer)
     Prometheus::configure(m_Router);
     Prometheus::start(m_Group);
 
-    auto sMD = std::make_shared<Swagger::MetricsDiscovery>(m_Asio.service(), Etcd::Balancer::Params{});
+    auto sMD = std::make_shared<Swagger::MetricsDiscovery>(m_Asio.service(), SD::Balancer::Params{});
     sMD->start();
     sMD->configure(m_Router);
     Threads::sleep(0.1); // wait until MD make a step

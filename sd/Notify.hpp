@@ -2,27 +2,27 @@
 
 #include <mutex>
 
-#include "Etcd.hpp"
+#include <etcd/Etcd.hpp>
 
-namespace Etcd {
+namespace SD {
     struct Notify : public std::enable_shared_from_this<Notify>
     {
         struct Params
         {
-            Client::Params addr;
-            std::string    key;
-            int            ttl      = 30;
-            int            period   = 10;
-            bool           no_clear = false;
+            Etcd::Client::Params addr;
+            std::string          key;
+            int                  ttl      = 30;
+            int                  period   = 10;
+            bool                 no_clear = false;
         };
 
     private:
-        const Params      m_Params;
-        asio::io_service& m_Service;
-        std::string       m_EtcdValue;
+        const Params             m_Params;
+        boost::asio::io_service& m_Service;
+        std::string              m_EtcdValue;
 
-        std::atomic<bool>  m_Stop{false};
-        asio::steady_timer m_Timer;
+        std::atomic<bool>         m_Stop{false};
+        boost::asio::steady_timer m_Timer;
 
         using Lock = std::unique_lock<std::mutex>;
         mutable std::mutex m_Mutex;
@@ -43,10 +43,10 @@ namespace Etcd {
             return m_Value;
         }
 
-        void init(asio::yield_context yield)
+        void init(boost::asio::yield_context yield)
         {
-            const auto sValue = getValue();
-            Client     sClient(m_Service, m_Params.addr, yield);
+            const auto   sValue = getValue();
+            Etcd::Client sClient(m_Service, m_Params.addr, yield);
 
             int64_t sLease = getLease();
             if (sLease == 0)
@@ -60,22 +60,22 @@ namespace Etcd {
             m_LastError.clear();
         };
 
-        void cleanup(asio::yield_context yield)
+        void cleanup(boost::asio::yield_context yield)
         {
             try {
                 if (!m_Params.no_clear) {
-                    Client sClient(m_Service, m_Params.addr, yield);
+                    Etcd::Client sClient(m_Service, m_Params.addr, yield);
                     sClient.dropLease(getLease());
                 }
             } catch (...) {
             }
         };
 
-        void refresh(asio::yield_context yield)
+        void refresh(boost::asio::yield_context yield)
         {
             try {
                 if (m_Refresh) {
-                    Client sClient(m_Service, m_Params.addr, yield);
+                    Etcd::Client sClient(m_Service, m_Params.addr, yield);
                     sClient.updateLease(getLease());
                 } else {
                     init(yield);
@@ -88,7 +88,7 @@ namespace Etcd {
         };
 
     public:
-        Notify(asio::io_service& aService, const Params& aParams, const std::string& aValue)
+        Notify(boost::asio::io_service& aService, const Params& aParams, const std::string& aValue)
         : m_Params(aParams)
         , m_Service(aService)
         , m_Timer(aService)
@@ -112,8 +112,8 @@ namespace Etcd {
 
         void start()
         {
-            asio::spawn(m_Timer.get_executor(), [this, p = shared_from_this()](asio::yield_context yield) {
-                beast::error_code ec;
+            boost::asio::spawn(m_Timer.get_executor(), [this, p = shared_from_this()](boost::asio::yield_context yield) {
+                boost::beast::error_code ec;
                 while (!m_Stop) {
                     refresh(yield);
                     m_Timer.expires_from_now(std::chrono::seconds(m_Params.period));
@@ -129,4 +129,4 @@ namespace Etcd {
             m_Timer.cancel();
         }
     };
-} // namespace Etcd
+} // namespace SD

@@ -2,10 +2,10 @@
 
 #include <asio_http/Router.hpp>
 #include <container/Algorithm.hpp>
-#include <etcd/Balancer.hpp>
 #include <parser/Json.hpp>
 #include <parser/Parser.hpp>
 #include <prometheus/Metrics.hpp>
+#include <sd/Balancer.hpp>
 
 namespace Swagger {
 
@@ -62,10 +62,10 @@ namespace Swagger {
         using List = std::vector<Entry>;
 
     private:
-        const Etcd::Balancer::Params m_Params;
-        boost::asio::io_service&     m_Service;
-        std::atomic<bool>            m_Stop{false};
-        boost::asio::steady_timer    m_Timer;
+        const SD::Balancer::Params m_Params;
+        boost::asio::io_service&   m_Service;
+        std::atomic<bool>          m_Stop{false};
+        boost::asio::steady_timer  m_Timer;
 
         using Lock = std::unique_lock<std::mutex>;
         mutable std::mutex    m_Mutex;
@@ -131,7 +131,7 @@ namespace Swagger {
         }
 
     public:
-        MetricsDiscovery(boost::asio::io_service& aService, const Etcd::Balancer::Params& aParams)
+        MetricsDiscovery(boost::asio::io_service& aService, const SD::Balancer::Params& aParams)
         : m_Params(aParams)
         , m_Service(aService)
         , m_Timer(aService)

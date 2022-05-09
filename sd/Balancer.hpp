@@ -2,19 +2,18 @@
 
 #include <mutex>
 
-#include "Etcd.hpp"
-
+#include <etcd/Etcd.hpp>
 #include <parser/Json.hpp>
 
-namespace Etcd {
+namespace SD {
     struct Balancer : public std::enable_shared_from_this<Balancer>
     {
         struct Params
         {
-            Client::Params addr;
-            std::string    prefix;
-            int            period = 10;
-            std::string    location;
+            Etcd::Client::Params addr;
+            std::string          prefix;
+            int                  period = 10;
+            std::string          location;
         };
 
         struct Entry
@@ -33,10 +32,10 @@ namespace Etcd {
         using List = std::vector<Entry>;
 
     private:
-        const Params       m_Params;
-        asio::io_service&  m_Service;
-        std::atomic<bool>  m_Stop{false};
-        asio::steady_timer m_Timer;
+        const Params              m_Params;
+        boost::asio::io_service&  m_Service;
+        std::atomic<bool>         m_Stop{false};
+        boost::asio::steady_timer m_Timer;
 
         using Lock = std::unique_lock<std::mutex>;
         mutable std::mutex m_Mutex;
@@ -46,12 +45,12 @@ namespace Etcd {
 
         using Error = std::runtime_error;
 
-        void read_i(asio::yield_context yield)
+        void read_i(boost::asio::yield_context yield)
         {
-            Client   sClient(m_Service, m_Params.addr, yield);
-            auto     sList = sClient.list(m_Params.prefix, 0);
-            List     sState;
-            uint64_t sWeight = 0;
+            Etcd::Client sClient(m_Service, m_Params.addr, yield);
+            auto         sList = sClient.list(m_Params.prefix, 0);
+            List         sState;
+            uint64_t     sWeight = 0;
 
             for (auto&& x : sList) {
                 x.key.erase(0, m_Params.prefix.size());
@@ -59,7 +58,7 @@ namespace Etcd {
                 try {
                     sRoot = Parser::Json::parse(x.value);
                 } catch (const std::invalid_argument& e) {
-                    throw Error(std::string("etcd: bad server response: ") + e.what());
+                    throw Error(std::string("SD: bad etcd server response: ") + e.what());
                 }
                 Entry sTmp;
                 sTmp.key = x.key;
@@ -77,7 +76,7 @@ namespace Etcd {
             lk.unlock();
         }
 
-        void read(asio::yield_context yield)
+        void read(boost::asio::yield_context yield)
         {
             try {
                 read_i(yield);
@@ -95,7 +94,7 @@ namespace Etcd {
         }
 
     public:
-        Balancer(asio::io_service& aService, const Params& aParams)
+        Balancer(boost::asio::io_service& aService, const Params& aParams)
         : m_Params(aParams)
         , m_Service(aService)
         , m_Timer(aService)
@@ -118,7 +117,7 @@ namespace Etcd {
                 else
                     sKey -= x.weight;
 
-            throw Error("Etcd::Balancer fail to pick item");
+            throw Error("SD: fail to pick item");
         }
 
         std::string lastError() const
@@ -129,8 +128,8 @@ namespace Etcd {
 
         void start()
         {
-            asio::spawn(m_Timer.get_executor(), [this, p = shared_from_this()](asio::yield_context yield) {
-                beast::error_code ec;
+            boost::asio::spawn(m_Timer.get_executor(), [this, p = shared_from_this()](boost::asio::yield_context yield) {
+                boost::beast::error_code ec;
                 while (!m_Stop) {
                     read(yield);
                     m_Timer.expires_from_now(std::chrono::seconds(m_Params.period));
@@ -146,4 +145,4 @@ namespace Etcd {
             m_Timer.cancel();
         }
     };
-} // namespace Etcd
+} // namespace SD

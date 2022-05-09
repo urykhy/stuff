@@ -40,8 +40,8 @@
 
 {% set x_discovery = doc['info'].get('x-discovery', false) %}
 {% if x_discovery %}
-    #include <etcd/Balancer.hpp>
-    #include <etcd/Notify.hpp>
+    #include <sd/Balancer.hpp>
+    #include <sd/Notify.hpp>
 {% endif %}
 
 {% set bearer_schemas = [] %}

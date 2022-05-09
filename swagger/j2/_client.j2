@@ -2,7 +2,7 @@ class client
 {
     asio_http::ClientPtr m_HttpClient;
 {%- if x_discovery %}
-    std::shared_ptr<Etcd::Balancer> m_Balancer;
+    std::shared_ptr<SD::Balancer> m_Balancer;
 {%- else %}
     const std::string m_Base;
 {%- endif %}
@@ -26,10 +26,10 @@ public:
     client(asio_http::ClientPtr aHttpClient, boost::asio::io_service& aAsio, const std::string& aService, const std::string& aLocation = {})
     : m_HttpClient(aHttpClient)
     {
-        Etcd::Balancer::Params sParams;
+        SD::Balancer::Params sParams;
         sParams.prefix = "discovery/swagger/" + aService + "/{{ doc['info']['title'] }}/{{ doc['info']['version'] }}/";
         sParams.location = aLocation;
-        m_Balancer = std::make_shared<Etcd::Balancer>(aAsio, sParams);
+        m_Balancer = std::make_shared<SD::Balancer>(aAsio, sParams);
         m_Balancer->start();
     }
 {% else %}
