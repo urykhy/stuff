@@ -168,7 +168,7 @@ namespace MySQL {
 
         using ResultRow = std::vector<std::string_view>;
         template <class T>
-        ResultRow prepareRow(const T* aBind, size_t aCount)
+        ResultRow prepareRow(const T* aBind, unsigned aCount)
         {
             ResultRow sRow;
             sRow.reserve(aCount);
@@ -224,16 +224,16 @@ namespace MySQL {
         template <class T>
         void Use(T aHandler)
         {
-            auto sMeta   = mysql_stmt_result_metadata(m_Stmt);
-            int  sFields = mysql_num_fields(sMeta);
-            //std::cout << "column count: " << sFields << std::endl;
+            auto     sMeta   = mysql_stmt_result_metadata(m_Stmt);
+            unsigned sFields = mysql_num_fields(sMeta);
+            // std::cout << "column count: " << sFields << std::endl;
 
             MYSQL_BIND sResult[sFields];
             memset(sResult, 0, sizeof(sResult));
 
-            for (int i = 0; i < sFields; i++) {
+            for (unsigned i = 0; i < sFields; i++) {
                 MYSQL_FIELD* sField = &sMeta->fields[i];
-                //std::cout << "field length " << sField->length << ", name = " << sField->name << std::endl;
+                // std::cout << "field length " << sField->length << ", name = " << sField->name << std::endl;
                 sResult[i].buffer        = alloca(sField->length);
                 sResult[i].buffer_length = sField->length;
                 sResult[i].length        = (long unsigned int*)alloca(sizeof(unsigned long));
@@ -245,10 +245,10 @@ namespace MySQL {
                 report("mysql_stmt_bind_result");
 
             // To cause the complete result set to be buffered on the client
-            //if (mysql_stmt_store_result(m_Stmt))
+            // if (mysql_stmt_store_result(m_Stmt))
             //    report("mysql_stmt_store_result");
 
-            //std::cout << "row count:    " << mysql_stmt_num_rows(m_Stmt) << std::endl;
+            // std::cout << "row count:    " << mysql_stmt_num_rows(m_Stmt) << std::endl;
 
             int sCode = 0;
             while (sCode == 0) {
@@ -361,15 +361,15 @@ namespace MySQL {
         void Use(UseCB aHandler) override
         {
             // reads the entire result of a query to the client
-            //MYSQL_RES* sResult = mysql_store_result(&m_Handle);
+            // MYSQL_RES* sResult = mysql_store_result(&m_Handle);
 
             // initiates a result set retrieval but does not actually read the result set into the client
             MYSQL_RES* sResult = mysql_use_result(&m_Handle);
             if (sResult == NULL)
                 report("mysql_use_result");
 
-            int       sFields = mysql_num_fields(sResult);
-            MYSQL_ROW sRow;
+            const unsigned sFields = mysql_num_fields(sResult);
+            MYSQL_ROW      sRow;
             while ((sRow = mysql_fetch_row(sResult)))
                 aHandler(Row(sRow, sFields));
             mysql_free_result(sResult);
