@@ -1,0 +1,5 @@
+module std {
+    requires cplusplus17
+    header "std.hpp"
+    export *
+}
