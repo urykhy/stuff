@@ -2,6 +2,8 @@
 
 #include <json/json.h>
 
+#include <optional>
+
 namespace Parser::Json {
     using Value = ::Json::Value;
 

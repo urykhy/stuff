@@ -2,6 +2,8 @@
 
 #include <json/json.h>
 
+#include <optional>
+
 namespace Format::Json {
 
     using Value = ::Json::Value;
