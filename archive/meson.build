@@ -1,4 +1,4 @@
-project('archive', 'cpp', version : '0.1', default_options : ['cpp_std=c++17'])
+project('archive', 'cpp', version : '0.1')
 
 includes  = include_directories('..')
 boost     = dependency('boost', modules : ['unit_test_framework', 'system', 'iostreams'], version : '>=1.71')

@@ -1,5 +1,5 @@
 # PKG_CONFIG_PATH=../pkgconfig meson build
-project('mysql', 'cpp', version : '0.1', default_options : ['cpp_std=c++2a'])
+project('mysql', 'cpp', version : '0.1')
 
 includes = include_directories('..')
 boost     = dependency('boost', modules : ['unit_test_framework', 'system'])

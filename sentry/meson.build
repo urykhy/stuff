@@ -1,4 +1,4 @@
-project('sentry', 'cpp', version : '0.1', default_options : ['cpp_std=c++2a'])
+project('sentry', 'cpp', version : '0.1')
 
 includes = include_directories('..')
 

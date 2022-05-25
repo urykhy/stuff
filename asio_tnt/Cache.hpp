@@ -1,5 +1,7 @@
 #pragma once
 
+#include <optional>
+
 #include "Client.hpp"
 
 namespace asio_tnt::cache {

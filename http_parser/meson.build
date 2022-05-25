@@ -1,4 +1,4 @@
-#project('http_parser', 'cpp', version : '0.1', default_options : ['cpp_std=c++17'])
+#project('http_parser', 'cpp', version : '0.1')
 # https://github.com/nodejs/llhttp
 # llhttp-release-v6.0.6
 add_languages('c')

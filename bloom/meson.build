@@ -1,4 +1,4 @@
-project('bloom', 'cpp', version : '0.1', default_options : ['cpp_std=c++17'])
+project('bloom', 'cpp', version : '0.1')
 
 includes = include_directories('..')
 boost    = dependency('boost', modules : ['unit_test_framework', 'system', 'iostreams'])

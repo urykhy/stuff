@@ -1,4 +1,4 @@
-project('cbor', 'cpp', version : '0.1', default_options : ['cpp_std=c++17'])
+project('cbor', 'cpp', version : '0.1')
 
 includes  = include_directories('..')
 benchmark = dependency('benchmark', required : true)

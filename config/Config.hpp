@@ -2,6 +2,7 @@
 
 #include <filesystem>
 #include <map>
+#include <optional>
 #include <string>
 
 #define FILE_NO_ARCHIVE

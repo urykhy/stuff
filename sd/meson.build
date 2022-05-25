@@ -1,4 +1,4 @@
-project('sd', 'cpp', version : '0.1', default_options : ['cpp_std=c++2a'])
+project('sd', 'cpp', version : '0.1')
 
 includes  = include_directories('..')
 boost     = dependency('boost', modules : ['unit_test_framework', 'system', 'coroutine'])

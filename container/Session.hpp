@@ -1,6 +1,7 @@
 #pragma once
 
 #include <map>
+#include <optional>
 
 #include <boost/any.hpp>
 
