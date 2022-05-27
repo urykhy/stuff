@@ -1,4 +1,4 @@
-project('protobuf', 'cpp', version : '0.1')
+project('protobuf', 'cpp', version : '0.1',  license : 'GPL-2.0')
 
 includes  = include_directories('..')
 protoc    = find_program('protoc', required : true)
@@ -32,3 +32,18 @@ test('basic test', a, args : ['-l', 'all'])
 benchmark('protobuf', b)
 benchmark('protobuf', b2)
 #run_target('bench', command : ['./build/b.out'])
+
+# play with FPM packaging
+conf = configuration_data()
+conf.set_quoted('PACKAGE', meson.project_name())
+conf.set_quoted('VERSION', meson.project_version())
+conf.set_quoted('LICENSE', meson.project_license())
+conf.set_quoted('TAG', run_command('git', 'rev-parse', '--short', 'HEAD', check: true).stdout().strip())
+conf.set_quoted('SOURCE_ROOT', meson.source_root())
+binaries=[]
+foreach x : [a, b, b2]
+    n = import('fs').name(x.full_path())
+    binaries += [n + '=' + get_option('prefix') + '/' + meson.project_name() + '/' + get_option('bindir') + '/' + n]
+endforeach
+conf.set('BINARIES', ' '.join(binaries))
+package_file = configure_file(input: 'package.sh.in', output: 'package.sh', configuration: conf)

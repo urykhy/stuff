@@ -1,0 +1,28 @@
+#!/bin/bash
+
+git log --pretty="tformat:* %cd %an <%ae>%n- %s%b (%h)%n" @SOURCE_ROOT@ | perl -lap00e '~s/(\d{2}:){2}\d{2} (\d{4}) [+-]\d{4}/$2/g' > .changelog
+
+NAME=@PACKAGE@
+VERSION=@VERSION@
+LICENSE=@LICENSE@
+TAG=@TAG@
+MAINTAINER="example@example.com"
+VENDOR="Example Inc"
+DESCRIPTION="Protobuf experiments (test and benchmarks)"
+URL="https://github.com/urykhy/stuff/tree/master/protobuf"
+BINARIES=(@BINARIES@)
+fpm --verbose                     \
+    --input-type dir              \
+    --output-type rpm             \
+    --no-auto-depends             \
+    --architecture "x86_64"       \
+    --name "$NAME"                \
+    --version "$VERSION"          \
+    --license "$LICENSE"          \
+    --rpm-changelog .changelog    \
+    --maintainer "$MAINTAINER"    \
+    --iteration "$TAG"            \
+    --vendor "$VENDOR"            \
+    --description "$DESCRIPTION"  \
+    --url "$URL"                  \
+    ${BINARIES[*]}
