@@ -45,7 +45,7 @@ BOOST_AUTO_TEST_CASE(router)
     auto sRouter = std::make_shared<asio_http::Router>();
     Prometheus::configure(sRouter);
     Threads::Asio sAsio;
-    asio_http::startServer(sAsio, 2081, sRouter);
+    asio_http::startServer(sAsio.service(), 2081, sRouter);
 
     Threads::Group sGroup;
     Prometheus::start(sGroup);
@@ -53,7 +53,7 @@ BOOST_AUTO_TEST_CASE(router)
 
     asio_http::ClientRequest sRequest{.method = asio_http::http::verb::get, .url = "http://127.0.0.1:2081/metrics"};
 
-    auto sResponse = asio_http::async(sAsio, std::move(sRequest)).get();
+    auto sResponse = asio_http::async(sAsio.service(), std::move(sRequest)).get();
     BOOST_CHECK_EQUAL(sResponse.result(), asio_http::http::status::ok);
     BOOST_TEST_MESSAGE("metrics: \n"
                        << sResponse.body());

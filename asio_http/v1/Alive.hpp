@@ -5,12 +5,16 @@
 
 #include "Client.hpp"
 
+#ifndef ASIO_HTTP_LIBRARY_HEADER
 #include <container/Pool.hpp>
 #include <container/RequestQueue.hpp>
 #include <unsorted/Log4cxx.hpp>
+#endif
 
 namespace asio_http::v1 {
-
+#ifdef ASIO_HTTP_LIBRARY_HEADER
+    std::shared_ptr<Client> makeClient(asio::io_service& aService);
+#else
     static log4cxx::LoggerPtr sLogger = Logger::Get("http");
 
     class Manager;
@@ -99,10 +103,9 @@ namespace asio_http::v1 {
             return sPromise->get_future();
         }
 
-        auto async(ClientRequest&& aRequest, net::yield_context yield)
+        std::shared_ptr<CT> async_y(ClientRequest&& aRequest, net::yield_context yield) override
         {
             auto sPromise    = std::make_shared<std::promise<Response>>();
-            using CT         = boost::asio::async_completion<asio_http::asio::yield_context, void(Promise)>;
             auto sCompletion = std::make_shared<CT>(yield);
 
             auto sCB = [sCompletion, sPromise, sHandler = sCompletion->completion_handler]() {
@@ -256,4 +259,15 @@ namespace asio_http::v1 {
         }
     };
 
+#ifndef ASIO_HTTP_LIBRARY_IMPL
+    inline
+#endif
+        std::shared_ptr<Client>
+        makeClient(asio::io_service& aService)
+    {
+        auto sClient = std::make_shared<asio_http::v1::Manager>(aService, asio_http::v1::Params{});
+        sClient->start_cleaner();
+        return sClient;
+    }
+#endif // ASIO_HTTP_LIBRARY_HEADER
 } // namespace asio_http::v1

@@ -1,11 +1,17 @@
 #pragma once
 
+#include <future>
 #include <string>
 
+#ifdef ASIO_HTTP_LIBRARY_HEADER
+#include <boost/asio/spawn.hpp>
+#include <boost/beast/http/string_body.hpp>
+#else
 #include <boost/asio.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>
+#endif
 
 namespace asio_http {
 
@@ -13,7 +19,9 @@ namespace asio_http {
     namespace beast = boost::beast;
     namespace http  = beast::http;
     namespace net   = boost::asio;
-    using tcp       = boost::asio::ip::tcp;
+#ifndef ASIO_HTTP_LIBRARY_HEADER
+    using tcp = boost::asio::ip::tcp;
+#endif
 
     using Request  = http::request<http::string_body>;
     using Response = http::response<http::string_body>;
@@ -65,7 +73,10 @@ namespace asio_http {
 
     struct Client
     {
-        virtual std::future<Response> async(ClientRequest&& aRequest) = 0;
+        using CT = boost::asio::async_completion<asio_http::asio::yield_context, void(Promise)>;
+
+        virtual std::future<Response> async(ClientRequest&& aRequest)                             = 0;
+        virtual std::shared_ptr<CT>   async_y(ClientRequest&& aRequest, net::yield_context yield) = 0;
         virtual ~Client(){};
     };
     using ClientPtr = std::shared_ptr<Client>;

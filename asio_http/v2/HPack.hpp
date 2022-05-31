@@ -10,6 +10,8 @@
 #include <container/Stream.hpp>
 #include <nghttp2/nghttp2.h>
 #include <parser/Atoi.hpp>
+#include <parser/Url.hpp>
+#include <string/String.hpp>
 
 namespace asio_http::v2 {
 

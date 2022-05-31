@@ -16,3 +16,8 @@ go_server = custom_target('go_server', output: 'server', input: 'server.go', env
 
 a = executable('a.out', 'test.cpp', go_server, dependencies : [boost, threads, curl, log4cxx, nghttp2, json], include_directories : includes)
 test('basic test', a, args : ['-l', 'all'])
+
+# put beast into cage
+asio_lib = static_library('asio_http', 'Lib.cpp', include_directories : includes)
+asio_dep = declare_dependency(link_with : asio_lib)
+b = executable('b.out', 'test-lib.cpp', dependencies : [boost, threads, curl, log4cxx, nghttp2, json, asio_dep], include_directories : includes)

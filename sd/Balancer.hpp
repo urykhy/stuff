@@ -2,6 +2,8 @@
 
 #include <mutex>
 
+#include <boost/asio/steady_timer.hpp>
+
 #include <etcd/Etcd.hpp>
 #include <parser/Json.hpp>
 

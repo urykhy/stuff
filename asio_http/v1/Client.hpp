@@ -8,7 +8,10 @@
 #include <threads/Asio.hpp>
 
 namespace asio_http::v1 {
-
+#ifdef ASIO_HTTP_LIBRARY_HEADER
+    std::future<Response> async(asio::io_service& aService, ClientRequest&& aRequest);
+    std::future<Response> async(asio::io_service& aService, ClientRequest&& aRequest, boost::asio::yield_context yield);
+#else
     inline void simple_client_session(asio::io_service& aService, ClientRequest&& aRequest, Promise aPromise, net::yield_context yield)
     {
         beast::error_code ec;
@@ -61,7 +64,11 @@ namespace asio_http::v1 {
         sStream.socket().shutdown(tcp::socket::shutdown_both, ec);
     }
 
-    inline std::future<Response> async(asio::io_service& aService, ClientRequest&& aRequest)
+#ifndef ASIO_HTTP_LIBRARY_IMPL
+    inline
+#endif
+        std::future<Response>
+        async(asio::io_service& aService, ClientRequest&& aRequest)
     {
         auto sPromise = std::make_shared<std::promise<Response>>();
         boost::asio::spawn(aService, [aService = std::ref(aService), aRequest = std::move(aRequest), sPromise](boost::asio::yield_context yield) mutable {
@@ -70,15 +77,15 @@ namespace asio_http::v1 {
         return sPromise->get_future();
     }
 
-    inline std::future<Response> async(Threads::Asio& aContext, ClientRequest&& aRequest)
-    {
-        return async(aContext.service(), std::move(aRequest));
-    }
-
-    inline std::future<Response> async(asio::io_service& aService, ClientRequest&& aRequest, boost::asio::yield_context yield)
+#ifndef ASIO_HTTP_LIBRARY_IMPL
+    inline
+#endif
+        std::future<Response>
+        async(asio::io_service& aService, ClientRequest&& aRequest, boost::asio::yield_context yield)
     {
         auto sPromise = std::make_shared<std::promise<asio_http::Response>>();
         simple_client_session(aService, std::move(aRequest), sPromise, yield);
         return sPromise->get_future();
     }
-} // namespace asio_http
+#endif // ASIO_HTTP_LIBRARY_HEADER
+} // namespace asio_http::v1

@@ -31,7 +31,7 @@ BOOST_AUTO_TEST_CASE(simple)
     sMQ.configure(sRouter);
 
     Threads::Asio sAsio;
-    asio_http::startServer(sAsio, 2081, sRouter);
+    asio_http::startServer(sAsio.service(), 2081, sRouter);
 
     // client part
     MQ::Client::Params sClientParams;

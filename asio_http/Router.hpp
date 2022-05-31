@@ -4,6 +4,9 @@
 #include <mutex>
 #include <string>
 
+#include <boost/asio/io_service.hpp>
+#include <boost/asio/spawn.hpp>
+
 #include "API.hpp"
 
 namespace asio_http {

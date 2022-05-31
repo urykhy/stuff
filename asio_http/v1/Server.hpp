@@ -3,13 +3,16 @@
 // based on https://www.boost.org/doc/libs/master/libs/beast/example/http/server/small/http_server_small.cpp
 //          https://www.boost.org/doc/libs/master/libs/beast/example/http/server/coro/http_server_coro.cpp
 
+#include <boost/asio/spawn.hpp>
+
 #include "../Router.hpp"
 
 #include <container/Session.hpp>
-#include <threads/Asio.hpp>
 
 namespace asio_http::v1 {
-
+#ifdef ASIO_HTTP_LIBRARY_HEADER
+    void startServer(asio::io_service& aService, uint16_t aPort, RouterPtr aRouter);
+#else
     inline void session(asio::io_service& aService, beast::tcp_stream& aStream, RouterPtr aRouter, asio::yield_context yield)
     {
         beast::error_code  ec;
@@ -54,11 +57,16 @@ namespace asio_http::v1 {
         });
     }
 
-    inline void startServer(Threads::Asio& aContext, uint16_t aPort, RouterPtr aRouter)
+#ifndef ASIO_HTTP_LIBRARY_IMPL
+    inline
+#endif
+        void
+        startServer(asio::io_service& aService, uint16_t aPort, RouterPtr aRouter)
     {
         auto const sAddress  = asio::ip::make_address("0.0.0.0");
-        auto       sAcceptor = std::make_shared<tcp::acceptor>(aContext.service(), tcp::endpoint(sAddress, aPort));
-        auto       sSocket   = std::make_shared<tcp::socket>(aContext.service());
-        server(aContext.service(), sAcceptor, sSocket, aRouter);
+        auto       sAcceptor = std::make_shared<tcp::acceptor>(aService, tcp::endpoint(sAddress, aPort));
+        auto       sSocket   = std::make_shared<tcp::socket>(aService);
+        server(aService, sAcceptor, sSocket, aRouter);
     }
-} // namespace asio_http
+#endif // ASIO_HTTP_LIBRARY_HEADER
+} // namespace asio_http::v1

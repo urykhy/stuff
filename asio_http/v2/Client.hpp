@@ -1,12 +1,16 @@
 #pragma once
 
+#ifndef ASIO_HTTP_LIBRARY_HEADER
 #include "Input.hpp"
 #include "Output.hpp"
+#endif
 
 #include <unsorted/Raii.hpp>
 
 namespace asio_http::v2 {
-
+#ifdef ASIO_HTTP_LIBRARY_HEADER
+    std::shared_ptr<Client> makeClient(asio::io_service& aService);
+#else
     struct Peer : public std::enable_shared_from_this<Peer>, InputFace
     {
         using Notify = std::function<void(const std::string&)>;
@@ -244,8 +248,8 @@ namespace asio_http::v2 {
 
     struct Params
     {
-        //unsigned max_connections  = 32;
-        //time_t   delay            = 1;
+        // unsigned max_connections  = 32;
+        // time_t   delay            = 1;
     };
 
     class Manager : public std::enable_shared_from_this<Manager>, public Client
@@ -301,6 +305,11 @@ namespace asio_http::v2 {
             return sPromise->get_future();
         }
 
+        std::shared_ptr<CT> async_y(ClientRequest&& aRequest, net::yield_context yield) override
+        {
+            throw std::invalid_argument("async_y not implemented");
+        }
+
     private:
         void async_i(RQ&& aRQ)
         {
@@ -317,7 +326,7 @@ namespace asio_http::v2 {
                     sAddr.port,
                     m_Strand.wrap([sWeakPtr, p = shared_from_this()](const std::string& aMsg) {
                         p->notify_i(sWeakPtr, aMsg);
-                    }));
+                          }));
                 sDataPtr->peer = sPeer;
                 sPeer->start();
                 auto sTmp = m_Data.insert(std::make_pair(sAddr, sDataPtr));
@@ -361,4 +370,15 @@ namespace asio_http::v2 {
         }
     };
 
+#ifndef ASIO_HTTP_LIBRARY_IMPL
+    inline
+#endif
+        std::shared_ptr<Client>
+        makeClient(asio::io_service& aService)
+    {
+        auto sClient = std::make_shared<Manager>(aService, asio_http::v2::Params{});
+        sClient->start_cleaner();
+        return sClient;
+    }
+#endif // ASIO_HTTP_LIBRARY_HEADER
 } // namespace asio_http::v2

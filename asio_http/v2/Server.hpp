@@ -1,13 +1,15 @@
 #pragma once
 
+#ifndef ASIO_HTTP_LIBRARY_HEADER
 #include "../v1/Server.hpp"
 #include "Input.hpp"
 #include "Output.hpp"
-
-#include <threads/Asio.hpp>
+#endif
 
 namespace asio_http::v2 {
-
+#ifdef ASIO_HTTP_LIBRARY_HEADER
+    void startServer(asio::io_service& aService, uint16_t aPort, RouterPtr aRouter);
+#else
     class Session : public std::enable_shared_from_this<Session>, InputFace
     {
         asio::io_service&        m_Service;
@@ -193,11 +195,17 @@ namespace asio_http::v2 {
         });
     }
 
-    inline void startServer(Threads::Asio& aContext, uint16_t aPort, RouterPtr aRouter)
+#ifndef ASIO_HTTP_LIBRARY_IMPL
+    inline
+#endif
+    // clang-format off
+    void startServer(asio::io_service& aService, uint16_t aPort, RouterPtr aRouter)
+    // clang-format on
     {
         auto const sAddress  = asio::ip::make_address("0.0.0.0");
-        auto       sAcceptor = std::make_shared<tcp::acceptor>(aContext.service(), tcp::endpoint(sAddress, aPort));
-        auto       sSocket   = std::make_shared<tcp::socket>(aContext.service());
-        server(aContext.service(), sAcceptor, sSocket, aRouter);
+        auto       sAcceptor = std::make_shared<tcp::acceptor>(aService, tcp::endpoint(sAddress, aPort));
+        auto       sSocket   = std::make_shared<tcp::socket>(aService);
+        server(aService, sAcceptor, sSocket, aRouter);
     }
+#endif // ASIO_HTTP_LIBRARY_HEADER
 } // namespace asio_http::v2

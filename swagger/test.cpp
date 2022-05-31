@@ -302,38 +302,32 @@ struct RedirectServerX : api::redirect_1_0::server
 
 struct WithServer
 {
-    Threads::Asio                           m_Asio;
-    std::shared_ptr<asio_http::Router>      m_Router;
-    std::shared_ptr<asio_http::v1::Manager> m_HttpClient;
-    Threads::Group                          m_Group;
+    Threads::Asio                      m_Asio;
+    std::shared_ptr<asio_http::Router> m_Router;
+    std::shared_ptr<asio_http::Client> m_HttpClient;
+    Threads::Group                     m_Group;
 
     WithServer()
     {
-        m_Router = std::make_shared<asio_http::Router>();
-
-        m_HttpClient = std::make_shared<asio_http::v1::Manager>(m_Asio.service(), asio_http::v1::Params{});
-        m_HttpClient->start_cleaner();
-
-        asio_http::startServer(m_Asio, 3000, m_Router);
+        m_Router     = std::make_shared<asio_http::Router>();
+        m_HttpClient = asio_http::v1::makeClient(m_Asio.service());
+        asio_http::startServer(m_Asio.service(), 3000, m_Router);
         m_Asio.start(m_Group);
     }
 };
 
 struct WithServerV2
 {
-    Threads::Asio                           m_Asio;
-    std::shared_ptr<asio_http::Router>      m_Router;
-    std::shared_ptr<asio_http::v2::Manager> m_HttpClient;
-    Threads::Group                          m_Group;
+    Threads::Asio                      m_Asio;
+    std::shared_ptr<asio_http::Router> m_Router;
+    std::shared_ptr<asio_http::Client> m_HttpClient;
+    Threads::Group                     m_Group;
 
     WithServerV2()
     {
-        m_Router = std::make_shared<asio_http::Router>();
-
-        m_HttpClient = std::make_shared<asio_http::v2::Manager>(m_Asio.service(), asio_http::v2::Params{});
-        m_HttpClient->start_cleaner();
-
-        asio_http::v2::startServer(m_Asio, 3000, m_Router);
+        m_Router     = std::make_shared<asio_http::Router>();
+        m_HttpClient = asio_http::v2::makeClient(m_Asio.service());
+        asio_http::v2::startServer(m_Asio.service(), 3000, m_Router);
         m_Asio.start(m_Group);
     }
 };
@@ -410,7 +404,7 @@ BOOST_FIXTURE_TEST_CASE(swagger_ui, WithServer)
         .method = asio_http::http::verb::get,
         .url    = "http://127.0.0.1:3000/swagger/index.html"};
 
-    auto sResponse = asio_http::async(m_Asio, std::move(sRequest)).get();
+    auto sResponse = asio_http::async(m_Asio.service(), std::move(sRequest)).get();
     BOOST_CHECK_EQUAL(sResponse.result(), asio_http::http::status::ok);
     BOOST_CHECK_EQUAL(sResponse.body().size(), 1425);
 }
@@ -521,7 +515,7 @@ BOOST_FIXTURE_TEST_CASE(redirect, WithServer)
         RedirectServerX                    sRedirectServerX;
         std::shared_ptr<asio_http::Router> sRouter = std::make_shared<asio_http::Router>();
         sRedirectServerX.configure(sRouter);
-        asio_http::startServer(m_Asio, 3001, sRouter);
+        asio_http::startServer(m_Asio.service(), 3001, sRouter);
 
         auto sR = sClient.get_permanent({});
         std::visit([&](auto&& arg) {

@@ -4,5 +4,5 @@
 
 namespace asio_http
 {
-    using v1::Manager;
+    using v1::makeClient;
 }
