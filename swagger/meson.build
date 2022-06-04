@@ -29,5 +29,7 @@ endforeach
 swagger_ui_get = find_program('get_swagger_ui.sh', required : true)
 swagger_ui_tar = custom_target('swagger_ui_tar', output: 'swagger_ui.tar', command: [swagger_ui_get])
 
-a = executable('a.out', 'test.cpp', api_src, swagger_ui_tar, dependencies : [boost, threads, json, log4cxx, curl, uuid, thrift, jaeger_proto, ssl, nghttp2], include_directories : includes)
+subdir('asio_http_lib')
+
+a = executable('a.out', 'test.cpp', api_src, swagger_ui_tar, dependencies : [boost, threads, json, log4cxx, curl, uuid, thrift, jaeger_proto, ssl, nghttp2, asio_dep], include_directories : includes)
 test('basic test', a, args : ['-l', 'all'])

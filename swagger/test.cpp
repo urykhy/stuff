@@ -1,6 +1,8 @@
 #define BOOST_TEST_MODULE Suites
 #include <boost/test/unit_test.hpp>
 
+#define ASIO_HTTP_LIBRARY_HEADER
+
 #include "MetricsDiscovery.hpp"
 #include "common.v1.hpp"
 #include "discovery.v1.hpp"
