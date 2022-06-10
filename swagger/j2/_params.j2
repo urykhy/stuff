@@ -1,26 +1,32 @@
-struct {{ name }}_parameters {
-    {# parameters #}
-    {%- set p1 = doc['paths'][path].get('parameters', []) | swagger_expand_refs %}
-    {%- set p2 = doc['paths'][path][method].get('parameters', []) | swagger_expand_refs %}
-    {%- set params = p1 + p2 | sort(attribute='name') %}
+{%- set p1 = doc['paths'][path].get('parameters', []) | swagger_expand_refs %}
+{%- set p2 = doc['paths'][path][method].get('parameters', []) | swagger_expand_refs %}
+{%- set params = p1 + p2 | sort(attribute='name') %}
+{%- set body = doc['paths'][path][method].get('requestBody',{}).get('content',{}) %}
+{%- set json = body.get('application/json',{}) | length %}
+{%- set binary = (json == 0 and body | length == 1) %}
 
-    {%- for param in params %}
-        {{ complex_schema(param['schema'], _name(param), True) }}
-    {%- endfor %}
+{% if not x_hpp_name %}
+    struct {{ name }}_parameters {
+        {%- for param in params %}
+            {{ complex_schema(param['schema'], _name(param), True) }}
+        {%- endfor %}
 
-    {# body #}
-    {%- set body = doc['paths'][path][method].get('requestBody',{}).get('content',{}) %}
-    {%- set json = body.get('application/json',{}) | length %}
-    {%- set binary = (json == 0 and body | length == 1) %}
-    {%- if binary > 0 %}
-        {%- set content_type = body | first %}
-        std::string body;
-    {%- elif json > 0 %}
-        {%- set schema = body.get('application/json').get('schema') %}
-        {{ complex_schema(schema) }}
-    {% endif %}
+        {%- if binary > 0 %}
+            {%- set content_type = body | first %}
+            std::string body;
+        {%- elif json > 0 %}
+            {%- set schema = body.get('application/json').get('schema') -%}
+            {{ complex_schema(schema) }}
+        {% endif %}
 
-    void __parse(const asio_http::Request& aRequest) {
+        void __parse(const asio_http::Request& aRequest);
+        bool __test_content_type(const asio_http::Request& aRequest) const;
+        asio_http::ClientRequest __format() const;
+    };
+
+{% else %} {# CPP #}
+
+    void {{ name }}_parameters::__parse(const asio_http::Request& aRequest) {
         auto sQuery = aRequest.target();
         std::string_view sQueryView(sQuery.data(), sQuery.size());
 
@@ -82,7 +88,7 @@ struct {{ name }}_parameters {
         {%- endif %}
     }
 
-    bool __test_content_type(const asio_http::Request& aRequest) const
+    bool {{ name }}_parameters::__test_content_type(const asio_http::Request& aRequest) const
     {
         const auto sContentType = aRequest["Content-Type"];
         if (sContentType.empty())
@@ -96,7 +102,7 @@ struct {{ name }}_parameters {
         {%- endif %}
     }
 
-    asio_http::ClientRequest __format() const
+    asio_http::ClientRequest {{ name }}_parameters::__format() const
     {
         namespace http = boost::beast::http;
         asio_http::ClientRequest sRequest={
@@ -158,4 +164,4 @@ struct {{ name }}_parameters {
 
         return sRequest;
     }
-};
+{% endif %}

@@ -1,3 +1,4 @@
+{% if not x_hpp_name %}
 class server
 {
     log4cxx::LoggerPtr sLogger = Logger::Get("access");
@@ -30,8 +31,79 @@ class server
 {% endif %}
 {% if x_bearer %}
     const Jwt::IFace* m_Jwt = nullptr;
+    Jwt::Claim __auth_helper(const asio_http::Request& aRequest);
+{% endif %}
+{% if x_discovery %}
+    std::shared_ptr<SD::Notify> m_Notify;
+{% endif %}
 
-    Jwt::Claim __auth_helper(const asio_http::Request& aRequest)
+public:
+
+{% if x_sentry %}
+    void with_sentry(SentryHandler aHandler, time_t aRate = 60);
+{% endif %}
+{% if x_queue %}
+    void with_queue(Threads::QueueExecutor& aQueue);
+{% endif %}
+{% if x_bearer %}
+    void with_authorization(const Jwt::IFace* aManager);
+{% endif %}
+{% if x_discovery %}
+    void with_discovery(boost::asio::io_service& aAsio, const std::string& aAddr, const std::string& aService, const std::string& aLocation, unsigned aWeight);
+{% endif %}
+    void configure(asio_http::RouterPtr aRouter);
+    virtual ~server() {};
+
+{# server can respond with plain http status #}
+{% call(doc, path, method, name) _for_every_method(doc) %}
+    // {{ name }}
+    using {{ name }}_parameters = {{ Aname }}::{{ name }}_parameters;
+    {%- call(name, k, response) _for_every_response(doc, path, method, name) -%}
+        using {{ name }}_response_{{ k }} = {{ Aname }}::{{ name }}_response_{{ k }};
+    {%- endcall -%}
+    using {{ name }}_response_v = std::variant<
+        boost::beast::http::status
+        {%- call(name, k, response) _for_every_response(doc, path, method, name) -%}
+            , {{ Aname }}::{{ name }}_response_{{ k -}}
+        {%- endcall -%}
+    >;
+    virtual {{ name }}_response_v
+    {{ name }}_i(asio_http::asio::io_service& aService,
+                 const {{ name }}_parameters& aRequest,
+                 asio_http::asio::yield_context yield {% if x_jaeger %}, Jaeger::Helper& aTrace {% endif %});
+    {%- if x_bearer %}
+        virtual bool
+        {{ name }}_auth(const Jwt::Claim& aClaim, const {{ name }}_parameters& aRequest);
+    {% endif %}
+
+{% endcall %}
+
+private:
+{% call(doc, path, method, name) _for_every_method(doc) %}
+    void {{ name }}(asio_http::asio::io_service& aService,
+                    const asio_http::Request& aRequest,
+                    asio_http::Response& aResponse,
+                    asio_http::asio::yield_context yield);
+{% endcall %}
+};
+
+{% else %} {# CPP #}
+
+{% if x_sentry %}
+    void server::with_sentry(SentryHandler aHandler, time_t aRate)
+    {
+        m_SentryRateLimit = aRate;
+        m_SentryHandler = aHandler;
+    }
+{% endif %}
+{% if x_queue %}
+    void server::with_queue(Threads::QueueExecutor& aQueue)
+    {
+        m_Queue = &aQueue;
+    }
+{% endif %}
+{% if x_bearer %}
+    Jwt::Claim server::__auth_helper(const asio_http::Request& aRequest)
     {
         if (nullptr == m_Jwt)
             throw std::runtime_error("authorization not configured on server");
@@ -52,34 +124,14 @@ class server
         }
         return sClaim;
     }
-{% endif %}
-{% if x_discovery %}
-    std::shared_ptr<SD::Notify> m_Notify;
-{% endif %}
 
-public:
-
-{% if x_sentry %}
-    void with_sentry(SentryHandler aHandler, time_t aRate = 60)
-    {
-        m_SentryRateLimit = aRate;
-        m_SentryHandler = aHandler;
-    }
-{% endif %}
-{% if x_queue %}
-    void with_queue(Threads::QueueExecutor& aQueue)
-    {
-        m_Queue = &aQueue;
-    }
-{% endif %}
-{% if x_bearer %}
-    void with_authorization(const Jwt::IFace* aManager)
+    void server::with_authorization(const Jwt::IFace* aManager)
     {
         m_Jwt = aManager;
     }
 {% endif %}
 {% if x_discovery %}
-    void with_discovery(boost::asio::io_service& aAsio, const std::string& aAddr, const std::string& aService, const std::string& aLocation, unsigned aWeight)
+    void server::with_discovery(boost::asio::io_service& aAsio, const std::string& aAddr, const std::string& aService, const std::string& aLocation, unsigned aWeight)
     {
         SD::Notify::Params sParams;
         sParams.key        = "discovery/swagger/" + aService + "/{{ doc['info']['title'] }}/{{ doc['info']['version'] }}/" + aAddr;
@@ -91,13 +143,23 @@ public:
         m_Notify->start();
     }
 {% endif %}
-
 {% call(doc, path, method, name) _for_every_method(doc) %}
-    using {{ name }}_parameters = {{ Aname }}::{{ name }}_parameters;
-    {% call(name, k, response) _for_every_response(doc, path, method, name) %}
-        using {{ name }}_response_{{ k }} = {{ Aname }}::{{ name }}_response_{{ k }};
-    {% endcall %}
-    void {{ name }}(asio_http::asio::io_service& aService,
+
+    server::{{ name }}_response_v
+    server::{{ name }}_i(asio_http::asio::io_service& aService,
+                 const {{ name }}_parameters& aRequest,
+                 asio_http::asio::yield_context yield {% if x_jaeger %}, Jaeger::Helper& aTrace {% endif %})
+    {
+        return {boost::beast::http::status::not_implemented};
+    }
+    {% if x_bearer %}
+        bool server::{{ name }}_auth(const Jwt::Claim& aClaim, const {{ name }}_parameters& aRequest)
+        {
+            return false;
+        }
+    {% endif %}
+
+    void server::{{ name }}(asio_http::asio::io_service& aService,
                     const asio_http::Request& aRequest,
                     asio_http::Response& aResponse,
                     asio_http::asio::yield_context yield)
@@ -223,7 +285,7 @@ public:
     }
 {% endcall %}
 
-    void configure(asio_http::RouterPtr aRouter) {
+    void server::configure(asio_http::RouterPtr aRouter) {
         namespace http = boost::beast::http;
         {%- for path in doc['paths'] %}
         aRouter->insert("{{ (doc['servers'][0]['url'], path) | join('') | swagger_prefix }}",
@@ -247,29 +309,4 @@ public:
                         }, true /* prefix match */);
         {% endfor %}
     }
-
-{# server can respond with plain http status #}
-{% call(doc, path, method, name) _for_every_method(doc) %}
-    using {{ name }}_response_v = std::variant<
-        boost::beast::http::status
-        {%- call(name, k, response) _for_every_response(doc, path, method, name) -%}
-            , {{ Aname }}::{{ name }}_response_{{ k }}
-        {%- endcall %}
-    >;
-    virtual {{ name }}_response_v
-    {{ name }}_i(asio_http::asio::io_service& aService,
-                 const {{ name }}_parameters& aRequest,
-                 asio_http::asio::yield_context yield {% if x_jaeger %}, Jaeger::Helper& aTrace {% endif %})
-    {
-        return {boost::beast::http::status::not_implemented};
-    }
-    {% if x_bearer %}
-        virtual bool
-        {{ name }}_auth(const Jwt::Claim& aClaim, const {{ name }}_parameters& aRequest)
-        {
-            return false;
-        }
-    {% endif %}
-{% endcall %}
-    virtual ~server() {}
-};
+{% endif %}

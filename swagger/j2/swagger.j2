@@ -1,18 +1,27 @@
+{% set x_hpp_name = doc['info'].get('x-hpp-name', false) %}
+{% if not x_hpp_name %}
+#pragma once
+{% endif %}
+
+{% if x_hpp_name %}
+#include "{{ x_hpp_name }}"
 #include <regex>
+
+#include <container/Algorithm.hpp>
+#include <container/Session.hpp>
+#include <exception/Error.hpp>
+#include <format/Float.hpp>
+{% endif %}
 #include <set>
 #include <string>
 #include <variant>
 #include <vector>
 
 #include "Format.hpp"
-
+#define ASIO_HTTP_LIBRARY_HEADER
 #include <asio_http/Alive.hpp>
 #include <asio_http/Router.hpp>
 #include <cbor/cbor.hpp>
-#include <container/Algorithm.hpp>
-#include <container/Session.hpp>
-#include <exception/Error.hpp>
-#include <format/Float.hpp>
 #include <jwt/JWT.hpp>
 #include <unsorted/Log4cxx.hpp>
 
@@ -54,13 +63,13 @@
 {% set bearer_scheme = bearer_schemas | first | default('') %}
 {% set x_bearer = doc.get('security',[]) | selectattr(bearer_scheme, 'defined') | list | length %}
 
-{% macro complex_schema(schema, name='body', opt=False, decl=True, level=0) -%}
-    {% set current_type = schema.get('type','') %}
-    {% if current_type == 'object' %}
+{% macro complex_schema(schema, name='body', opt=False, decl=True, level=0) %}
+    {%- set current_type = schema.get('type','') %}
+    {%- if current_type == 'object' %}
         struct {{ name }}_t {
-            {% for k,v in schema.properties.items() %}
+            {%- for k,v in schema.properties.items() %}
                 {{ complex_schema(v, k, opt, True, level+1) }}
-            {% endfor %}
+            {%- endfor %}
             ::Json::Value to_json() const {
                 ::Json::Value sValue(::Json::objectValue);
                 {%- for t in schema.properties | sort %}sValue["{{ t }}"] = Format::Json::to_value({{ t }});{%- endfor %}
@@ -76,35 +85,35 @@
                 cbor::read(aIn, {{ schema.properties | sort | join(',') }});
             }
         };
-        {% if level == 0 %}
-            {%- if opt == True %}std::optional<{% endif %}{{ name }}_t {%- if opt %}>{% endif %} {{ name }} = {}; {# root object #}
-        {% endif %}
-    {% elif current_type == 'array' %}
-        {% set array_type = schema['items']['type'] %}
-        {% if array_type == 'object' %}
-            {{ complex_schema(schema['items'], name, opt, True, level+1) }}
-            {% if decl == True %}
+        {%- if level == 0 %}
+            {%- if opt == True %}std::optional<{% endif %}{{ name }}_t {%- if opt %}>{% endif %} {{ name }} = {};
+        {%- endif %}
+    {%- elif current_type == 'array' %}
+        {%- set array_type = schema['items']['type'] %}
+        {%- if array_type == 'object' %}
+            {{- complex_schema(schema['items'], name, opt, True, level+1) }}
+            {%- if decl == True %}
                 std::vector<{{ name }}_t> {{ name }} = {};
-            {% else %}
+            {%- else %}
                 using {{ name }} = std::vector<{{ name }}_t>;
-            {% endif %}
-        {% elif array_type == 'array' %}
-            {{ complex_schema(schema['items'], name + '_a', opt, False, level+1) }} {# decl = False #}
-            {% if decl == True %}
+            {%- endif %}
+        {%- elif array_type == 'array' -%}
+            {{ complex_schema(schema['items'], name + '_a', opt, False, level+1) }}
+            {%- if decl == True %}
                 std::vector<{{ name }}_a> {{ name }} = {};
-            {% else %}
+            {%- else %}
                 using {{ name }} = std::vector<{{ name }}_a>;
-            {% endif %}
-        {% else %}
-            {% if decl == True %}
+            {%- endif %}
+        {%- else %}
+            {%- if decl == True %}
                 std::vector<{{ array_type | swagger_type }}> {{ name }} = {};
-            {% else %}
+            {%- else %}
                 using {{ name }} = std::vector<{{ array_type | swagger_type }}>;
-            {% endif %}
-        {% endif %}
-    {% else %}
+            {%- endif %}
+        {%- endif %}
+    {%- else %}
         {%- if opt == True %}std::optional<{% endif %}{{ current_type | swagger_type }}{%- if opt %}>{% endif %} {{ name }} = {};
-    {% endif %}
+    {%- endif %}
 {%- endmacro %}
 
 {% macro _err_class(k) %}
@@ -128,19 +137,22 @@
         {%- for method in doc['paths'][path] if method in ["get", "put", "post", "head", "delete"] %}
             {%- set name = _name(doc['paths'][path][method]['operationId']) %}
             {%- if name == '' %}
-                {%- set name = (doc['servers'][0]['url'], path) | join('') | swagger_prefix | replace('/','_') %}
+                {%- set name = (doc['servers'][0]['url'], path) | join('') | swagger_prefix | replace('/','_') | replace('.','_') %}
             {% endif %}
+            {%- if name.startswith('_') %}
+                {%- set name=name[1:] %}
+            {%- endif %}
             {{ caller(doc, path, method, name) }}
         {%- endfor %}
     {%- endfor %}
 {% endmacro %}
 
-{% macro _for_every_response(doc, path, method, name) %}
+{%- macro _for_every_response(doc, path, method, name) %}
     {%- for k,v in doc['paths'][path][method].get('responses',{}) | dictsort %}
         {%- set response = v | swagger_expand_ref %}
-        {{ caller(name, k, response) }}
+        {{- caller(name, k, response) }}
     {%- endfor %}
-{% endmacro %}
+{%- endmacro -%}
 
 {% macro _parameters(doc, path, method) %}
     {%- set p1 = doc['paths'][path].get('parameters', []) | swagger_expand_refs %}

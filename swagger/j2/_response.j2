@@ -1,22 +1,35 @@
-struct {{ name }}_response_{{ k }}
-    {%- if k | int >= 400 %} : public {{ _err_class(k) }}{%- endif %}
-{
-    {%- set json = response.get('content',{}).get('application/json',{}) | length %}
-    {%- set binary = (json == 0 and response.get('content',{}) | length == 1) %}
-    {%- if binary > 0 %}
-        {%- set content_type = response.get('content') | first %}
-        std::string body;
-    {%- elif json > 0 %}
-        {%- set schema = response.get('content',{}).get('application/json').get('schema') %}
-        {{ complex_schema(schema) }}
-    {%- endif %}
+{%- set json = response.get('content',{}).get('application/json',{}) | length %}
+{%- set binary = (json == 0 and response.get('content',{}) | length == 1) %}
+{%- set headers = response.get('headers',{}) %}
 
-    {%- set headers = response.get('headers',{}) %}
-    {%- for k,v in headers | dictsort %}
-        {{ complex_schema(v['schema'], _name(k), True) }}
-    {%- endfor %}
+{% if not x_hpp_name %}
+    struct {{ name }}_response_{{ k }}
+        {%- if k | int >= 400 %} : public {{ _err_class(k) }}{%- endif %}
+    {
+        {%- if binary > 0 %}
+            {%- set content_type = response.get('content') | first %}
+            std::string body;
+        {%- elif json > 0 %}
+            {%- set schema = response.get('content',{}).get('application/json').get('schema') -%}
+            {{ complex_schema(schema) }}
+        {%- endif %}
 
-    void __format(const asio_http::Request& aRequest, asio_http::Response& aResponse) {
+        {%- for k,v in headers | dictsort %}
+            {{ complex_schema(v['schema'], _name(k), True) }}
+        {%- endfor %}
+
+        {#  default c-tor for runtime-error #}
+        {%- if k | int >= 400 %}
+            {{ name }}_response_{{ k }}() : {{ _err_class(k) }}("{{ response['description'] }}"){}
+        {%- endif %}
+
+        void __format(const asio_http::Request& aRequest, asio_http::Response& aResponse);
+        void __parse(asio_http::Response& aResponse);
+    };
+
+{% else %} {# CPP #}
+
+    void {{ name }}_response_{{ k }}::__format(const asio_http::Request& aRequest, asio_http::Response& aResponse) {
         {#  format response body #}
         namespace http = boost::beast::http;
         {%- if binary > 0 %}
@@ -46,7 +59,7 @@ struct {{ name }}_response_{{ k }}
         aResponse.result({{ k }});
     }
 
-    void __parse(asio_http::Response& aResponse)
+    void {{ name }}_response_{{ k }}::__parse(asio_http::Response& aResponse)
     {
         [[maybe_unused]] const auto sContentType = aResponse["Content-Type"];
         {%- if binary > 0 %}
@@ -71,9 +84,4 @@ struct {{ name }}_response_{{ k }}
                 swagger::parse(sValue, {{ _name(k) }});
         {%- endfor %}
     }
-
-    {#  default c-tor for runtime-error #}
-    {%- if k | int >= 400 %}
-        {{ name }}_response_{{ k }}() : {{ _err_class(k) }}("{{ response['description'] }}"){}
-    {%- endif %}
-};
+{% endif %}

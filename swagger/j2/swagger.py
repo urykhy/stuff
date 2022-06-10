@@ -5,6 +5,7 @@ import pathlib
 import re
 import sys
 from urllib.parse import urlparse
+from pathlib import Path
 
 import yaml
 from jinja2 import Template, Environment, FileSystemLoader
@@ -87,8 +88,15 @@ def swagger_type(x):
     return x
     # raise Exception("unexpected type: " + str(x))
 environment.filters['swagger_type'] = swagger_type
-
-
 template = environment.from_string(open(script_path + '/swagger.j2').read())
-doc = yaml.safe_load(open(sys.argv[1], 'r'))
-print(template.render(doc=doc))
+
+yaml_name = sys.argv[1]
+doc = yaml.safe_load(open(yaml_name, 'r'))
+
+hpp_name = Path(yaml_name).name.replace('.yaml', '.hpp')
+cpp_name = Path(yaml_name).name.replace('.yaml', '.cpp')
+
+print(template.render(doc=doc), file=open(hpp_name, 'w'))
+
+doc['info']['x-hpp-name'] = hpp_name
+print(template.render(doc=doc), file=open(cpp_name, 'w'))

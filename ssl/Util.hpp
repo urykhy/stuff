@@ -32,10 +32,10 @@ namespace SSLxx {
         return KeyPtr(key, EVP_PKEY_free);
     }
 
-    KeyPtr publicKey(std::string_view aStr) { return readKey<PEM_read_bio_PUBKEY>(aStr); }
-    KeyPtr privateKey(std::string_view aStr) { return readKey<PEM_read_bio_PrivateKey>(aStr); }
+    inline KeyPtr publicKey(std::string_view aStr) { return readKey<PEM_read_bio_PUBKEY>(aStr); }
+    inline KeyPtr privateKey(std::string_view aStr) { return readKey<PEM_read_bio_PrivateKey>(aStr); }
 
-    KeyPtr hmacKey(const std::string_view aKey)
+    inline KeyPtr hmacKey(const std::string_view aKey)
     {
         auto* sKey = EVP_PKEY_new_mac_key(EVP_PKEY_HMAC, NULL, (const uint8_t*)aKey.data(), aKey.size());
         if (sKey == nullptr)
@@ -44,7 +44,7 @@ namespace SSLxx {
     }
 
     using DigestCtx = std::unique_ptr<EVP_MD_CTX, void (*)(EVP_MD_CTX*)>;
-    DigestCtx makeDigestCtx()
+    inline DigestCtx makeDigestCtx()
     {
         auto* sCtx = EVP_MD_CTX_create();
         if (sCtx == nullptr)
@@ -53,7 +53,7 @@ namespace SSLxx {
     }
 
     using CipherCtx = std::unique_ptr<EVP_CIPHER_CTX, void (*)(EVP_CIPHER_CTX*)>;
-    CipherCtx makeCipherCtx()
+    inline CipherCtx makeCipherCtx()
     {
         auto* sCtx = EVP_CIPHER_CTX_new();
         if (sCtx == nullptr)
