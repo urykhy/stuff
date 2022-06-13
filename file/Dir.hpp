@@ -13,14 +13,14 @@
 #include <unsorted/Raii.hpp>
 
 namespace File {
-    bool isDirectory(const std::string& aPath)
+    inline bool isDirectory(const std::string& aPath)
     {
         namespace fs = std::filesystem;
         return fs::exists(aPath) && !fs::is_directory(aPath);
     }
 
     using FileList = std::vector<std::string>;
-    size_t countFiles(const std::string& aPath)
+    inline size_t countFiles(const std::string& aPath)
     {
         namespace fs    = std::filesystem;
         uint64_t sCount = 0;
@@ -32,7 +32,7 @@ namespace File {
         return sCount;
     }
 
-    FileList listFiles(const std::string& aPath, const std::string& aExt)
+    inline FileList listFiles(const std::string& aPath, const std::string& aExt)
     {
         namespace fs = std::filesystem;
         FileList sResult;
@@ -49,7 +49,7 @@ namespace File {
         return sResult;
     }
 
-    FileList glob(const std::string& aPattern)
+    inline FileList glob(const std::string& aPattern)
     {
         FileList   sResult;
         glob_t     sGlob;

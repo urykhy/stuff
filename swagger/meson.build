@@ -32,5 +32,8 @@ swagger_ui_tar = custom_target('swagger_ui_tar', output: 'swagger_ui.tar', comma
 
 subdir('asio_http_lib')
 
-a = executable('a.out', 'test.cpp', api_src, swagger_ui_tar, dependencies : [boost, threads, json, log4cxx, curl, uuid, thrift, jaeger_proto, ssl, nghttp2, asio_dep], include_directories : includes)
+a = executable('a.out', 'test.cpp', api_src, swagger_ui_tar,
+               dependencies : [boost, threads, json, log4cxx, curl, uuid, thrift, jaeger_proto, ssl, nghttp2, asio_dep],
+               include_directories : includes,
+               cpp_pch : 'pch/test_pch.hpp')
 test('basic test', a, args : ['-l', 'all'])
