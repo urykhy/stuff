@@ -137,12 +137,9 @@
         {%- for method in doc['paths'][path] if method in ["get", "put", "post", "head", "delete"] %}
             {%- set name = _name(doc['paths'][path][method]['operationId']) %}
             {%- if name == '' %}
-                {%- set name = (doc['servers'][0]['url'], path) | join('') | swagger_prefix | replace('/','_') | replace('.','_') %}
+                {%- set name = (method, doc['servers'][0]['url'], path) | join('') | swagger_prefix | replace('/','_') | replace('.','_') %}
             {% endif %}
-            {%- if name.startswith('_') %}
-                {%- set name=name[1:] %}
-            {%- endif %}
-            {{ caller(doc, path, method, name) }}
+            {{- caller(doc, path, method, name) }}
         {%- endfor %}
     {%- endfor %}
 {% endmacro %}

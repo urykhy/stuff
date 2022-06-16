@@ -296,7 +296,7 @@ private:
                             {%- for method in doc['paths'][path] if method in ["get", "put", "post", "head", "delete"] %}
                                 {%- set name = _name(doc['paths'][path][method]['operationId']) %}
                                 {%- if name == '' %}
-                                    {%- set name = (doc['servers'][0]['url'], path) | join('') | swagger_prefix | replace('/','_') %}
+                                    {%- set name = (method, doc['servers'][0]['url'], path) | join('') | swagger_prefix | replace('/','_') | replace('.','_') %}
                                 {% endif %}
                                 case http::verb::{{ method | swagger_method }}:
                                     {{ name }}(aService, aRequest, aResponse, yield);
