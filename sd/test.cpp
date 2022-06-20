@@ -94,7 +94,7 @@ BOOST_AUTO_TEST_CASE(start_with_check)
     const uint32_t COUNT    = 40;
     uint32_t       sBlocked = 0;
     for (uint32_t i = 1; i < COUNT; i++) {
-        if (sStat.test(i))
+        if (sStat.test())
             sStat.insert(i, true);
         else
             sBlocked++;
@@ -116,7 +116,7 @@ BOOST_DATA_TEST_CASE(constant_probability,
 
     for (unsigned sTimestamp = 0; sTimestamp < SECONDS; sTimestamp++) {
         for (unsigned i = 0; i < RPS; i++) {
-            if (sStat.test(sTimestamp)) {
+            if (sStat.test()) {
                 sAllowed++;
                 sStat.insert(sTimestamp, drand48() < sProb);
             }

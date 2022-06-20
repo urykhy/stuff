@@ -18,8 +18,8 @@ namespace SD {
     private:
         class Bucket
         {
-            uint64_t m_Success = 0;
-            uint64_t m_Calls   = 0;
+            uint32_t m_Success = 0;
+            uint32_t m_Calls   = 0;
 
         public:
             void insert(bool aSuccess)
@@ -37,6 +37,10 @@ namespace SD {
                 m_Success = 0;
                 m_Calls   = 0;
             }
+            bool empty() const
+            {
+                return m_Calls == 0;
+            }
         };
 
         using Lock = std::unique_lock<std::mutex>;
@@ -47,9 +51,9 @@ namespace SD {
         std::array<Bucket, BUCKET_COUNT> m_Buckets;
 
         unsigned m_CurrentBucket = 0;
-        time_t   m_MaxTimestamp  = 0;
-        time_t   m_Red           = 0; // block mode until this time
-        time_t   m_Heal          = 0; // heal mode until this time
+        time_t   m_CurrentTime   = 0;
+        time_t   m_RedUntil      = 0; // block mode until this time
+        time_t   m_HealUntil     = 0; // heal mode until this time
 
         enum class Zone
         {
@@ -61,37 +65,31 @@ namespace SD {
         Zone   m_Zone        = Zone::YELLOW;
         double m_SuccessRate = INITIAL_ZONE;
 
-        time_t   m_AccountTimestamp = 0;
         Duration m_Duration;
 
-        Zone zone_i() const
+        Zone calc_zone() const
         {
-            if (m_Red > 0)
+            if (m_RedUntil > 0)
                 return Zone::RED;
-            else if (m_Heal > 0)
+            else if (m_HealUntil > 0)
                 return Zone::HEAL;
             else if (m_SuccessRate > YELLOW_ZONE)
                 return Zone::GREEN;
             return Zone::YELLOW;
         }
 
-        void check_zone(time_t aNow)
+        void switch_zone()
         {
-            if (aNow <= m_AccountTimestamp)
-                return;
-
-            m_AccountTimestamp = aNow;
-
             // zone transitions
-            if (m_Red == 0 and m_Heal == 0 and m_SuccessRate <= RED_ZONE) {
-                m_Red = aNow + DELAY;
-            } else if (m_Red > 0 and m_Red <= aNow) {
-                m_Red  = 0;
-                m_Heal = aNow + DELAY;
-            } else if (m_Heal > 0 and m_Heal <= aNow) {
-                m_Heal = 0;
+            if (m_RedUntil == 0 and m_HealUntil == 0 and m_SuccessRate <= RED_ZONE) {
+                m_RedUntil = m_CurrentTime + DELAY;
+            } else if (m_RedUntil > 0 and m_RedUntil <= m_CurrentTime) {
+                m_RedUntil  = 0;
+                m_HealUntil = m_CurrentTime + DELAY;
+            } else if (m_HealUntil > 0 and m_HealUntil <= m_CurrentTime) {
+                m_HealUntil = 0;
             }
-            m_Zone = zone_i();
+            m_Zone = calc_zone();
 
             // account next second
             switch (m_Zone) {
@@ -104,8 +102,7 @@ namespace SD {
             }
         }
 
-        double
-        success_rate_i() const
+        double calc_success_rate() const
         {
             double sSum = 0;
             for (auto& x : m_Buckets)
@@ -113,16 +110,20 @@ namespace SD {
             return sSum / m_Buckets.size();
         }
 
-        void prepare_i(time_t aNow)
+        void prepare(time_t aNow)
         {
-            if (aNow > m_MaxTimestamp) {
-                m_MaxTimestamp = aNow;
+            if (aNow <= m_CurrentTime)
+                return;
+
+            m_CurrentTime = aNow;
+
+            if (!m_Buckets[m_CurrentBucket].empty()) {
                 m_CurrentBucket += 1;
                 m_CurrentBucket = m_CurrentBucket % m_Buckets.size();
-                m_SuccessRate   = success_rate_i();
+                m_SuccessRate   = calc_success_rate();
                 m_Buckets[m_CurrentBucket].reset();
-                check_zone(aNow);
             }
+            switch_zone();
         }
 
     public:
@@ -135,11 +136,11 @@ namespace SD {
         void insert(time_t aNow, bool aSuccess)
         {
             Lock sLock(m_Mutex);
-            prepare_i(aNow);
+            prepare(aNow);
             m_Buckets[m_CurrentBucket].insert(aSuccess);
         }
 
-        bool test(time_t aNow)
+        bool test()
         {
             Lock sLock(m_Mutex);
 
@@ -156,7 +157,7 @@ namespace SD {
         void timer(time_t aNow)
         {
             Lock sLock(m_Mutex);
-            check_zone(aNow);
+            prepare(aNow);
         }
 
         double success_rate() const
