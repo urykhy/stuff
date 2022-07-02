@@ -32,3 +32,17 @@
    ...
    obj:/usr/lib/x86_64-linux-gnu/libgcrypt.so.20.2.5
 }
+{
+   <librdkafka/sasl/client_init>
+   Memcheck:Leak
+   ...
+   fun:sasl_client_init
+   obj:/usr/lib/x86_64-linux-gnu/librdkafka.so.1
+}
+{
+   <_dl_catch_exception>
+   Memcheck:Leak
+   fun:?alloc
+   ...
+   fun:_dl_catch_exception
+}
