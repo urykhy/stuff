@@ -6,7 +6,7 @@
 #include <boost/algorithm/string/predicate.hpp>
 
 #define FILE_NO_ARCHIVE
-#include "Client.hpp"
+#include "Once.hpp"
 
 #include <file/Dir.hpp>
 #include <file/File.hpp>
@@ -29,11 +29,11 @@ namespace MySQL::Upload {
             const std::string sFileName = File::getFilename(sName);
             MySQL::Connection sClient(m_Config);
 
-            sClient.Query("BEGIN");
-            File::by_string(sName, [&sClient](auto sView) {
-                sClient.Query(std::string(sView));
+            MySQL::Once::transaction(&sClient, "uploader", File::getFilename(sName), "as-one", [&sName](auto* aClient) {
+                File::by_string(sName, [aClient](auto sView) {
+                    aClient->Query(std::string(sView));
+                });
             });
-            sClient.Query("COMMIT");
             INFO("success");
         }
 
@@ -41,7 +41,8 @@ namespace MySQL::Upload {
         Consumer(const std::string& aBase, const Config& aConfig)
         : m_Consumer({.base = aBase, .ext = ".upload.sql"}, [this](const std::string& aName) { upload(aName); })
         , m_Config(aConfig)
-        {}
+        {
+        }
 
         void     start(Threads::Group& aGroup) { m_Consumer.start(aGroup); }
         uint32_t size() const { return m_Consumer.size(); }
@@ -54,7 +55,8 @@ namespace MySQL::Upload {
     public:
         Producer(const std::string aBase)
         : m_Producer({.base = aBase, .ext = "upload.sql"})
-        {}
+        {
+        }
 
         void push(const std::string& aName, const List& aData)
         {

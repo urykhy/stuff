@@ -108,19 +108,40 @@ BOOST_AUTO_TEST_CASE(updateable)
     r = upd2.find("d006");
     BOOST_CHECK_EQUAL(r.value(), "Quality Management");
 }
-BOOST_AUTO_TEST_CASE(upload)
+BOOST_AUTO_TEST_CASE(once)
 {
-    MySQL::Connection c(cfg);
-    c.Query("USE test");
+    MySQL::Connection c(MySQL::Config{.database = "test"});
+    c.Query("TRUNCATE TABLE transaction_log");
     c.Query("TRUNCATE TABLE test_data");
 
-    MySQL::Upload::Consumer sWorker("/tmp", cfg);
+    c.Query("INSERT INTO transaction_log VALUES ('test','foo','bar',DATE_SUB(NOW(), INTERVAL 3 DAY))");
+    MySQL::Once::truncate(&c);
+    unsigned sCount = 0;
+    c.Query("SELECT COUNT(1) FROM transaction_log");
+    c.Use([&sCount](const MySQL::Row& aRow) mutable { sCount = aRow[0].as_uint64(); });
+    BOOST_CHECK_EQUAL(0, sCount);
+
+    auto sInsert = [](auto aClient) { aClient->Query("INSERT INTO test_data (name) VALUES ('dummy')"); };
+    MySQL::Once::transaction(&c, "test", "foo", "bar", sInsert);
+    MySQL::Once::transaction(&c, "test", "foo", "bar", sInsert); // 2nd time
+
+    sCount = 0;
+    c.Query("SELECT COUNT(1) FROM test_data");
+    c.Use([&sCount](const MySQL::Row& aRow) mutable { sCount = aRow[0].as_uint64(); });
+    BOOST_CHECK_EQUAL(1, sCount);
+}
+BOOST_AUTO_TEST_CASE(upload)
+{
+    MySQL::Connection c(MySQL::Config{.database = "test"});
+    c.Query("TRUNCATE TABLE transaction_log");
+    c.Query("TRUNCATE TABLE test_data");
+
+    MySQL::Upload::Consumer sWorker("/tmp", MySQL::Config{.database = "test"});
     MySQL::Upload::Producer sQueue("/tmp");
     Threads::Group          tg; // create last one. automagical `wait` in Threads::Group d-tor
     sWorker.start(tg);
 
     MySQL::Upload::List sList;
-    sList.push_back("USE test");
     sList.push_back("INSERT INTO test_data VALUES (0, 'test1'),(0, 'test2'),(0,'test3')");
     sList.push_back("INSERT INTO test_data VALUES (0, 'testX1'),(0, 'testX2'),(0,'testX3')");
 
@@ -131,10 +152,15 @@ BOOST_AUTO_TEST_CASE(upload)
 
     unsigned sRowCount = 0;
     c.Query("select count(1) from test_data");
-    c.Use([&sRowCount](const MySQL::Row& sRow) mutable {
-        sRowCount = sRow[0].as_int64();
+    c.Use([&sRowCount](const MySQL::Row& aRow) mutable {
+        sRowCount = aRow[0].as_int64();
     });
     BOOST_CHECK_EQUAL(sRowCount, 6);
+
+    c.Query("select created from transaction_log where service='uploader' and task='" + sName + ".upload.sql'");
+    c.Use([](const MySQL::Row& aRow) mutable {
+        BOOST_TEST_MESSAGE("transaction_log entry created at: " << aRow[0].as_string());
+    });
 }
 BOOST_AUTO_TEST_CASE(prepare)
 {
@@ -248,7 +274,8 @@ BOOST_AUTO_TEST_CASE(simple)
         size_t& m_Count;
         TestHandler(size_t& aCount)
         : m_Count(aCount)
-        {}
+        {
+        }
 
         bool process(const MySQL::TaskQueue::Task& task, MySQL::TaskQueue::updateCookie&& api) override
         {
@@ -285,7 +312,8 @@ BOOST_AUTO_TEST_CASE(mock)
         size_t& m_Count;
         TestHandler(size_t& aCount)
         : m_Count(aCount)
-        {}
+        {
+        }
 
         bool process(const MySQL::TaskQueue::Task& task, MySQL::TaskQueue::updateCookie&& api) override
         {

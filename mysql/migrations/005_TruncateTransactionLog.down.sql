@@ -1,0 +1,1 @@
+DROP PROCEDURE truncate_transaction_log
