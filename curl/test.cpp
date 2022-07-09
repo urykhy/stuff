@@ -3,13 +3,13 @@
 
 #include <chrono>
 
-#include <threads/Periodic.hpp> // for sleep
-#include <time/Meter.hpp>
-#include <unsorted/Process.hpp>
-
 #include "Curl.hpp"
 #include "Multi.hpp"
 #include "Util.hpp"
+
+#include <threads/Periodic.hpp> // for sleep
+#include <time/Meter.hpp>
+#include <unsorted/Process.hpp>
 using namespace std::chrono_literals;
 
 namespace bp = boost::process;
@@ -203,10 +203,7 @@ BOOST_AUTO_TEST_CASE(Mass)
 {
     Curl::Client::GlobalInit();
 
-    enum
-    {
-        REQUEST_COUNT = 5000
-    };
+    const unsigned  REQUEST_COUNT = 5000;
     std::atomic_int sDone{0};
 
     Curl::Multi::Params sParams; // default 3 sec per request, 32 connections
@@ -229,11 +226,11 @@ BOOST_AUTO_TEST_CASE(Mass)
         });
     };
 
-    for (int i = 0; i < REQUEST_COUNT; i++)
+    for (unsigned i = 0; i < REQUEST_COUNT; i++)
         spawn();
 
     // wait
-    for (int i = 0; i < 1000 and REQUEST_COUNT != sDone; i++) {
+    for (unsigned i = 0; i < 1000 and REQUEST_COUNT != sDone; i++) {
         Threads::sleep(0.01);
     }
     auto sUsed = sMeter.get().to_double();
