@@ -36,7 +36,7 @@ BOOST_AUTO_TEST_CASE(simple)
     BOOST_CHECK_EQUAL(c.ping(), true); // connected
     std::list<Entry> sData;
     Time::XMeter     m1;
-    c.Query("SELECT emp_no, salary, from_date, to_date FROM salaries");
+    c.Query("SELECT emp_no, salary, from_date, to_date FROM salaries LIMIT 100");
     c.Use([&sData](const MySQL::Row& aRow) {
         sData.push_back(Entry{aRow[0].as_int64(), aRow[1].as_int64(), aRow[2].as_string(), aRow[3].as_string()});
     });
@@ -68,6 +68,7 @@ BOOST_AUTO_TEST_CASE(pool)
     auto                        xc = sPool.get();
     xc->Query("select version()");
     xc->Use([](const MySQL::Row& aRow) {
+        BOOST_CHECK_EQUAL("version()", aRow[0].name());
         BOOST_TEST_MESSAGE(aRow[0].as_string());
     });
     sPool.insert(xc);
@@ -169,7 +170,9 @@ BOOST_AUTO_TEST_CASE(prepare)
     // s.Execute();
     MySQL::Statment s = c.Prepare("select * from departments where dept_no > ? and dept_no < ? order by dept_no");
     s.Execute("d004", "d007");
-    s.Use([i = 0](const auto& aRow) mutable {
+    s.Use([i = 0](const auto& aRow, const auto& aMeta) mutable {
+        BOOST_CHECK_EQUAL(aMeta[0], "dept_no");
+        BOOST_CHECK_EQUAL(aMeta[1], "dept_name");
         const std::string_view sNumber = aRow[0];
         const std::string_view sName   = aRow[1];
         BOOST_TEST_MESSAGE(sNumber << " = " << sName);
@@ -187,7 +190,7 @@ BOOST_AUTO_TEST_CASE(prepare)
 
     MySQL::Statment s1 = c.Prepare("select * from salaries where from_date=? and emp_no > ? order by emp_no");
     s1.Execute("1997-11-28", 494301);
-    s1.Use([i = 0](const auto& aRow) mutable {
+    s1.Use([i = 0](const auto& aRow, const auto& aMeta) mutable {
         BOOST_TEST_MESSAGE(aRow[0] << ' ' << aRow[1] << ' ' << aRow[2] << ' ' << aRow[3]);
         if (i == 0) {
             BOOST_CHECK_EQUAL(aRow[0], "495165");
@@ -228,12 +231,12 @@ BOOST_AUTO_TEST_CASE(mock)
     MySQL::Mock::SqlSet sExpectedSQL{
         {"SELECT id, task FROM task_queue1"},
         {"SELECT id, task FROM task_queue2",
-         MySQL::Mock::Rows{
-             {"12", "mock task"},
-             {"12", "mock task"},
-         }},
-        {"COMMIT",
-         MySQL::Error{"mock generated error", CR_SERVER_LOST}},
+         MySQL::Mock::Rows{.rows = {
+                               {"12", "mock task"},
+                               {"12", "mock task"},
+                           },
+                           .meta = {"id", "task"}}},
+        {"COMMIT", MySQL::Error{"mock generated error", CR_SERVER_LOST}},
     };
     MySQL::Mock sMock(sExpectedSQL);
 
@@ -250,6 +253,8 @@ BOOST_AUTO_TEST_CASE(mock)
     sClient->Use([&sCount](const MySQL::Row& aRow) {
         BOOST_CHECK_EQUAL(12, aRow[0].as_uint64());
         BOOST_CHECK_EQUAL("mock task", aRow[1].as_string());
+        BOOST_CHECK_EQUAL(aRow[0].name(), "id");
+        BOOST_CHECK_EQUAL(aRow[1].name(), "task");
         sCount++;
     });
     BOOST_CHECK_EQUAL(2, sCount);
@@ -336,7 +341,7 @@ BOOST_AUTO_TEST_CASE(mock)
     MySQL::Mock::SqlSet sExpectedSQL{
         {"BEGIN"},
         {"SELECT id, task, worker, cookie FROM task_queue WHERE status = 'new' OR (status = 'started' AND updated < DATE_SUB(NOW(), INTERVAL 1 HOUR)) ORDER BY id ASC LIMIT 1 FOR UPDATE",
-         MySQL::Mock::Rows{{"12", "mock task", "", "existing cookie"}}},
+         MySQL::Mock::Rows{.rows = {{"12", "mock task", "", "existing cookie"}}, .meta = {"id", "task", "worker", "cookie"}}},
         {"UPDATE task_queue SET status = 'started', worker = 'test' WHERE id = 12"},
         {"COMMIT"},
         {"UPDATE task_queue SET cookie = 'updated cookie' WHERE id = 12"},

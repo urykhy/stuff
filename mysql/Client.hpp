@@ -35,7 +35,8 @@ namespace MySQL {
         Error(const std::string& aMsg, unsigned aErrno = 0)
         : std::runtime_error(aMsg)
         , m_Errno(aErrno)
-        {}
+        {
+        }
 
         enum ErrorType
         {
@@ -67,48 +68,62 @@ namespace MySQL {
     {
         const MYSQL_ROW& m_Row;
         const unsigned   m_Size;
+        using Meta = std::vector<std::string_view>; // column names
+        const Meta& m_Meta;
 
         class Cell
         {
-            const char* m_Ptr = nullptr;
+            const char*      m_Data = nullptr;
+            std::string_view m_Name;
 
         public:
-            Cell(const char* aPtr)
-            : m_Ptr(aPtr)
-            {}
+            Cell(const char* aData, std::string_view aName)
+            : m_Data(aData)
+            , m_Name(aName)
+            {
+            }
 
             int64_t as_int64() const
             {
                 if (is_null())
                     throw std::logic_error(std::string("MySQL::Null"));
-                return Parser::Atoi<int64_t>(std::string_view(m_Ptr));
+                return Parser::Atoi<int64_t>(std::string_view(m_Data));
             }
-            int64_t as_uint64() const
+            uint64_t as_uint64() const
             {
                 if (is_null())
                     throw std::logic_error(std::string("MySQL::Null"));
-                return Parser::Atoi<uint64_t>(std::string_view(m_Ptr));
+                return Parser::Atoi<uint64_t>(std::string_view(m_Data));
             }
             std::string as_string() const
             {
                 if (is_null())
                     throw std::logic_error(std::string("MySQL::Null"));
-                return m_Ptr;
+                return m_Data;
             }
-            bool is_null() const { return m_Ptr == nullptr; }
+            bool is_null() const { return m_Data == nullptr; }
+
+            std::string_view name() const
+            {
+                return m_Name;
+            }
         };
 
     public:
-        Row(const MYSQL_ROW& aRow, const unsigned aSize)
+        Row(const MYSQL_ROW& aRow, const unsigned aSize, const Meta& aMeta)
         : m_Row(aRow)
         , m_Size(aSize)
-        {}
-
-        Cell operator[](unsigned index) const
+        , m_Meta(aMeta)
         {
-            if (index >= m_Size)
+            if (aSize != aMeta.size())
+                throw std::logic_error("MySQL::Row");
+        }
+
+        Cell operator[](unsigned aIndex) const
+        {
+            if (aIndex >= m_Size)
                 throw std::out_of_range(std::string("MySQL::Row"));
-            return Cell{m_Row[index]};
+            return Cell{m_Row[aIndex], m_Meta[aIndex]};
         }
     };
 
@@ -208,10 +223,11 @@ namespace MySQL {
             MYSQL_BIND sBind[sizeof...(t)];
             memset(sBind, 0, sizeof(sBind));
 
-            Mpl::for_each_argument([this, &sBind, index = 0](const auto& x) mutable {
-                this->bind_one(sBind[index++], x);
-            },
-                                   t...);
+            Mpl::for_each_argument(
+                [this, &sBind, index = 0](const auto& x) mutable {
+                    this->bind_one(sBind[index++], x);
+                },
+                t...);
 
             if (mysql_stmt_bind_param(m_Stmt, sBind))
                 report("mysql_stmt_bind_param");
@@ -224,22 +240,24 @@ namespace MySQL {
         template <class T>
         void Use(T aHandler)
         {
-            auto     sMeta   = mysql_stmt_result_metadata(m_Stmt);
-            unsigned sFields = mysql_num_fields(sMeta);
+            auto       sMeta = mysql_stmt_result_metadata(m_Stmt);
+            Util::Raii sCleanup([&sMeta]() { mysql_free_result(sMeta); });
+            unsigned   sFields = mysql_num_fields(sMeta);
             // std::cout << "column count: " << sFields << std::endl;
 
             MYSQL_BIND sResult[sFields];
             memset(sResult, 0, sizeof(sResult));
+            std::vector<std::string_view> sNames;
+            sNames.reserve(sFields);
 
             for (unsigned i = 0; i < sFields; i++) {
                 MYSQL_FIELD* sField = &sMeta->fields[i];
-                // std::cout << "field length " << sField->length << ", name = " << sField->name << std::endl;
+                sNames.push_back(sField->name);
                 sResult[i].buffer        = alloca(sField->length);
                 sResult[i].buffer_length = sField->length;
                 sResult[i].length        = (long unsigned int*)alloca(sizeof(unsigned long));
                 sResult[i].error         = (my_bool*)alloca(sizeof(my_bool));
             }
-            mysql_free_result(sMeta);
 
             if (mysql_stmt_bind_result(m_Stmt, sResult))
                 report("mysql_stmt_bind_result");
@@ -256,7 +274,7 @@ namespace MySQL {
                 if (sCode == 1)
                     report("mysql_stmt_fetch");
                 if (sCode == 0)
-                    aHandler(prepareRow(&sResult[0], sFields));
+                    aHandler(prepareRow(&sResult[0], sFields), sNames);
             };
         }
     };
@@ -367,12 +385,18 @@ namespace MySQL {
             MYSQL_RES* sResult = mysql_use_result(&m_Handle);
             if (sResult == NULL)
                 report("mysql_use_result");
+            Util::Raii sCleanup([sResult]() { mysql_free_result(sResult); });
 
             const unsigned sFields = mysql_num_fields(sResult);
-            MYSQL_ROW      sRow;
+            std::vector<std::string_view> sMeta; // column names
+            sMeta.reserve(sFields);
+            while (auto sField = mysql_fetch_field(sResult)) {
+                sMeta.push_back(sField->name);
+            }
+
+            MYSQL_ROW sRow;
             while ((sRow = mysql_fetch_row(sResult)))
-                aHandler(Row(sRow, sFields));
-            mysql_free_result(sResult);
+                aHandler(Row(sRow, sFields, sMeta));
         }
     };
 } // namespace MySQL

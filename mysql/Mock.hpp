@@ -17,8 +17,12 @@
 namespace MySQL {
     struct Mock
     {
-        using Row    = std::vector<const char*>;
-        using Rows   = std::vector<Row>;
+        using Row  = std::vector<const char*>;
+        using Rows = struct
+        {
+            std::vector<Row>              rows;
+            std::vector<std::string_view> meta;
+        };
         using Result = std::variant<Rows, Error>;
 
         struct Case
@@ -61,10 +65,10 @@ namespace MySQL {
 
                 std::visit(Mpl::overloaded{
                                [this](const Rows& aRows) {
-                                   if (!aRows.empty()) {
+                                   if (!aRows.rows.empty()) {
                                        When(Method(m_Mock, Use)).Do([this, &aRows](auto&& aHandler) mutable {
-                                           for (auto& x : aRows)
-                                               aHandler(MySQL::Row((MYSQL_ROW)x.data(), x.size()));
+                                           for (auto& x : aRows.rows)
+                                               aHandler(MySQL::Row((MYSQL_ROW)x.data(), x.size(), aRows.meta));
                                        });
                                        m_VerifyUse = true;
                                    } else if (m_SQL[m_Serial].query.compare(0, 6, "SELECT") == 0) {

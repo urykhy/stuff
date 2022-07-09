@@ -2,7 +2,7 @@
    <log4cxx>
    Memcheck:Leak
    ...
-   obj:/usr/lib/x86_64-linux-gnu/liblog4cxx.so.10.0.0
+   obj:/usr/lib/x86_64-linux-gnu/liblog4cxx.so.11.0.0
 }
 {
    <mysql>
@@ -45,4 +45,10 @@
    fun:?alloc
    ...
    fun:_dl_catch_exception
+}
+{
+    <cctz/utc>
+    Memcheck:Leak
+    ...
+    fun:_ZN4cctz9time_zone4Impl3UTCEv
 }
