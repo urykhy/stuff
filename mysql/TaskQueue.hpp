@@ -30,12 +30,12 @@ namespace MySQL::TaskQueue {
         std::optional<std::string> cookie;
 
         Task(const MySQL::Row& aRow)
-        : id(aRow[0].as_uint64())
-        , task(aRow[1].as_string())
-        , worker(aRow[2].as_string())
+        : id(aRow[0])
+        , task(aRow[1])
+        , worker(aRow[2])
         {
-            if (!aRow[3].is_null())
-                cookie = aRow[3].as_string();
+            if (aRow[3])
+                cookie = aRow[3];
         }
     };
 

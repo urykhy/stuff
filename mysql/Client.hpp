@@ -85,23 +85,39 @@ namespace MySQL {
 
             int64_t as_int64() const
             {
-                if (is_null())
-                    throw std::logic_error(std::string("MySQL::Null"));
-                return Parser::Atoi<int64_t>(std::string_view(m_Data));
+                return Parser::Atoi<int64_t>(as_view());
             }
+            template <typename T = int64_t>
+            operator typename std::enable_if_t<std::is_same_v<T, int64_t>, T>() const { return as_int64(); }
+            template <typename T = int32_t>
+            operator typename std::enable_if_t<std::is_same_v<T, int32_t>, T>() const { return as_int64(); }
+
             uint64_t as_uint64() const
             {
-                if (is_null())
-                    throw std::logic_error(std::string("MySQL::Null"));
-                return Parser::Atoi<uint64_t>(std::string_view(m_Data));
+                return Parser::Atoi<uint64_t>(as_view());
             }
+            template <typename T = uint64_t>
+            operator typename std::enable_if_t<std::is_same_v<T, uint64_t>, T>() const { return as_uint64(); }
+            template <typename T = uint32_t>
+            operator typename std::enable_if_t<std::is_same_v<T, uint32_t>, T>() const { return as_uint64(); }
+
             std::string as_string() const
+            {
+                return std::string(as_view());
+            }
+            operator std::string() const { return std::string(as_string()); }
+
+            std::string_view as_view() const
             {
                 if (is_null())
                     throw std::logic_error(std::string("MySQL::Null"));
                 return m_Data;
             }
+            operator std::string_view() const { return as_view(); }
+
             bool is_null() const { return m_Data == nullptr; }
+            template <typename T = bool>
+            operator typename std::enable_if_t<std::is_same_v<T, bool>, T>() const { return !is_null(); }
 
             std::string_view name() const
             {
@@ -387,7 +403,7 @@ namespace MySQL {
                 report("mysql_use_result");
             Util::Raii sCleanup([sResult]() { mysql_free_result(sResult); });
 
-            const unsigned sFields = mysql_num_fields(sResult);
+            const unsigned                sFields = mysql_num_fields(sResult);
             std::vector<std::string_view> sMeta; // column names
             sMeta.reserve(sFields);
             while (auto sField = mysql_fetch_field(sResult)) {

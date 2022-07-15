@@ -60,7 +60,7 @@ namespace MySQL::MessageQueue {
                 "   FOR UPDATE",
                 m_Config.producer);
             m_Connection->Query(sQuery);
-            m_Connection->Use([&sPosition](const MySQL::Row& aRow) { sPosition = aRow[0].as_uint64(); });
+            m_Connection->Use([&sPosition](const MySQL::Row& aRow) { sPosition = aRow[0]; });
 
             if (is_exists(aTask)) {
                 return ALREADY;
@@ -110,7 +110,7 @@ namespace MySQL::MessageQueue {
                 " WHERE service='{}'",
                 m_Config.consumer);
             m_Connection->Query(sQuery);
-            m_Connection->Use([this](const MySQL::Row& aRow) { m_Position = aRow[0].as_uint64(); });
+            m_Connection->Use([this](const MySQL::Row& aRow) { m_Position = aRow[0]; });
         }
 
     public:
@@ -148,9 +148,9 @@ namespace MySQL::MessageQueue {
             m_Connection->Query(sQuery);
             m_Connection->Use([&sTasks](const MySQL::Row& aRow) {
                 Task sTask;
-                sTask.serial = aRow[0].as_uint64();
-                sTask.task   = aRow[1].as_string();
-                sTask.hash   = aRow[2].as_string();
+                sTask.serial = aRow[0];
+                sTask.task   = aRow[1];
+                sTask.hash   = aRow[2];
                 sTasks.push_back(std::move(sTask));
             });
 

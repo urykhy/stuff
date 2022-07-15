@@ -38,7 +38,7 @@ BOOST_AUTO_TEST_CASE(simple)
     Time::XMeter     m1;
     c.Query("SELECT emp_no, salary, from_date, to_date FROM salaries LIMIT 100");
     c.Use([&sData](const MySQL::Row& aRow) {
-        sData.push_back(Entry{aRow[0].as_int64(), aRow[1].as_int64(), aRow[2].as_string(), aRow[3].as_string()});
+        sData.push_back(Entry{aRow[0], aRow[1], aRow[2], aRow[3]});
     });
     BOOST_TEST_MESSAGE("elapsed " << m1.duration().count() / 1000 / 1000.0 << " ms");
     BOOST_TEST_MESSAGE("got " << sData.size() << " rows");
@@ -82,7 +82,7 @@ BOOST_AUTO_TEST_CASE(updateable)
         using Container = std::map<std::string, std::string>;
         using Timestamp = time_t;
 
-        static void        parse(Container& aDest, const MySQL::Row& aRow) { aDest[aRow[0].as_string()] = aRow[1].as_string(); }
+        static void        parse(Container& aDest, const MySQL::Row& aRow) { aDest[aRow[0]] = aRow[1]; }
         static std::string query(Timestamp aTimestamp) { return "select dept_no, dept_name from departments"; }
         static Timestamp   merge(Container& aSrc, Container& aDst)
         {
@@ -119,7 +119,7 @@ BOOST_AUTO_TEST_CASE(once)
     MySQL::Once::truncate(&c);
     unsigned sCount = 0;
     c.Query("SELECT COUNT(1) FROM transaction_log");
-    c.Use([&sCount](const MySQL::Row& aRow) mutable { sCount = aRow[0].as_uint64(); });
+    c.Use([&sCount](const MySQL::Row& aRow) mutable { sCount = aRow[0]; });
     BOOST_CHECK_EQUAL(0, sCount);
 
     auto sInsert = [](auto aClient) { aClient->Query("INSERT INTO test_data (name) VALUES ('dummy')"); };
@@ -128,7 +128,7 @@ BOOST_AUTO_TEST_CASE(once)
 
     sCount = 0;
     c.Query("SELECT COUNT(1) FROM test_data");
-    c.Use([&sCount](const MySQL::Row& aRow) mutable { sCount = aRow[0].as_uint64(); });
+    c.Use([&sCount](const MySQL::Row& aRow) mutable { sCount = aRow[0]; });
     BOOST_CHECK_EQUAL(1, sCount);
 }
 BOOST_AUTO_TEST_CASE(upload)
@@ -154,7 +154,7 @@ BOOST_AUTO_TEST_CASE(upload)
     unsigned sRowCount = 0;
     c.Query("select count(1) from test_data");
     c.Use([&sRowCount](const MySQL::Row& aRow) mutable {
-        sRowCount = aRow[0].as_int64();
+        sRowCount = aRow[0];
     });
     BOOST_CHECK_EQUAL(sRowCount, 6);
 
