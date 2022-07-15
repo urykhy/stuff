@@ -24,7 +24,7 @@ namespace Kafka {
         {
             if (aErr != nullptr) {
                 std::unique_ptr<RdKafka::Error> sPtr(aErr);
-                std::string sErr = "Kafka::" + aMsg + ": " + to_string(aErr);
+                std::string                     sErr = "Kafka::" + aMsg + ": " + to_string(aErr);
                 throw std::runtime_error(sErr);
             }
         }
@@ -165,6 +165,21 @@ namespace Kafka {
             check(m_Consumer->subscribe(m_Topics), "Consumer: rewind topic");
         }
 
+        void rewind_and_wait(int aTimeout = TIMEOUT)
+        {
+            pause();
+            rewind();
+            for (int i = 0; i < aTimeout; i++) {
+                consume(1);
+                auto sPos = position();
+                if (sPos.vector.size() > 0) {
+                    resume();
+                    return;
+                }
+            }
+            throw std::runtime_error("Kafka::Consumer: rewind_and_wait timeout");
+        }
+
         void sync()
         {
             check(m_Consumer->commitSync(), "Consumer: commitSync");
@@ -230,7 +245,7 @@ namespace Kafka {
             check(m_Producer->begin_transaction(), "Producer: begin_transaction");
         }
 
-        void commit(Consumer& aConsumer)
+        void send_offsets(Consumer& aConsumer)
         {
             auto sGroupMetadata = aConsumer.groupMetadata();
             auto sOffsets       = aConsumer.position();
@@ -238,7 +253,11 @@ namespace Kafka {
                       sOffsets.vector,
                       sGroupMetadata.get(), -1),
                   "Producer: send_offsets_to_transaction");
+        }
 
+        // user must rewind consumer on exception
+        void commit()
+        {
             while (true) {
                 std::unique_ptr<RdKafka::Error> sError(m_Producer->commit_transaction(-1));
                 if (!sError)
@@ -248,7 +267,6 @@ namespace Kafka {
                     std::this_thread::sleep_for(1s);
                     continue;
                 }
-                aConsumer.rewind();
                 if (sError->txn_requires_abort()) {
                     std::string                     sAbortStr = "; successfully aborted";
                     std::unique_ptr<RdKafka::Error> sAbort(m_Producer->abort_transaction(-1));
@@ -256,9 +274,8 @@ namespace Kafka {
                         sAbortStr = "; abort_transaction failed as well: " + to_string(sAbort.get());
                     throw std::runtime_error("Kafka::Producer: fail to commit: " + to_string(sError.get()) + sAbortStr);
                 }
-                if (sError->is_fatal()) {
-                    throw std::runtime_error("Kafka::Producer: fatal error: " + to_string(sError.get()));
-                }
+                // sError->is_fatal())
+                throw std::runtime_error("Kafka::Producer: fatal error: " + to_string(sError.get()));
             }
         }
 

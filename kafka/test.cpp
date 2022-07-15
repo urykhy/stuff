@@ -131,8 +131,11 @@ BOOST_AUTO_TEST_CASE(transform)
     }
 
     // transform
-    Kafka::Transform sKafka(sConfig);
-    sKafka([](RdKafka::Message* aMsg, Kafka::Producer& aProducer) {
+    auto sHandler = [](RdKafka::Message* aMsg, Kafka::Producer& aProducer) {
+        static unsigned sCounter = 0;
+        sCounter++;
+        if (sCounter == 4)
+            throw std::runtime_error("rollback requested from handler");
         if (aMsg == nullptr)
             return;
         std::string sPayload(static_cast<const char*>(aMsg->payload()), aMsg->len());
@@ -142,7 +145,11 @@ BOOST_AUTO_TEST_CASE(transform)
                            << "; data: " << sPayload);
         std::string sResult("processed: " + sPayload);
         aProducer.push(RdKafka::Topic::PARTITION_UA, {}, sResult);
-    });
+    };
+
+    Kafka::Transform sKafka(sConfig);
+    BOOST_CHECK_THROW(sKafka(sHandler), std::runtime_error); // ensure we interrupt transaction by handler request
+    sKafka(sHandler);
 }
 BOOST_AUTO_TEST_CASE(rebalance)
 {
