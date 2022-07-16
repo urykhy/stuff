@@ -5,11 +5,17 @@
    obj:/usr/lib/x86_64-linux-gnu/liblog4cxx.so.11.0.0
 }
 {
-   <mysql>
+   <mysql/thread>
    Memcheck:Leak
    ...
-   obj:/usr/lib/x86_64-linux-gnu/libmariadb.so.3
    fun:__pthread_once_slow
+   obj:/usr/lib/x86_64-linux-gnu/libmysqlclient.so.*
+}
+{
+   <mysql/server>
+   Memcheck:Leak
+   ...
+   fun:mysql_server_init
    fun:mysql_init
 }
 {

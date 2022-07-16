@@ -272,7 +272,7 @@ namespace MySQL {
                 sResult[i].buffer        = alloca(sField->length);
                 sResult[i].buffer_length = sField->length;
                 sResult[i].length        = (long unsigned int*)alloca(sizeof(unsigned long));
-                sResult[i].error         = (my_bool*)alloca(sizeof(my_bool));
+                sResult[i].error         = (bool*)alloca(sizeof(bool));
             }
 
             if (mysql_stmt_bind_result(m_Stmt, sResult))
