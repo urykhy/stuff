@@ -45,10 +45,22 @@ namespace asio_mysql
             return;
         sResponse.parse(sBuffer);
 
+        // auth switch
+        AuthSwitchRequest sSwitch;
+        sSwitch.serialize(sStream);
+        ec = write(aStream, yield, sStream.str(), 2);
+        if (ec)
+            return;
+
+        // read auth switch response... and ignore one
+        ec = read(aStream, yield ,sBuffer);
+        if (ec)
+            return;
+
         // send ok packet
         OkResponse sOk;
         sOk.serialize(sStream);
-        ec = write(aStream, yield, sStream.str());
+        ec = write(aStream, yield, sStream.str(), 4);
         if (ec)
             return;
 
