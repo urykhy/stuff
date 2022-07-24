@@ -15,7 +15,7 @@ BOOST_DATA_TEST_CASE(read_write, sExt)
 {
     const std::string sData = "123\n123\n321\n\n";
     std::string       sReaded;
-    const std::string sName = "__test." + sample;
+    const std::string sName = "__test_rw." + sample;
 
     File::write(sName, [&sData](File::IWriter* aWriter) {
         aWriter->write(sData.data(), sData.size());
@@ -45,7 +45,29 @@ BOOST_DATA_TEST_CASE(read_write, sExt)
     });
     BOOST_CHECK_EQUAL(sSerial, 4);
 }
+BOOST_DATA_TEST_CASE(flush, sExt)
+{
+    const std::string sData = "1234567890";
+    const std::string sName = "__test_flush." + sample;
 
+    File::write(sName, [&sData](File::IWriter* aWriter) {
+        aWriter->write("123", 3);
+        aWriter->flush();
+        aWriter->write("456", 3);
+        aWriter->flush();
+        aWriter->write("7890", 4);
+    });
+
+    std::string sReaded;
+    File::read(sName, [&sReaded](File::IReader* aReader) {
+        sReaded.resize(128);
+        size_t sActual = aReader->read(sReaded.data(), sReaded.size());
+        sReaded.resize(sActual);
+        BOOST_CHECK(aReader->eof());
+    });
+
+    BOOST_CHECK_EQUAL(sReaded, sData);
+}
 BOOST_AUTO_TEST_CASE(block)
 {
     const std::string sName = "__block.bin";

@@ -21,7 +21,8 @@ namespace File {
     public:
         explicit FileWriter(int aFD)
         : m_FD(aFD)
-        {}
+        {
+        }
         FileWriter(const std::string& aName, int aFlags = 0) // O_APPEND | O_TRUNC; O_EXCL
         {
             m_FD = ::open(aName.c_str(), O_WRONLY | O_CREAT | aFlags, 0644);
@@ -37,7 +38,8 @@ namespace File {
                 throw Exception::ErrnoError("FileWriter: partial write");
         }
         void flush() override
-        {}
+        {
+        }
         void sync() override
         {
             int sRC = fsync(m_FD);
@@ -85,7 +87,8 @@ namespace File {
         BufWriter(IWriter* aWriter, size_t aLen = DEFAULT_BUFFER_SIZE)
         : m_Writer(aWriter)
         , m_Buffer(aLen, ' ')
-        {}
+        {
+        }
 
         void write(const void* aPtr, size_t aSize) override
         {
@@ -133,8 +136,8 @@ namespace File {
         FilterWriter(IWriter* aWriter, Archive::IFilter* aFilter, size_t aLen = DEFAULT_BUFFER_SIZE)
         : BufWriter(aWriter, aLen)
         , m_Filter(aFilter)
-        {}
-
+        {
+        }
         void write(const void* aPtr, size_t aSize) override
         {
             const char* sPtr  = (const char*)aPtr;
@@ -150,20 +153,16 @@ namespace File {
                 }
             }
         }
-        void close() override
+        void flush() override
         {
-            if (m_Filter == nullptr)
-                return;
             while (true) {
                 ensure(m_Filter->estimate(0));
                 auto sInfo = m_Filter->finish(ptr(), avail());
                 m_End += sInfo.usedDst;
-                flush();
+                BufWriter::flush();
                 if (sInfo.done)
                     break;
             }
-            m_Writer->close();
-            m_Filter = nullptr;
         }
         virtual ~FilterWriter()
         {

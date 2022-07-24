@@ -36,18 +36,36 @@ namespace Archive {
 
     class WriteGzip : public IFilter
     {
-        z_stream m_State;
+        const int m_Level;
+        bool      m_Reset = false;
+        z_stream  m_State;
 
-    public:
-        WriteGzip(int aLevel = 3)
+        void init()
         {
             memset(&m_State, 0, sizeof(m_State));
-            auto sRC = deflateInit(&m_State, aLevel);
+            auto sRC = deflateInit(&m_State, m_Level);
             if (sRC != Z_OK)
                 throw std::runtime_error("WriteGzip: fail to init deflate");
         }
+
+        void cleanup()
+        {
+            deflateEnd(&m_State);
+        }
+
+    public:
+        WriteGzip(int aLevel = 3)
+        : m_Level(aLevel)
+        {
+            init();
+        }
         Pair filter(const char* aSrc, size_t aSrcLen, char* aDst, size_t aDstLen) override
         {
+            if (m_Reset) {
+                cleanup();
+                init();
+                m_Reset = false;
+            }
             m_State.next_in   = (uint8_t*)aSrc;
             m_State.avail_in  = aSrcLen;
             m_State.next_out  = (uint8_t*)aDst;
@@ -64,10 +82,14 @@ namespace Archive {
             m_State.next_out  = (uint8_t*)aDst;
             m_State.avail_out = aDstLen;
             auto sRC          = deflate(&m_State, Z_FINISH);
-            if (sRC > Z_STREAM_END)
-                throw std::runtime_error("WriteGzip: fail to deflate/finish");
-            return {aDstLen - m_State.avail_out, sRC == Z_STREAM_END};
+            if (sRC == Z_OK or sRC == Z_BUF_ERROR)
+                return {aDstLen - m_State.avail_out, false};
+            if (sRC == Z_STREAM_END) {
+                m_Reset = true;
+                return {aDstLen - m_State.avail_out, true};
+            }
+            throw std::runtime_error("WriteGzip: fail to deflate/finish");
         }
-        virtual ~WriteGzip() { deflateEnd(&m_State); }
+        virtual ~WriteGzip() { cleanup(); }
     };
 } // namespace Archive
