@@ -10,4 +10,6 @@
 #include <prometheus/API.hpp>
 #include <resource/Get.hpp>
 #include <resource/Server.hpp>
+#include <sd/Balancer.hpp>
+#include <sd/Breaker.hpp>
 #include <sentry/Client.hpp>

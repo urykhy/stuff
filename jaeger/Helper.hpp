@@ -4,76 +4,42 @@
 
 #include <unsorted/Log4cxx.hpp>
 
-namespace Jaeger {
+namespace Jaeger::Helper {
 
-    struct Helper : boost::noncopyable
+    inline auto create(const std::string& aParent, const std::string& aState, int64_t aBaseId, std::string_view aService)
     {
-        using Step    = Metric::Step;
-        using StepPtr = std::unique_ptr<Step>;
+        if (!aParent.empty())
+            return std::make_unique<Trace>(Params::parse(aParent, aState, aBaseId, aService));
+        return std::unique_ptr<Trace>(nullptr);
+    }
 
-    private:
-        Params m_Params;
-        bool   m_Active = false;
+    inline auto start(std::unique_ptr<Trace>& aTrace, const std::string& aName)
+    {
+        if (aTrace)
+            return std::make_optional(Span(*aTrace, aName));
+        else
+            return std::optional<Span>();
+    }
 
-        std::unique_ptr<Metric> m_Metric;
-        StepPtr                 m_Current;
+    inline auto start(std::optional<Span>& aSpan, const std::string& aName)
+    {
+        if (aSpan)
+            return std::make_optional(aSpan->child(aName));
+        else
+            return std::optional<Span>();
+    }
 
-    public:
-        Helper(const std::string& aParent, const std::string& aState, int64_t aBaseId, std::string_view aService)
-        {
-            if (!aParent.empty()) {
-                m_Params         = Params::parse(aParent, aState);
-                m_Params.baseId  &= 0xFF00000000000000; // preserving high byte (offset)
-                m_Params.baseId  |= aBaseId;
-                m_Params.service = aService;
-                m_Metric         = std::make_unique<Metric>(m_Params);
-                m_Active         = true;
-            }
-        }
+    inline void stop(std::optional<Span>& aSpan)
+    {
+        if (aSpan)
+            aSpan->close();
+    }
 
-        void start(const std::string& aStage)
-        {
-            if (!m_Active)
-                return;
-            stop();
-            m_Current = std::make_unique<Step>(*m_Metric, aStage);
+    inline void set_error(std::optional<Span>& aSpan, const char* aMsg)
+    {
+        if (aSpan) {
+            aSpan->set_error();
+            aSpan->set_log(Tag{"exception", aMsg});
         }
-        void stop()
-        {
-            if (m_Current)
-                m_Current.reset();
-        }
-        void set_error(const char* aMessage)
-        {
-            if (m_Current) {
-                m_Current->set_error();
-                m_Current->set_log(Metric::Tag{"exception", aMessage});
-            }
-        }
-
-        StepPtr child(const std::string& aName)
-        {
-            StepPtr sResult;
-            if (m_Current) {
-                sResult = std::make_unique<Step>(m_Current->child(aName));
-            }
-            return sResult;
-        }
-
-        static StepPtr child(StepPtr& aStep, const std::string& aName)
-        {
-            StepPtr sResult;
-            if (aStep) {
-                sResult = std::make_unique<Step>(aStep->child(aName));
-            }
-            return sResult;
-        }
-
-        ~Helper()
-        {
-            stop();
-            if (m_Active)
-                send(*m_Metric);
-        }
-    };
-} // namespace Jaeger
+    }
+} // namespace Jaeger::Helper

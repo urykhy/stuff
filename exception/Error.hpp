@@ -47,7 +47,10 @@ namespace Exception {
         static std::string format(const std::string& aMsg, int aStatus)
         {
             std::stringstream sBuffer;
-            sBuffer << "Http response: " << aStatus << " (" << aMsg << ")";
+            if (aMsg.empty())
+                sBuffer << "Http response status: " << aStatus;
+            else
+                sBuffer << "Http response status: " << aStatus << " (" << aMsg << ")";
             return sBuffer.str();
         }
         const unsigned m_Status;

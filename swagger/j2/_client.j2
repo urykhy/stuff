@@ -4,6 +4,7 @@ class client
     asio_http::ClientPtr m_HttpClient;
 {%- if x_discovery %}
     std::shared_ptr<SD::Balancer> m_Balancer;
+    std::shared_ptr<SD::Breaker> m_Breaker;
 {%- else %}
     const std::string m_Base;
 {%- endif %}
@@ -25,6 +26,7 @@ class client
 public:
     {% if x_discovery %}
         client(asio_http::ClientPtr aHttpClient, boost::asio::io_service& aAsio, const std::string& aService, const std::string& aLocation = {});
+        void with_breaker(std::shared_ptr<SD::Breaker> aBreaker);
     {% else %}
         client(asio_http::ClientPtr aHttpClient, const std::string& aBase);
     {% endif %}
@@ -50,7 +52,7 @@ public:
             {%- set returnType = name + "_response_v" %}
         {%- endif %}
         using {{ name }}_response = {{ returnType }};
-        {{ name }}_response {{ name }}(const {{ name }}_parameters& aRequest {% if x_jaeger %}, std::optional<Jaeger::Metric::Step*> aTraceParent = std::nullopt, int8_t aTraceOffset = 0{% endif %});
+        {{ name }}_response {{ name }}(const {{ name }}_parameters& aRequest {% if x_jaeger %}, Jaeger::Span* aTraceParent = nullptr, int8_t aTraceOffset = 0{% endif %});
 
     {% endcall %}
 };
@@ -66,6 +68,10 @@ public:
             sParams.location = aLocation;
             m_Balancer = std::make_shared<SD::Balancer>(aAsio, sParams);
             m_Balancer->start();
+        }
+        void client::with_breaker(std::shared_ptr<SD::Breaker> aBreaker)
+        {
+            m_Breaker = aBreaker;
         }
     {% else %}
         client::client(asio_http::ClientPtr aHttpClient, const std::string& aBase)
@@ -83,7 +89,7 @@ public:
 
     {% call(doc, path, method, name) _for_every_method(doc) %}
         {# client response with successful struct, or throw #}
-        client::{{ name }}_response client::{{ name }}(const {{ name }}_parameters& aRequest {% if x_jaeger %}, std::optional<Jaeger::Metric::Step*> aTraceParent, int8_t aTraceOffset{% endif %})
+        client::{{ name }}_response client::{{ name }}(const {{ name }}_parameters& aRequest {% if x_jaeger %}, Jaeger::Span* aTraceParent, int8_t aTraceOffset{% endif %})
         {
             namespace http = boost::beast::http;
             asio_http::ClientRequest sRequest = aRequest.__format();
@@ -91,7 +97,7 @@ public:
             {
                 Lock sLock(m_Mutex);
                 {%- if x_discovery %}
-                    std::string sPeer = "http://" + m_Balancer->random().key;
+                    std::string sPeer = m_Balancer->random().key;
                     auto sIt = m_{{ name }}_redirect.find(sPeer);
                     if (sIt == m_{{ name }}_redirect.end())
                     {
@@ -114,14 +120,14 @@ public:
                     }
                 {%- endif %}
             };
-            const std::string sPeer = sPick();
-            sRequest.url = sPeer + sRequest.url;
+            std::string sPeer = sPick();
+            sRequest.url = "http://" + sPeer + sRequest.url;
 
             {% if x_jaeger %}
-            std::unique_ptr<Jaeger::Metric::Step> sTraceCall;
+            std::unique_ptr<Jaeger::Span> sTraceCall;
             if (aTraceParent)
             {
-                sTraceCall = std::make_unique<Jaeger::Metric::Step>((*aTraceParent)->child("call {{ name }}"));
+                sTraceCall = std::make_unique<Jaeger::Span>(aTraceParent->child("call {{ Aname }}/{{ name }}"));
                 sRequest.headers["traceparent"] = sTraceCall->extract().traceparent();
                 if (aTraceOffset > 0)
                     sRequest.headers["tracestate"] = "span_offset=" + Format::to_hex(aTraceOffset);
@@ -136,8 +142,25 @@ public:
             int64_t sRedirectCount = 0;
             while (sRedirectCount < 5) {# up to 5 redirects #}
             {
-                INFO("{{ method }} " << sRequest.url);
-                sResponse = m_HttpClient->async(asio_http::ClientRequest(sRequest)).get(); {# copy request #}
+                INFO("{{ method }} " << sRequest.url {% if x_jaeger %} << ( sTraceCall ? " [J:" + sTraceCall->trace_id() + "]" : "") {% endif %});
+                {# copy request to make a call, since we need one if redirect #}
+                {%- if x_discovery %}
+                if (m_Breaker)
+                    sResponse = m_Breaker->wrap(sPeer, [&, this]() {
+                        try {
+                            return m_HttpClient->async(asio_http::ClientRequest(sRequest)).get();
+                        } catch (const SD::Breaker::Error& e) {
+                            {% if x_jaeger %}
+                            if (sTraceCall)
+                                sTraceCall->set_tag(Jaeger::Tag{"circuit_breaker", 1});
+                            {% endif %}
+                            throw;
+                        }
+                    });
+                else
+                {%- endif %}
+                    sResponse = m_HttpClient->async(asio_http::ClientRequest(sRequest)).get();
+
                 if (sResponse.result() == asio_http::http::status::temporary_redirect or
                     sResponse.result() == asio_http::http::status::found)
                 {
@@ -149,6 +172,8 @@ public:
                             static_cast<unsigned>(sResponse.result())
                         );
                     sRequest.url = sLocation.to_string();
+                    const auto sParsed = Parser::url(sLocation.to_string());
+                    sPeer = sParsed.host + ":" + sParsed.port;
                 }
                 else if (sResponse.result() == asio_http::http::status::permanent_redirect or
                          sResponse.result() == asio_http::http::status::moved_permanently)
@@ -162,11 +187,12 @@ public:
                         );
                     sRequest.url = sLocation.to_string();
                     const auto sParsed = Parser::url(sLocation.to_string());
+                    sPeer = sParsed.host + ":" + sParsed.port;
                     Lock sLock(m_Mutex);
                     {%- if x_discovery %}
-                        m_{{ name }}_redirect[sPeer] = "http://" + sParsed.host + ":" + sParsed.port;
+                        m_{{ name }}_redirect[sPeer] = sPeer;
                     {%- else %}
-                        m_{{ name }}_redirect = "http://" + sParsed.host + ":" + sParsed.port;
+                        m_{{ name }}_redirect = sPeer;
                     {%- endif %}
                 }
                 else
@@ -176,8 +202,8 @@ public:
                 sRedirectCount++;
             }
             {% if x_jaeger %}
-            if (sRedirectCount > 0)
-                sTraceCall->set_tag(Jaeger::Metric::Tag{"redirect_count", sRedirectCount});
+            if (sRedirectCount > 0 and sTraceCall)
+                sTraceCall->set_tag(Jaeger::Tag{"redirect_count", sRedirectCount});
             {% endif %}
 
             {# error codes from swagger #}

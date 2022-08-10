@@ -8,6 +8,7 @@
 #include <parser/Json.hpp>
 
 namespace SD {
+
     struct Balancer : public std::enable_shared_from_this<Balancer>
     {
         struct Params

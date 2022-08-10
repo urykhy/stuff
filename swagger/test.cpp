@@ -20,6 +20,8 @@
 #include <prometheus/API.hpp>
 #include <resource/Get.hpp>
 #include <resource/Server.hpp>
+#include <sd/Balancer.hpp>
+#include <sd/Breaker.hpp>
 #include <sentry/Client.hpp>
 
 DECLARE_RESOURCE(swagger_ui_tar, "swagger_ui.tar")
@@ -64,6 +66,17 @@ struct Discovery : api::discovery_1_0::server
         get_discovery_response_200 sResult;
         sResult.body = "success";
         return sResult;
+    }
+};
+
+struct Discovery500 : api::discovery_1_0::server
+{
+    get_discovery_response_v
+    get_discovery_i(asio_http::asio::io_service&    aService,
+                    const get_discovery_parameters& aRequest,
+                    asio_http::asio::yield_context  yield) override
+    {
+        return boost::beast::http::status::internal_server_error;
     }
 };
 
@@ -217,28 +230,28 @@ struct TutorialServer : api::tutorial_1_0::server
     get_parameters_i(asio_http::asio::io_service&     aService,
                      const get_parameters_parameters& aRequest,
                      asio_http::asio::yield_context   yield,
-                     Jaeger::Helper&                  aTrace)
+                     std::optional<Jaeger::Span>&     aTrace)
     {
         {
-            auto sStep1 = aTrace.child("prepare");
+            auto __span = Jaeger::Helper::start(aTrace, "prepare");
             std::this_thread::sleep_for(100ms);
         }
         {
-            auto sStep1 = aTrace.child("fetch");
+            auto __span = Jaeger::Helper::start(aTrace, "fetch");
             std::this_thread::sleep_for(200ms);
         }
         {
-            auto sStep1 = aTrace.child("merge");
+            auto __span = Jaeger::Helper::start(aTrace, "merge");
             std::this_thread::sleep_for(100ms);
         }
         {
-            auto sStep1 = aTrace.child("write");
+            auto __span = Jaeger::Helper::start(aTrace, "write");
             {
-                auto sStep2 = Jaeger::Helper::child(sStep1, "mysql");
+                auto __span1 = Jaeger::Helper::start(__span, "mysql");
                 std::this_thread::sleep_for(300ms);
             }
             {
-                auto sStep2 = Jaeger::Helper::child(sStep1, "s3");
+                auto __span1 = Jaeger::Helper::start(__span, "s3");
                 std::this_thread::sleep_for(300ms);
             }
         }
@@ -340,7 +353,7 @@ BOOST_FIXTURE_TEST_CASE(simple, WithServer)
     Common sCommon;
     sCommon.configure(m_Router);
 
-    api::common_1_0::client sClient(m_HttpClient, "http://127.0.0.1:3000");
+    api::common_1_0::client sClient(m_HttpClient, "127.0.0.1:3000");
 
     auto sResponse = sClient.get_enum({});
 
@@ -361,7 +374,7 @@ BOOST_FIXTURE_TEST_CASE(kv_with_auth, WithServer)
     sKeyValue.configure(m_Router);
     sKeyValue.with_authorization(&sTokenManager);
 
-    api::keyValue_1_0::client sClient(m_HttpClient, "http://127.0.0.1:3000");
+    api::keyValue_1_0::client sClient(m_HttpClient, "127.0.0.1:3000");
 
     Jwt::Claim sClaim{.exp = time(nullptr) + 10,
                       .nbf = time(nullptr) - 10,
@@ -415,7 +428,7 @@ BOOST_FIXTURE_TEST_CASE(json, WithServer)
     jsonParam sJsonParam;
     sJsonParam.configure(m_Router);
 
-    api::jsonParam_1_0::client sClient(m_HttpClient, "http://127.0.0.1:3000");
+    api::jsonParam_1_0::client sClient(m_HttpClient, "127.0.0.1:3000");
 
     auto R1 = sClient.get_test1({.param = {{"one", true}, {"two", false}}});
     BOOST_TEST_MESSAGE("json response: " << R1.body);
@@ -430,7 +443,7 @@ BOOST_FIXTURE_TEST_CASE(sentry, WithServer)
     sTutorialServer.configure(m_Router);
     Util::Raii sCleanup([this]() { m_Group.wait(); });
 
-    api::tutorial_1_0::client sClient(m_HttpClient, "http://127.0.0.1:3000");
+    api::tutorial_1_0::client sClient(m_HttpClient, "127.0.0.1:3000");
     try {
         sClient.get_parameters({.id = "test-id", .x_header_int = 92});
     } catch (const std::exception& e) {
@@ -447,7 +460,7 @@ BOOST_FIXTURE_TEST_CASE(queue, WithServer)
     sTutorialServer.configure(m_Router);
     Util::Raii sCleanup([this]() { m_Group.wait(); });
 
-    api::tutorial_1_0::client sClient(m_HttpClient, "http://127.0.0.1:3000");
+    api::tutorial_1_0::client sClient(m_HttpClient, "127.0.0.1:3000");
 
     Time::Meter sMeter;
     std::thread sR1([&sClient]() {
@@ -481,13 +494,13 @@ BOOST_FIXTURE_TEST_CASE(jaeger, WithServer)
     sTutorialServer.configure(m_Router);
     Util::Raii sCleanup([this]() { m_Group.wait(); });
 
-    api::tutorial_1_0::client sClient(m_HttpClient, "http://127.0.0.1:3000");
+    api::tutorial_1_0::client sClient(m_HttpClient, "127.0.0.1:3000");
 
-    Jaeger::Metric sTrace(Jaeger::Params::uuid("swagger.cpp"));
+    Jaeger::Trace sTrace(Jaeger::Params::uuid("swagger.cpp"));
     {
-        Jaeger::Metric::Step sTraceStep(sTrace, "make test");
+        Jaeger::Span sTraceSpan(sTrace, "make test");
 
-        auto sR = sClient.get_parameters({.id = "test-id", .string_required = "abcdefg"}, &sTraceStep, 0x1a);
+        auto sR = sClient.get_parameters({.id = "test-id", .string_required = "abcdefg"}, &sTraceSpan, 0x1a);
         BOOST_TEST_MESSAGE("request: " << sR.body);
     }
     Jaeger::send(sTrace);
@@ -497,7 +510,7 @@ BOOST_FIXTURE_TEST_CASE(redirect, WithServer)
     RedirectServer sRedirectServer;
     sRedirectServer.configure(m_Router);
 
-    api::redirect_1_0::client sClient(m_HttpClient, "http://127.0.0.1:3000");
+    api::redirect_1_0::client sClient(m_HttpClient, "127.0.0.1:3000");
 
     // temporary
     {
@@ -532,8 +545,11 @@ BOOST_FIXTURE_TEST_CASE(redirect, WithServer)
 }
 BOOST_FIXTURE_TEST_CASE(discovery, WithServer)
 {
+    auto sBreaker = std::make_shared<SD::Breaker>(m_Asio.service());
+    sBreaker->start();
     Discovery sDiscovery;
     sDiscovery.with_discovery(m_Asio.service(), "127.0.0.1:3000", "test-service", "test-location", 10);
+
     sDiscovery.configure(m_Router);
     Threads::sleep(0.1); // wait until etcd updated
 
@@ -547,6 +563,7 @@ BOOST_FIXTURE_TEST_CASE(discovery, WithServer)
     }
 
     api::discovery_1_0::client sClient(m_HttpClient, m_Asio.service(), "test-service");
+    sClient.with_breaker(sBreaker);
     Threads::sleep(0.1); // wait until we collect peers from etcd
     auto sResponse = sClient.get_discovery({});
     BOOST_CHECK_EQUAL(sResponse.body, "success");
@@ -569,6 +586,36 @@ BOOST_FIXTURE_TEST_CASE(discovery, WithServer)
 
     // sleep(600);
 }
+BOOST_FIXTURE_TEST_CASE(breaker, WithServer)
+{
+    auto sBreaker = std::make_shared<SD::Breaker>(m_Asio.service());
+    sBreaker->start();
+    Discovery500 sDiscovery;
+    sDiscovery.with_discovery(m_Asio.service(), "127.0.0.1:3000", "test-service", "test-location", 10);
+
+    sDiscovery.configure(m_Router);
+    Threads::sleep(0.1); // wait until etcd updated
+
+    api::discovery_1_0::client sClient(m_HttpClient, m_Asio.service(), "test-service");
+    sClient.with_breaker(sBreaker);
+    Threads::sleep(0.1); // wait until we collect peers from etcd
+
+    bool sBreaked = false;
+    for (int i = 0; i < 15 and !sBreaked; i++) {
+        try {
+            BOOST_TEST_MESSAGE("success rate: " << sBreaker->success_rate("127.0.0.1:3000"));
+            auto sResponse = sClient.get_discovery({});
+            BOOST_CHECK_EQUAL(sResponse.body, "success");
+        } catch (const SD::Breaker::Error& e) {
+            BOOST_TEST_MESSAGE("breaker error: " << e.what());
+            sBreaked = true;
+        } catch (const std::exception& e) {
+            BOOST_TEST_MESSAGE("client error: " << e.what());
+        }
+        sleep(1);
+    }
+    BOOST_CHECK_EQUAL(sBreaked, true);
+}
 BOOST_AUTO_TEST_SUITE_END() // rpc
 
 BOOST_AUTO_TEST_SUITE(http2)
@@ -577,7 +624,7 @@ BOOST_FIXTURE_TEST_CASE(simple, WithServerV2)
     Common sCommon;
     sCommon.configure(m_Router);
 
-    api::common_1_0::client sClient(m_HttpClient, "http://127.0.0.1:3000");
+    api::common_1_0::client sClient(m_HttpClient, "127.0.0.1:3000");
 
     auto sResponse = sClient.get_enum({});
 

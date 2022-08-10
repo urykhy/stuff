@@ -13,10 +13,39 @@
 #include <exception/Error.hpp>
 
 namespace Util {
+    class Drand48
+    {
+        struct drand48_data m_Data;
+        static long int     m_Seed;
+
+    public:
+        Drand48()
+        {
+            long int sSeed = m_Seed > 0 ? m_Seed : gettid();
+            srand48_r(sSeed, &m_Data);
+        }
+        static void seed(long int aSeed)
+        {
+            m_Seed = aSeed;
+        }
+        double drand48()
+        {
+            double sResult = 0;
+            drand48_r(&m_Data, &sResult);
+            return sResult;
+        }
+    };
+    inline long int Drand48::m_Seed = 0;
+
+    inline double drand48()
+    {
+        thread_local Drand48 sLocal;
+        return sLocal.drand48();
+    }
 
     inline void seed(unsigned aSeed = 123)
     {
-        srand(aSeed);
+        Drand48::seed(aSeed);
     }
 
     // return number in range [0 ... aMax);
@@ -30,7 +59,7 @@ namespace Util {
         static const char sAlNum[] = "0123456789"
                                      "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
                                      "abcdefghijklmnopqrstuvwxyz";
-        std::string sResult;
+        std::string       sResult;
         sResult.reserve(size);
         for (int i = 0; i < size; i++)
             // off by one since sAlnum contains terminating zero

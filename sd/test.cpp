@@ -118,7 +118,7 @@ BOOST_DATA_TEST_CASE(constant_probability,
         for (unsigned i = 0; i < RPS; i++) {
             if (sStat.test()) {
                 sAllowed++;
-                sStat.insert(sTimestamp, drand48() < sProb);
+                sStat.insert(sTimestamp, Util::drand48() < sProb);
             }
         }
         sStat.timer(sTimestamp);

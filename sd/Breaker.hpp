@@ -3,6 +3,11 @@
 #include <array>
 #include <memory>
 
+#include <boost/asio/steady_timer.hpp>
+
+#include <exception/Error.hpp>
+#include <unsorted/Random.hpp>
+
 namespace SD {
 
     struct PeerState
@@ -146,8 +151,8 @@ namespace SD {
 
             switch (m_Zone) {
             case Zone::RED: return false;
-            case Zone::HEAL: return drand48() < HEAL_ZONE;
-            case Zone::YELLOW: return drand48() < m_SuccessRate;
+            case Zone::HEAL: return Util::drand48() < HEAL_ZONE;
+            case Zone::YELLOW: return Util::drand48() < m_SuccessRate;
             case Zone::GREEN:
             default:
                 return true;
@@ -170,6 +175,89 @@ namespace SD {
         {
             Lock sLock(m_Mutex);
             return m_Duration;
+        }
+    };
+
+    class Breaker : public std::enable_shared_from_this<Breaker>
+    {
+        boost::asio::io_service&  m_Service;
+        std::atomic<bool>         m_Stop{false};
+        boost::asio::steady_timer m_Timer;
+
+        mutable std::mutex m_Mutex;
+        using Lock = std::unique_lock<std::mutex>;
+        std::map<std::string, std::shared_ptr<PeerState>> m_State;
+
+        void timer(boost::asio::yield_context yield)
+        {
+            const time_t sNow = time(nullptr);
+            Lock         sLock(m_Mutex);
+            for (auto& x : m_State)
+                x.second->timer(sNow);
+        }
+
+        std::shared_ptr<PeerState> getOrCreate(const std::string& aKey)
+        {
+            Lock  sLock(m_Mutex);
+            auto& sVal = m_State[aKey];
+            if (!sVal)
+                sVal = std::make_shared<PeerState>();
+            return sVal;
+        }
+
+        bool goodResponse(const asio_http::Response& aResponse)
+        {
+            auto sCode = aResponse.result_int();
+            bool sBad  = sCode == 429 or sCode >= 500;
+            return !sBad;
+        }
+
+    public:
+        using Error = Exception::Error<Breaker>;
+
+        Breaker(boost::asio::io_service& aService)
+        : m_Service(aService)
+        , m_Timer(aService)
+        {
+        }
+
+        void start()
+        {
+            boost::asio::spawn(m_Timer.get_executor(), [this, p = shared_from_this()](boost::asio::yield_context yield) {
+                boost::beast::error_code ec;
+                while (!m_Stop) {
+                    timer(yield);
+                    m_Timer.expires_from_now(std::chrono::seconds(1));
+                    m_Timer.async_wait(yield[ec]);
+                }
+            });
+        }
+
+        void stop()
+        {
+            m_Stop = true;
+            m_Timer.cancel();
+        }
+
+        template <class T>
+        asio_http::Response wrap(const std::string& aKey, T&& aHandler)
+        {
+            auto sState = getOrCreate(aKey);
+            if (!sState->test())
+                throw Error("request to " + aKey + " blocked by circuit breaker");
+            try {
+                asio_http::Response sResponse = aHandler();
+                sState->insert(time(nullptr), goodResponse(sResponse));
+                return sResponse;
+            } catch (...) {
+                sState->insert(time(nullptr), false);
+                throw;
+            }
+        }
+
+        double success_rate(const std::string& aKey)
+        {
+            return getOrCreate(aKey)->success_rate();
         }
     };
 } // namespace SD

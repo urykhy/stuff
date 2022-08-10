@@ -23,6 +23,7 @@
 #include <unsorted/Uuid.hpp>
 
 namespace Jaeger {
+
     struct Params
     {
         int64_t     traceIdHigh = 0;
@@ -34,9 +35,9 @@ namespace Jaeger {
         std::string traceparent() const
         {
             return "00-" + // version
-                   Format::to_hex(traceIdHigh) +
-                   Format::to_hex(traceIdLow) + '-' +
-                   Format::to_hex(parentId) + '-' +
+                   Format::to_hex(htobe64(traceIdHigh)) +
+                   Format::to_hex(htobe64(traceIdLow)) + '-' +
+                   Format::to_hex(htobe64(parentId)) + '-' +
                    "00"; // flags
         };
 
@@ -53,11 +54,11 @@ namespace Jaeger {
                             throw std::invalid_argument("Jaeger::Params: version not supported");
                         break;
                     case 2: // trace id
-                        sNew.traceIdHigh = Parser::from_hex<int64_t>(aParam.substr(0, 16));
-                        sNew.traceIdLow  = Parser::from_hex<int64_t>(aParam.substr(16));
+                        sNew.traceIdHigh = be64toh(Parser::from_hex<int64_t>(aParam.substr(0, 16)));
+                        sNew.traceIdLow  = be64toh(Parser::from_hex<int64_t>(aParam.substr(16)));
                         break;
                     case 3: // parent id
-                        sNew.parentId = Parser::from_hex<int64_t>(aParam);
+                        sNew.parentId = be64toh(Parser::from_hex<int64_t>(aParam));
                         break;
                     case 4: // flags not used
                         break;
@@ -71,6 +72,15 @@ namespace Jaeger {
             return sNew;
         }
 
+        static Params parse(std::string_view aParent, std::string_view aState, int64_t aBaseId, std::string_view aService)
+        {
+            auto sParams = parse(aParent, aState);
+            sParams.baseId &= 0xFF00000000000000; // preserving high byte (offset)
+            sParams.baseId |= aBaseId;            // apply new base id
+            sParams.service = aService;
+            return sParams;
+        }
+
         static Params uuid(const std::string& aService)
         {
             Params sNew;
@@ -80,27 +90,17 @@ namespace Jaeger {
         }
     };
 
-    struct Metric : boost::noncopyable
+    struct Tag
     {
-        struct Tag
-        {
-            std::string name;
+        std::string name;
 
-            std::variant<std::string, const char*, double, bool, int64_t> value;
-        };
+        std::variant<std::string, const char*, double, bool, int64_t> value;
 
-    private:
-        jaegertracing::thrift::Batch m_Batch;
-        const Params                 m_Params;
-        size_t                       m_Counter = 0;
-
-        size_t nextSpanID() { return m_Params.baseId + m_Counter++; }
-
-        static jaegertracing::thrift::Tag convert(const Tag& aTag)
+        jaegertracing::thrift::Tag convert() const
         {
             using Type = jaegertracing::thrift::TagType;
             jaegertracing::thrift::Tag sTag;
-            sTag.key = aTag.name;
+            sTag.key = name;
             std::visit(Mpl::overloaded{
                            [&sTag](const std::string& arg) {
                                sTag.vType = Type::STRING;
@@ -123,12 +123,25 @@ namespace Jaeger {
                                sTag.__set_vLong(arg);
                            },
                        },
-                       aTag.value);
+                       value);
             return sTag;
         }
+    };
+
+    struct Span;
+    struct Trace : boost::noncopyable
+    {
+        friend class Span;
+
+    private:
+        jaegertracing::thrift::Batch m_Batch;
+        const Params                 m_Params;
+        size_t                       m_Counter = 0;
+
+        size_t nextSpanID() { return m_Params.baseId + m_Counter++; }
 
     public:
-        Metric(const Params& aParams)
+        Trace(const Params& aParams)
         : m_Params(aParams)
         {
             m_Batch.process.serviceName = aParams.service;
@@ -136,7 +149,7 @@ namespace Jaeger {
 
         void set_process_tag(const Tag& aTag)
         {
-            m_Batch.process.tags.push_back(convert(aTag));
+            m_Batch.process.tags.push_back(aTag.convert());
             m_Batch.process.__isset.tags = true;
         }
 
@@ -149,107 +162,110 @@ namespace Jaeger {
             sAgent.emitBatch(m_Batch);
             return sBuffer->getBufferAsString();
         }
-
-        class Step : boost::noncopyable
-        {
-            const int                   m_XCount;
-            Metric&                     m_Metric;
-            jaegertracing::thrift::Span m_Span;
-            bool                        m_Alive = true;
-
-        public:
-            Step(Metric& aMetric, const std::string& aName, size_t aParentSpanId = 0)
-            : m_XCount(std::uncaught_exceptions())
-            , m_Metric(aMetric)
-            {
-                m_Span.traceIdHigh = m_Metric.m_Params.traceIdHigh;
-                m_Span.traceIdLow  = m_Metric.m_Params.traceIdLow;
-                m_Span.spanId      = m_Metric.nextSpanID();
-                if (aParentSpanId == 0)
-                    m_Span.parentSpanId = m_Metric.m_Params.parentId;
-                else
-                    m_Span.parentSpanId = aParentSpanId;
-                m_Span.operationName = aName;
-                m_Span.flags         = 0;
-                m_Span.startTime     = Time::get_time().to_us();
-                m_Span.duration      = 0;
-
-                //BOOST_TEST_MESSAGE("new span " << aName << "(" << m_Span.spanId << ") with parent " << m_Span.parentSpanId);
-            }
-
-            Step(Step&& aOld)
-            : m_XCount(aOld.m_XCount)
-            , m_Metric(aOld.m_Metric)
-            , m_Span(std::move(aOld.m_Span))
-            , m_Alive(aOld.m_Alive)
-            {
-                aOld.m_Alive = false;
-            }
-
-            ~Step()
-            {
-                try {
-                    close();
-                } catch (...) {
-                };
-            }
-
-            void close()
-            {
-                if (m_Alive) {
-                    if (m_XCount != std::uncaught_exceptions())
-                        set_error();
-                    m_Span.duration = Time::get_time().to_us() - m_Span.startTime;
-                    m_Metric.m_Batch.spans.push_back(std::move(m_Span));
-                    m_Alive = false;
-                }
-            }
-
-            int64_t span_id() const { return m_Span.spanId; }
-
-            Step child(const std::string& aName)
-            {
-                return Step(m_Metric, aName, m_Span.spanId);
-            }
-
-            void set_tag(const Tag& aTag)
-            {
-                m_Span.tags.push_back(Metric::convert(aTag));
-                m_Span.__isset.tags = true;
-            }
-
-            void set_error() { set_tag(Tag{"error", true}); }
-
-            template <class... T>
-            void set_log(const T&... aTag)
-            {
-                jaegertracing::thrift::Log sLog;
-                sLog.timestamp = Time::get_time().to_us();
-
-                // convert every aTag
-                (static_cast<void>(sLog.fields.push_back(Metric::convert(aTag))), ...);
-
-                m_Span.logs.push_back(sLog);
-                m_Span.__isset.logs = true;
-            }
-
-            Params extract() const
-            {
-                return {
-                    m_Span.traceIdHigh,
-                    m_Span.traceIdLow,
-                    m_Span.spanId,
-                };
-            }
-        };
-        friend class Step;
     };
 
-    inline void send(const Metric& aMetric)
+    class Span : boost::noncopyable
+    {
+        const int                   m_XCount;
+        Trace&                      m_Trace;
+        jaegertracing::thrift::Span m_Span;
+        bool                        m_Alive = true;
+
+    public:
+        Span(Trace& aTrace, const std::string& aName, size_t aParentSpanId = 0)
+        : m_XCount(std::uncaught_exceptions())
+        , m_Trace(aTrace)
+        {
+            m_Span.traceIdHigh = m_Trace.m_Params.traceIdHigh;
+            m_Span.traceIdLow  = m_Trace.m_Params.traceIdLow;
+            m_Span.spanId      = m_Trace.nextSpanID();
+            if (aParentSpanId == 0)
+                m_Span.parentSpanId = m_Trace.m_Params.parentId;
+            else
+                m_Span.parentSpanId = aParentSpanId;
+            m_Span.operationName = aName;
+            m_Span.flags         = 0;
+            m_Span.startTime     = Time::get_time().to_us();
+            m_Span.duration      = 0;
+
+            // BOOST_TEST_MESSAGE("new span " << aName << "(" << m_Span.spanId << ") with parent " << m_Span.parentSpanId);
+        }
+
+        Span(Span&& aOld)
+        : m_XCount(aOld.m_XCount)
+        , m_Trace(aOld.m_Trace)
+        , m_Span(std::move(aOld.m_Span))
+        , m_Alive(aOld.m_Alive)
+        {
+            aOld.m_Alive = false;
+        }
+
+        ~Span()
+        {
+            try {
+                close();
+            } catch (...) {
+            };
+        }
+
+        void close()
+        {
+            if (m_Alive) {
+                if (m_XCount != std::uncaught_exceptions())
+                    set_error();
+                m_Span.duration = Time::get_time().to_us() - m_Span.startTime;
+                m_Trace.m_Batch.spans.push_back(std::move(m_Span));
+                m_Alive = false;
+            }
+        }
+
+        Span child(const std::string& aName)
+        {
+            return Span(m_Trace, aName, m_Span.spanId);
+        }
+
+        void set_tag(const Tag& aTag)
+        {
+            m_Span.tags.push_back(aTag.convert());
+            m_Span.__isset.tags = true;
+        }
+
+        void set_error() { set_tag(Tag{"error", true}); }
+
+        template <class... T>
+        void set_log(const T&... aTag)
+        {
+            jaegertracing::thrift::Log sLog;
+            sLog.timestamp = Time::get_time().to_us();
+
+            // convert every aTag
+            (static_cast<void>(sLog.fields.push_back(aTag.convert())), ...);
+
+            m_Span.logs.push_back(sLog);
+            m_Span.__isset.logs = true;
+        }
+
+        std::string trace_id() const
+        {
+            return Format::to_hex(htobe64(m_Span.traceIdHigh)) +
+                   Format::to_hex(htobe64(m_Span.traceIdLow));
+        }
+
+        Params extract() const
+        {
+            return {
+                m_Span.traceIdHigh,
+                m_Span.traceIdLow,
+                m_Span.spanId,
+            };
+        }
+    };
+
+    inline void send(const Trace& aTrace)
     {
         static Udp::Socket sUdp(Util::resolveName(Util::getEnv("JAEGER_HOST")),
                                 Util::getEnv<uint16_t>("JAEGER_PORT", 6831));
-        const std::string  sMessage = aMetric.serialize();
+        const std::string  sMessage = aTrace.serialize();
         sUdp.write(sMessage.data(), sMessage.size());
     }
 } // namespace Jaeger
