@@ -80,28 +80,27 @@ BOOST_AUTO_TEST_CASE(start_wo_check)
 {
     SD::PeerState sStat;
     BOOST_CHECK_CLOSE(sStat.success_rate(), 0.75, 1);
-    const uint32_t COUNT = 40;
+    const uint32_t COUNT = 50;
     for (uint32_t i = 1; i < COUNT; i++) {
         sStat.insert(i, true);
         BOOST_TEST_MESSAGE("after one more successful call: " << sStat.success_rate());
     }
-    BOOST_CHECK_CLOSE(sStat.success_rate(), 1, 1);
+    BOOST_CHECK_CLOSE(sStat.success_rate(), 1, 5);
 }
 BOOST_AUTO_TEST_CASE(start_with_check)
 {
     SD::PeerState sStat;
     BOOST_CHECK_CLOSE(sStat.success_rate(), 0.75, 1);
-    const uint32_t COUNT    = 40;
+    const uint32_t COUNT    = 50;
     uint32_t       sBlocked = 0;
     for (uint32_t i = 1; i < COUNT; i++) {
-        if (sStat.test())
+        if (sStat.test(i))
             sStat.insert(i, true);
         else
             sBlocked++;
         BOOST_TEST_MESSAGE("after one second: " << sStat.success_rate());
-        sStat.timer(i);
     }
-    BOOST_CHECK_CLOSE(sStat.success_rate(), 1, 1);
+    BOOST_CHECK_CLOSE(sStat.success_rate(), 1, 5);
     BOOST_TEST_MESSAGE("blocked calls: " << sBlocked);
 }
 
@@ -116,31 +115,40 @@ BOOST_DATA_TEST_CASE(constant_probability,
 
     for (unsigned sTimestamp = 0; sTimestamp < SECONDS; sTimestamp++) {
         for (unsigned i = 0; i < RPS; i++) {
-            if (sStat.test()) {
+            if (sStat.test(sTimestamp)) {
                 sAllowed++;
                 sStat.insert(sTimestamp, Util::drand48() < sProb);
             }
         }
-        sStat.timer(sTimestamp);
     }
     const double sActualRate = sAllowed / (double)(RPS * SECONDS);
 
-    if (sProb > 0.51) {
+    if (abs(sProb - 0) < 0.01)
+        BOOST_CHECK_CLOSE(0.1, sActualRate, 15);
+    else if (abs(sProb - 0.25) < 0.01)
+        BOOST_CHECK_CLOSE(0.135, sActualRate, 15);
+    else if (abs(sProb - 0.5) < 0.01)
+        BOOST_CHECK_CLOSE(0.23, sActualRate, 25);
+    else
         BOOST_CHECK_CLOSE(sProb, sActualRate, 5);
-    } else {
-        if (abs(sProb - 0) < 0.01)
-            BOOST_CHECK_CLOSE(0.05, sActualRate, 15); // ~ 1/2 of HEAL_ZONE requests
-        else if (abs(sProb - 0.25) < 0.01)
-            BOOST_CHECK_CLOSE(0.07, sActualRate, 10); // ~ 1/2 of HEAL_ZONE requests
-        else                                          // 0.5
-            BOOST_CHECK_CLOSE(0.25, sActualRate, 10); // ~ 1/2 of sProb
+}
+BOOST_AUTO_TEST_CASE(ewma)
+{
+    Util::Ewma sEwma(SD::PeerState::EWMA_FACTOR, SD::PeerState::INITIAL_RATE);
+    BOOST_TEST_MESSAGE("* only successfull calls");
+    for (auto i = 0; i < 10; i++) {
+        sEwma.add(1);
+        BOOST_TEST_MESSAGE("estimation: " << sEwma.estimate());
     }
-
-    const auto sDuration = sStat.duration();
-    BOOST_TEST_MESSAGE("duration stats"
-                       << ": red zone: " << sDuration.red / (double)SECONDS
-                       << ", heal zone: " << sDuration.heal / (double)SECONDS
-                       << ", yellow zone: " << sDuration.yellow / (double)SECONDS
-                       << ", green zone: " << sDuration.green / (double)SECONDS);
+    BOOST_TEST_MESSAGE("* degradate slowly");
+    for (auto i = 0; i < 40; i++) {
+        sEwma.add(1 - i / 100.0);
+        BOOST_TEST_MESSAGE("estimation: " << sEwma.estimate());
+    }
+    BOOST_TEST_MESSAGE("* recovering");
+    for (auto i = 40; i > 0; i--) {
+        sEwma.add(1 - i / 100.0);
+        BOOST_TEST_MESSAGE("estimation: " << sEwma.estimate());
+    }
 }
 BOOST_AUTO_TEST_SUITE_END()

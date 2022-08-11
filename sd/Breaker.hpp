@@ -1,200 +1,140 @@
 #pragma once
 
+#include <fmt/core.h>
+
 #include <array>
 #include <memory>
 
-#include <boost/asio/steady_timer.hpp>
-
 #include <exception/Error.hpp>
+#include <prometheus/GetOrCreate.hpp>
+#include <unsorted/Ewma.hpp>
 #include <unsorted/Random.hpp>
 
 namespace SD {
 
-    struct PeerState
+    class PeerState
     {
-        struct Duration
-        {
-            time_t green  = 0;
-            time_t yellow = 0;
-            time_t red    = 0;
-            time_t heal   = 0;
-        };
-
-    private:
-        class Bucket
-        {
-            uint32_t m_Success = 0;
-            uint32_t m_Calls   = 0;
-
-        public:
-            void insert(bool aSuccess)
-            {
-                if (aSuccess)
-                    m_Success++;
-                m_Calls++;
-            }
-            double get() const
-            {
-                return m_Calls > 0 ? m_Success / (double)m_Calls : INITIAL_ZONE;
-            }
-            void reset()
-            {
-                m_Success = 0;
-                m_Calls   = 0;
-            }
-            bool empty() const
-            {
-                return m_Calls == 0;
-            }
-        };
-
         using Lock = std::unique_lock<std::mutex>;
         mutable std::mutex m_Mutex;
 
-        static constexpr unsigned BUCKET_COUNT = 30;
-
-        std::array<Bucket, BUCKET_COUNT> m_Buckets;
-
-        unsigned m_CurrentBucket = 0;
-        time_t   m_CurrentTime   = 0;
-        time_t   m_RedUntil      = 0; // block mode until this time
-        time_t   m_HealUntil     = 0; // heal mode until this time
+        unsigned   m_Success = 0;
+        unsigned   m_Fail    = 0;
+        Util::Ewma m_Ewma;
 
         enum class Zone
         {
-            RED,
             HEAL,
+            RED,
             YELLOW,
             GREEN,
         };
         Zone   m_Zone        = Zone::YELLOW;
-        double m_SuccessRate = INITIAL_ZONE;
+        time_t m_CurrentTime = 0;
+        time_t m_Spent       = 0;
 
-        Duration m_Duration;
-
-        Zone calc_zone() const
+        Zone estimate()
         {
-            if (m_RedUntil > 0)
-                return Zone::RED;
-            else if (m_HealUntil > 0)
-                return Zone::HEAL;
-            else if (m_SuccessRate > YELLOW_ZONE)
+            m_Spent = 0;
+            if (m_Ewma.estimate() > YELLOW_RATE)
                 return Zone::GREEN;
-            return Zone::YELLOW;
+            if (m_Ewma.estimate() > RED_RATE)
+                return Zone::YELLOW;
+            return Zone::RED;
         }
 
-        void switch_zone()
+        void transition(time_t aNow)
         {
-            // zone transitions
-            if (m_RedUntil == 0 and m_HealUntil == 0 and m_SuccessRate <= RED_ZONE) {
-                m_RedUntil = m_CurrentTime + DELAY;
-            } else if (m_RedUntil > 0 and m_RedUntil <= m_CurrentTime) {
-                m_RedUntil  = 0;
-                m_HealUntil = m_CurrentTime + DELAY;
-            } else if (m_HealUntil > 0 and m_HealUntil <= m_CurrentTime) {
-                m_HealUntil = 0;
+            if (m_Zone == Zone::HEAL) {
+                if (m_Spent < HEAL_SECONDS)
+                    return;
+                m_Zone  = estimate();
+                return;
             }
-            m_Zone = calc_zone();
-
-            // account next second
-            switch (m_Zone) {
-            case Zone::RED: m_Duration.red++; break;
-            case Zone::HEAL: m_Duration.heal++; break;
-            case Zone::YELLOW: m_Duration.yellow++; break;
-            case Zone::GREEN:
-            default:
-                m_Duration.green++;
+            if (m_Zone == Zone::RED) {
+                if (m_Spent < COOLDOWN_SECONDS)
+                    return;
+                m_Zone  = Zone::HEAL;
+                m_Spent = 0;
+                m_Ewma.reset(HEAL_RATE);
+                return;
             }
-        }
-
-        double calc_success_rate() const
-        {
-            double sSum = 0;
-            for (auto& x : m_Buckets)
-                sSum += x.get();
-            return sSum / m_Buckets.size();
+            m_Zone = estimate();
         }
 
         void prepare(time_t aNow)
         {
             if (aNow <= m_CurrentTime)
                 return;
-
             m_CurrentTime = aNow;
+            m_Spent++;
 
-            if (!m_Buckets[m_CurrentBucket].empty()) {
-                m_CurrentBucket += 1;
-                m_CurrentBucket = m_CurrentBucket % m_Buckets.size();
-                m_SuccessRate   = calc_success_rate();
-                m_Buckets[m_CurrentBucket].reset();
+            if (m_Success + m_Fail > 0) {
+                m_Ewma.add(m_Success / double(m_Success + m_Fail));
+                m_Success = 0;
+                m_Fail    = 0;
             }
-            switch_zone();
+            transition(aNow);
         }
 
     public:
-        static constexpr double INITIAL_ZONE = 0.75;
-        static constexpr double RED_ZONE     = 0.50;
-        static constexpr double HEAL_ZONE    = 0.10; // rate in heal mode
-        static constexpr double YELLOW_ZONE  = 0.95;
-        static constexpr time_t DELAY        = 10; // delay before healing, duration of heal/block mode.
+        static constexpr double EWMA_FACTOR      = 0.95;
+        static constexpr double HEAL_RATE        = 0.25;
+        static constexpr double RED_RATE         = 0.50;
+        static constexpr double INITIAL_RATE     = 0.75;
+        static constexpr double YELLOW_RATE      = 0.95;
+        static constexpr time_t COOLDOWN_SECONDS = 10;
+        static constexpr time_t HEAL_SECONDS     = 10;
+
+        PeerState()
+        : m_Ewma(EWMA_FACTOR, INITIAL_RATE)
+        {
+        }
 
         void insert(time_t aNow, bool aSuccess)
         {
             Lock sLock(m_Mutex);
             prepare(aNow);
-            m_Buckets[m_CurrentBucket].insert(aSuccess);
+            if (aSuccess)
+                m_Success++;
+            else
+                m_Fail++;
         }
 
-        bool test()
+        bool test(time_t aNow)
         {
             Lock sLock(m_Mutex);
+            prepare(aNow);
 
             switch (m_Zone) {
-            case Zone::RED: return false;
-            case Zone::HEAL: return Util::drand48() < HEAL_ZONE;
-            case Zone::YELLOW: return Util::drand48() < m_SuccessRate;
+            case Zone::RED:
+                return false;
+            case Zone::HEAL:
+            case Zone::YELLOW:
+                return Util::drand48() < m_Ewma.estimate();
             case Zone::GREEN:
             default:
                 return true;
             }
         }
 
-        void timer(time_t aNow)
-        {
-            Lock sLock(m_Mutex);
-            prepare(aNow);
-        }
-
         double success_rate() const
         {
             Lock sLock(m_Mutex);
-            return m_SuccessRate;
-        }
-
-        Duration duration() const
-        {
-            Lock sLock(m_Mutex);
-            return m_Duration;
+            return m_Ewma.estimate();
         }
     };
 
-    class Breaker : public std::enable_shared_from_this<Breaker>
+    class Breaker
     {
-        boost::asio::io_service&  m_Service;
-        std::atomic<bool>         m_Stop{false};
-        boost::asio::steady_timer m_Timer;
+        const std::string m_API;
+        std::atomic<bool> m_Stop{false};
+
+        using Counter = Prometheus::Counter<>;
+        Prometheus::GetOrCreate m_Metrics;
 
         mutable std::mutex m_Mutex;
         using Lock = std::unique_lock<std::mutex>;
         std::map<std::string, std::shared_ptr<PeerState>> m_State;
-
-        void timer(boost::asio::yield_context yield)
-        {
-            const time_t sNow = time(nullptr);
-            Lock         sLock(m_Mutex);
-            for (auto& x : m_State)
-                x.second->timer(sNow);
-        }
 
         std::shared_ptr<PeerState> getOrCreate(const std::string& aKey)
         {
@@ -212,44 +152,45 @@ namespace SD {
             return !sBad;
         }
 
+        void tick(const std::string& aKey, std::string_view aAction)
+        {
+            const auto sKey = fmt::format(R"(sd_request_count{{api="{}",peer="{}",request="{}"}})",
+                                          m_API, aKey, aAction);
+            m_Metrics.get<Counter>(sKey)->tick();
+        }
+
     public:
         using Error = Exception::Error<Breaker>;
 
-        Breaker(boost::asio::io_service& aService)
-        : m_Service(aService)
-        , m_Timer(aService)
+        Breaker(const std::string& aAPI)
+        : m_API(aAPI)
         {
-        }
-
-        void start()
-        {
-            boost::asio::spawn(m_Timer.get_executor(), [this, p = shared_from_this()](boost::asio::yield_context yield) {
-                boost::beast::error_code ec;
-                while (!m_Stop) {
-                    timer(yield);
-                    m_Timer.expires_from_now(std::chrono::seconds(1));
-                    m_Timer.async_wait(yield[ec]);
-                }
-            });
-        }
-
-        void stop()
-        {
-            m_Stop = true;
-            m_Timer.cancel();
         }
 
         template <class T>
         asio_http::Response wrap(const std::string& aKey, T&& aHandler)
         {
+            static const std::string_view BLOCK("block");
+            static const std::string_view PERMIT("permit");
+            static const std::string_view FAIL("fail");
+
             auto sState = getOrCreate(aKey);
-            if (!sState->test())
+            if (!sState->test(time(nullptr))) {
+                tick(aKey, BLOCK);
                 throw Error("request to " + aKey + " blocked by circuit breaker");
+            }
             try {
+                tick(aKey, PERMIT);
                 asio_http::Response sResponse = aHandler();
-                sState->insert(time(nullptr), goodResponse(sResponse));
+                if (goodResponse(sResponse)) {
+                    sState->insert(time(nullptr), true);
+                } else {
+                    tick(aKey, FAIL);
+                    sState->insert(time(nullptr), false);
+                }
                 return sResponse;
             } catch (...) {
+                tick(aKey, FAIL);
                 sState->insert(time(nullptr), false);
                 throw;
             }
@@ -260,4 +201,34 @@ namespace SD {
             return getOrCreate(aKey)->success_rate();
         }
     };
+
+    struct BreakerManager
+    {
+        using Ptr     = std::shared_ptr<Breaker>;
+        using WeakPtr = std::weak_ptr<Breaker>;
+
+    private:
+        mutable std::mutex m_Mutex;
+        using Lock = std::unique_lock<std::mutex>;
+        std::map<std::string, WeakPtr> m_Info;
+
+    public:
+        Ptr get(const std::string& aAPI)
+        {
+            Lock sLock(m_Mutex);
+            auto sIt = m_Info.find(aAPI);
+            if (sIt != m_Info.end() and !sIt->second.expired())
+                return sIt->second.lock();
+            auto sNew    = std::make_shared<Breaker>(aAPI);
+            m_Info[aAPI] = sNew;
+            return sNew;
+        }
+    };
+
+    inline BreakerManager::Ptr getBreaker(const std::string& aAPI)
+    {
+        static BreakerManager sManager;
+        return sManager.get(aAPI);
+    }
+
 } // namespace SD

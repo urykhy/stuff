@@ -3,6 +3,7 @@ class client
 {
     asio_http::ClientPtr m_HttpClient;
 {%- if x_discovery %}
+    const std::string m_Service;
     std::shared_ptr<SD::Balancer> m_Balancer;
     std::shared_ptr<SD::Breaker> m_Breaker;
 {%- else %}
@@ -26,7 +27,7 @@ class client
 public:
     {% if x_discovery %}
         client(asio_http::ClientPtr aHttpClient, boost::asio::io_service& aAsio, const std::string& aService, const std::string& aLocation = {});
-        void with_breaker(std::shared_ptr<SD::Breaker> aBreaker);
+        void with_breaker();
     {% else %}
         client(asio_http::ClientPtr aHttpClient, const std::string& aBase);
     {% endif %}
@@ -62,6 +63,7 @@ public:
     {% if x_discovery %}
         client::client(asio_http::ClientPtr aHttpClient, boost::asio::io_service& aAsio, const std::string& aService, const std::string& aLocation)
         : m_HttpClient(aHttpClient)
+        , m_Service(aService)
         {
             SD::Balancer::Params sParams;
             sParams.prefix = "discovery/swagger/" + aService + "/{{ doc['info']['title'] }}/{{ doc['info']['version'] }}/";
@@ -69,9 +71,9 @@ public:
             m_Balancer = std::make_shared<SD::Balancer>(aAsio, sParams);
             m_Balancer->start();
         }
-        void client::with_breaker(std::shared_ptr<SD::Breaker> aBreaker)
+        void client::with_breaker()
         {
-            m_Breaker = aBreaker;
+            m_Breaker = SD::getBreaker(m_Service + "/{{ doc['info']['title'] }}/{{ doc['info']['version'] }}");
         }
     {% else %}
         client::client(asio_http::ClientPtr aHttpClient, const std::string& aBase)

@@ -545,8 +545,6 @@ BOOST_FIXTURE_TEST_CASE(redirect, WithServer)
 }
 BOOST_FIXTURE_TEST_CASE(discovery, WithServer)
 {
-    auto sBreaker = std::make_shared<SD::Breaker>(m_Asio.service());
-    sBreaker->start();
     Discovery sDiscovery;
     sDiscovery.with_discovery(m_Asio.service(), "127.0.0.1:3000", "test-service", "test-location", 10);
 
@@ -563,7 +561,7 @@ BOOST_FIXTURE_TEST_CASE(discovery, WithServer)
     }
 
     api::discovery_1_0::client sClient(m_HttpClient, m_Asio.service(), "test-service");
-    sClient.with_breaker(sBreaker);
+    sClient.with_breaker();
     Threads::sleep(0.1); // wait until we collect peers from etcd
     auto sResponse = sClient.get_discovery({});
     BOOST_CHECK_EQUAL(sResponse.body, "success");
@@ -588,8 +586,6 @@ BOOST_FIXTURE_TEST_CASE(discovery, WithServer)
 }
 BOOST_FIXTURE_TEST_CASE(breaker, WithServer)
 {
-    auto sBreaker = std::make_shared<SD::Breaker>(m_Asio.service());
-    sBreaker->start();
     Discovery500 sDiscovery;
     sDiscovery.with_discovery(m_Asio.service(), "127.0.0.1:3000", "test-service", "test-location", 10);
 
@@ -597,13 +593,13 @@ BOOST_FIXTURE_TEST_CASE(breaker, WithServer)
     Threads::sleep(0.1); // wait until etcd updated
 
     api::discovery_1_0::client sClient(m_HttpClient, m_Asio.service(), "test-service");
-    sClient.with_breaker(sBreaker);
+    sClient.with_breaker();
     Threads::sleep(0.1); // wait until we collect peers from etcd
 
     bool sBreaked = false;
     for (int i = 0; i < 15 and !sBreaked; i++) {
         try {
-            BOOST_TEST_MESSAGE("success rate: " << sBreaker->success_rate("127.0.0.1:3000"));
+            BOOST_TEST_MESSAGE("success rate: " << SD::getBreaker("test-service/discovery/1.0")->success_rate("127.0.0.1:3000"));
             auto sResponse = sClient.get_discovery({});
             BOOST_CHECK_EQUAL(sResponse.body, "success");
         } catch (const SD::Breaker::Error& e) {
@@ -615,6 +611,11 @@ BOOST_FIXTURE_TEST_CASE(breaker, WithServer)
         sleep(1);
     }
     BOOST_CHECK_EQUAL(sBreaked, true);
+
+    // log metrics
+    const auto sActual = Prometheus::Manager::instance().toPrometheus();
+    for (auto x : sActual)
+        BOOST_TEST_MESSAGE(x);
 }
 BOOST_AUTO_TEST_SUITE_END() // rpc
 
