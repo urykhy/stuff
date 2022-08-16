@@ -1,4 +1,3 @@
-
 #pragma once
 
 #include "immintrin.h"
@@ -7,9 +6,8 @@
 //#define STR(x) STR_HELPER(x)
 
 #define MAKE_AVX_INT_VECTOR(n)                                              \
-class WideInt##n {                                                          \
+struct WideInt##n {                                                         \
     __m256i data;                                                           \
-public:                                                                     \
     WideInt##n(uint##n##_t t = 0) {                                         \
         data = _mm256_set1_epi##n(t);                                       \
     }                                                                       \
@@ -54,9 +52,8 @@ MAKE_AVX_INT_VECTOR(64);
 #undef MAKE_AVX_INT_VECTOR
 
 #define MAKE_AVX_FLOAT_VECTOR(n, su, tname, avxt)                           \
-class WideFloat##n {                                                        \
+struct WideFloat##n {                                                       \
     avxt data;                                                              \
-public:                                                                     \
     WideFloat##n(tname t = 0) {                                             \
         data = _mm256_set1_##su(t);                                         \
     }                                                                       \
@@ -99,4 +96,3 @@ public:                                                                     \
 MAKE_AVX_FLOAT_VECTOR(32, ps, float,  __m256);
 MAKE_AVX_FLOAT_VECTOR(64, pd, double, __m256d);
 #undef MAKE_AVX_FLOAT_VECTOR
-
