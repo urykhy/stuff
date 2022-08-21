@@ -6,6 +6,7 @@
 
 #include <etcd/Etcd.hpp>
 #include <parser/Json.hpp>
+#include <unsorted/Random.hpp>
 
 namespace SD {
 
@@ -101,7 +102,8 @@ namespace SD {
         : m_Params(aParams)
         , m_Service(aService)
         , m_Timer(aService)
-        {}
+        {
+        }
 
         List state() const
         {
@@ -112,7 +114,7 @@ namespace SD {
         Entry random()
         {
             Lock     lk(m_Mutex);
-            uint64_t sKey = lrand48() % m_TotalWeight;
+            uint64_t sKey = Util::randomInt(m_TotalWeight);
 
             for (const auto& x : m_State)
                 if (sKey < x.weight)
