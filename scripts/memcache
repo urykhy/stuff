@@ -1,0 +1,47 @@
+#!/bin/bash
+
+# run server: docker run --rm --name memcache memcached
+
+mc_exec() {
+    echo -ne "$1\r\n" | nc -N memcache 11211
+}
+
+mc_set() {
+    key="$1"
+    val="$2"
+    len=$(echo -en "$val" | wc -c)
+    exp=900 # seconds
+    mc_exec "set $key 0 $exp $len\r\n$val"
+}
+
+mc_get() {
+    key="$1"
+    mc_exec "get $key"
+}
+
+mc_dump() {
+    mc_exec "lru_crawler metadump all"
+}
+
+mc_stats() {
+    mc_exec "stats items"
+}
+
+case "$1" in
+    set)
+        mc_set "$2" "$3"
+        ;;
+    get)
+        mc_get "$2"
+        ;;
+    dump)
+        mc_dump
+        ;;
+    stats)
+        mc_stats
+        ;;
+    *)
+        echo "Usage: $0 set|get|dump|stats" >&2
+        exit 1
+  ;;
+esac;
