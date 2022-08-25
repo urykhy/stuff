@@ -110,6 +110,9 @@ func inspect(cli *client.Client, ID string) {
 			}
 			return service + "." + project
 		}
+		if len(info.Name) > 1 && info.Name[0] == '/' {
+			return info.Name[1:]
+		}
 		return info.Config.Hostname
 	}()
 
