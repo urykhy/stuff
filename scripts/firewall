@@ -2,22 +2,24 @@
 #
 
 # allow all services for known ips
-SAFE_WLAN="-i wlan1 -s 192.168.1.67,192.168.1.64"
+SAFE_WLAN="-i wlan1 -s 192.168.1.67,192.168.1.69"
 
 # allow everything from local docker/bridge
 SAFE_LOCAL="-i br+"
 
 # services open for internet, lan (dhcp, syncthing, torrent)
-UNSAFE_TCP="-i wlan1 -p tcp -m multiport --dports 22000,6881"
-UNSAFE_UDP="-i wlan1 -p udp -m multiport --dports 67,68,22000,21027,6881"
+UNSAFE_TCP="-i wlan1 -p tcp -m multiport --dports 53,22000,6881"
+UNSAFE_UDP="-i wlan1 -p udp -m multiport --dports 53,67,68,22000,21027,6881"
 
-# services open for network namespace (dns)
-NSPACE_TCP="-i space+ -p tcp -m multiport --dports 53"
+# services open for network namespace (dns, tor proxy)
+NSPACE_TCP="-i space+ -p tcp -m multiport --dports 53,9052"
 NSPACE_UDP="-i space+ -p udp -m multiport --dports 53"
 NSPACE_FWD="-i space+ -o wlan1"
 
 # via tor
 VIA_TOR=("rutracker.org" "booktracker.org" "flibusta.is" "ru.linkedin.com" "linkedin.com")
+
+VIA_PROXY=("bt.rutracker.org" "bt2.rutracker.org" "bt3.rutracker.org" "bt4.rutracker.org" "bt.booktracker.work")
 
 # disallow any input for this interfaces - this is default action
 # UNSAFE_DEVICE=("tun+" "mru" "proton" "cameron")
@@ -28,27 +30,56 @@ msg="firewall"
 ipt="/sbin/iptables"
 ip6="/sbin/ip6tables"
 
+function ipset_start()
+{
+    # tor
+    ipset create -exist TOR hash:net
+    for x in ${VIA_TOR[@]};
+    do
+        for a in `host $x | sed -ne 's/.*has address \(.*\)/\1/p'`;
+        do
+            echo "add $x as $a"
+            ipset add TOR $a
+        done
+    done
+
+    # protonvpn via tor
+    ipset add TOR 103.125.235.18
+    ipset add TOR 185.165.241.34
+    ipset add TOR 89.38.99.188
+    ipset add TOR 138.199.7.240
+    ipset add TOR 109.201.133.20
+    ipset add TOR 185.177.124.213
+    ipset add TOR 37.19.199.134
+    ipset add TOR 93.190.141.69
+    ipset add TOR 185.177.125.90
+
+    ipset create -exist PROXY hash:net
+    for x in ${VIA_PROXY[@]};
+    do
+        for a in `host $x | sed -ne 's/.*has address \(.*\)/\1/p'`;
+        do
+            echo "add $x as $a"
+            ipset add PROXY $a
+        done
+    done
+}
+function ipset_flush()
+{
+    ipset flush TOR
+    ipset flush PROXY
+}
+function ipset_stop()
+{
+    ipset destroy TOR
+    ipset destroy PROXY
+}
+
 case "$1" in
         start)
             echo "Starting $msg"
 
-            # tor
-            ipset create TOR hash:net
-            for x in ${VIA_TOR[@]};
-            do
-                for a in `host $x | sed -ne 's/.*has address \(.*\)/\1/p'`;
-                do
-                    echo "add $x as $a"
-                    ipset add TOR $a
-                done
-            done
-
-            ipset create PROXY hash:net
-            ipset add PROXY 195.82.146.120 # bt.rutracker
-            ipset add PROXY 195.82.146.121 # bt2.rutracker
-            ipset add PROXY 195.82.146.122 # bt3.rutracker
-            ipset add PROXY 195.82.146.123 # bt4.rutracker
-            ipset add PROXY 212.8.244.193  # bt.booktracker.work
+            ipset_start
 
             NFLOG="NFLOG --nflog-group 1 --nflog-size=4096"
 
@@ -108,6 +139,9 @@ case "$1" in
             $ipt -t nat -A OUTPUT -m set --match-set TOR   dst -p tcp -m multiport --dports 80,443 -j DNAT --to-destination 127.0.0.1:9052 # tor
             #$ipt -t nat -A PREROUTING -i br0 -p tcp --dport 80 -j REDIRECT --to-ports 3128
 
+            # redirect to tor from network namespaces
+            $ipt -t nat -A PREROUTING -m set --match-set TOR dst -i space0 -p tcp -j DNAT --to-destination 172.18.1.1:9052 # tor
+
             # masquerade on output interfaces
             $ipt -t nat -A POSTROUTING -o wlan1 ! -d 192.168.1.0/24 -j MASQUERADE
 
@@ -124,7 +158,6 @@ case "$1" in
             #$ipt -t mangle -A FORWARD -i wlan0 -p udp                     -m connmark --mark 0 -j CONNMARK --set-mark 0xb # skype
             #$ipt -t mangle -A OUTPUT -m owner --uid-owner _dnscrypt-proxy -m connmark --mark 0 -j CONNMARK --set-mark 0xc # dns proxy
             #$ipt -t mangle -A OUTPUT -m owner --uid-owner debian-tor      -m connmark --mark 0 -j CONNMARK --set-mark 0xb # tor
-
             ;;
 
         stop)
@@ -145,8 +178,7 @@ case "$1" in
             $ip6 -t raw -F
 
             sleep 1
-            ipset destroy TOR
-            ipset destroy PROXY
+            ipset_stop
             ;;
 
         restart)
@@ -170,6 +202,11 @@ case "$1" in
             $ipt -t raw -Z
             ;;
 
+        ipset)
+            ipset_flush
+            sleep 1
+            ipset_start
+            ;;
         *)
             echo "Usage: $0 {start|stop|flush|restart|status}"
             exit 1
