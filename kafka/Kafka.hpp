@@ -8,6 +8,8 @@
 #include <thread>
 #include <vector>
 
+#include <boost/noncopyable.hpp>
+
 namespace Kafka {
 
     using Options         = std::map<std::string, std::string>;
@@ -99,7 +101,8 @@ namespace Kafka {
     public:
         Consumer(const Options&        aOptions,
                  const std::string&    aTopic,
-                 RdKafka::RebalanceCb* aRebalance = nullptr)
+                 RdKafka::RebalanceCb* aRebalance = nullptr,
+                 RdKafka::EventCb*     aEvent     = nullptr)
         : m_Config(RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL))
         {
             std::string sErr;
@@ -108,6 +111,11 @@ namespace Kafka {
             if (aRebalance) {
                 if (m_Config->set("rebalance_cb", aRebalance, sErr) != RdKafka::Conf::CONF_OK) {
                     throw std::invalid_argument("Kafka::Consumer: can't set rebalance_cb: " + sErr);
+                }
+            }
+            if (aEvent) {
+                if (m_Config->set("event_cb", aEvent, sErr) != RdKafka::Conf::CONF_OK) {
+                    throw std::invalid_argument("Kafka::Consumer: can't set event_cb: " + sErr);
                 }
             }
 
@@ -131,9 +139,17 @@ namespace Kafka {
             return std::unique_ptr<RdKafka::ConsumerGroupMetadata>(m_Consumer->groupMetadata());
         }
 
-        struct Position
+        struct Position : boost::noncopyable
         {
             std::vector<RdKafka::TopicPartition*> vector;
+            Position(std::vector<RdKafka::TopicPartition*>&& aFrom)
+            : vector(std::move(aFrom))
+            {
+            }
+            Position(Position&& aFrom)
+            : vector(std::move(aFrom.vector))
+            {
+            }
             ~Position()
             {
                 RdKafka::TopicPartition::destroy(vector);
@@ -145,7 +161,7 @@ namespace Kafka {
             std::vector<RdKafka::TopicPartition*> sPosition;
             check(m_Consumer->assignment(sPosition), "Consumer: assignment");
             check(m_Consumer->position(sPosition), "Consumer: position");
-            return {sPosition};
+            return Position(std::move(sPosition));
         }
 
         void pause()
@@ -193,13 +209,21 @@ namespace Kafka {
         std::unique_ptr<RdKafka::Producer> m_Producer;
 
     public:
-        Producer(const Options& aOptions, const std::string& aTopic)
+        Producer(const Options&     aOptions,
+                 const std::string& aTopic,
+                 RdKafka::EventCb*  aEvent = nullptr)
         : m_Topic(aTopic)
         , m_Config(RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL))
         {
+            std::string sErr;
             configure(m_Config.get(), aOptions);
 
-            std::string sErr;
+            if (aEvent) {
+                if (m_Config->set("event_cb", aEvent, sErr) != RdKafka::Conf::CONF_OK) {
+                    throw std::invalid_argument("Kafka::Producer: can't set event_cb: " + sErr);
+                }
+            }
+
             m_Producer.reset(RdKafka::Producer::create(m_Config.get(), sErr));
             if (!m_Producer)
                 throw std::invalid_argument("Kafka::Producer: can't create producer: " + sErr);

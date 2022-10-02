@@ -50,14 +50,7 @@ namespace Kafka {
 
         void operator()(Handler&& aHandler)
         {
-            if (m_Rewind) {
-                m_Consumer.rewind_and_wait();
-                m_Rewind = false;
-            }
-            if (m_Rollback) {
-                m_Producer.rollback();
-                m_Rollback = false;
-            }
+            recover();
 
             auto sRebalanceCheck = [this, sRebalance = m_RebalanceId.load()]() mutable {
                 if (sRebalance != m_RebalanceId) {
@@ -80,11 +73,23 @@ namespace Kafka {
                 }
             }
 
-            aHandler(nullptr, m_Producer); // flush (if handler collect some state)
+            aHandler(nullptr, m_Producer);       // flush (if handler collect some state)
             m_Producer.send_offsets(m_Consumer); // send_offsets_to_transaction
             m_Rollback = false;
             m_Producer.commit();
             m_Rewind = false;
+        }
+
+        void recover()
+        {
+            if (m_Rewind) {
+                m_Consumer.rewind_and_wait();
+                m_Rewind = false;
+            }
+            if (m_Rollback) {
+                m_Producer.rollback();
+                m_Rollback = false;
+            }
         }
 
     private:
