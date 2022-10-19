@@ -25,8 +25,14 @@ namespace XA {
         {
             IDLE,
             INSERT,
+            UPDATE,
             DELETE,
-            UPDATE
+        };
+        inline static const std::unordered_map<Operation, std::string_view> sOperationMap{
+            {Operation::IDLE, "idle"},
+            {Operation::DELETE, "delete"},
+            {Operation::INSERT, "insert"},
+            {Operation::UPDATE, "update"},
         };
 
         std::string name      = {};
@@ -110,6 +116,14 @@ namespace XA {
             {Result::INVALID_ARGUMENT, "invalid-argument"},
         };
 
+        struct XData
+        {
+            uint64_t    version = 0;
+            std::string data;
+            void        cbor_write(cbor::ostream& out) const { cbor::write(out, version, data); }
+            void        cbor_read(cbor::istream& in) { cbor::read(in, version, data); }
+        };
+
     private:
         using Changelog = boost::multi_index_container<
             Txn,
@@ -123,18 +137,10 @@ namespace XA {
                         Txn,
                         mi::member<Txn, Txn::Status, &Txn::status>,
                         mi::const_mem_fun<Txn, const std::string&, &Txn::data_key>>>,
-                mi::hashed_unique<
+                mi::ordered_unique<
                     mi::tag<Txn::by_name>,
                     mi::const_mem_fun<Txn, const std::string&, &Txn::name>>>>;
         Changelog m_Log;
-
-        struct XData
-        {
-            uint64_t    version = 0;
-            std::string data;
-            void        cbor_write(cbor::ostream& out) const { cbor::write(out, version, data); }
-            void        cbor_read(cbor::istream& in) { cbor::read(in, version, data); }
-        };
 
         using Data = std::unordered_map<std::string, XData>;
         Data m_Data;
@@ -185,6 +191,19 @@ namespace XA {
             return Result::SUCCESS;
         }
 
+#ifdef BOOST_TEST_MODULE
+    public:
+#endif
+
+        uint64_t next_serial()
+        {
+            auto& sStore = mi::get<typename Txn::by_serial>(m_Log);
+            if (sStore.empty())
+                return 1;
+            auto sIt = sStore.rbegin();
+            return sIt->serial + 1;
+        }
+
     public:
         std::optional<XData> get(const std::string& aKey)
         {
@@ -207,8 +226,8 @@ namespace XA {
                         return Result::CONFLICT;
                     }
                     if (sIt->status == Txn::COMMITED) {
-                        INFO("already commited. but it's ok");
-                        return Result::SUCCESS;
+                        INFO("already commited");
+                        return Result::CONFLICT;
                     }
                     return Result::SUCCESS;
                 }
@@ -223,7 +242,7 @@ namespace XA {
                 }
             }
             // ensure data was not updated, and sanity checks ok
-            Result sValidate = validate(aTxn);
+            const Result sValidate = validate(aTxn);
             if (sValidate != Result::SUCCESS)
                 return sValidate;
             // OK, prepare
@@ -231,15 +250,15 @@ namespace XA {
                 .serial = 0,
                 .status = Txn::Status::PREPARE,
                 .txn    = aTxn});
-            DEBUG("prepared for key " << aTxn.key);
+            DEBUG("prepare " << aTxn.operation);
             return Result::SUCCESS;
         }
 
-        Result rollback(const std::string& aID)
+        Result rollback(const std::string& aName)
         {
-            log4cxx::NDC ndc(aID);
+            log4cxx::NDC ndc(aName);
             auto&        sStore = mi::get<typename Txn::by_name>(m_Log);
-            auto         sIt    = sStore.find(aID);
+            auto         sIt    = sStore.find(aName);
             if (sIt == sStore.end()) {
                 WARN("not found");
                 return Result::NOT_FOUND;
@@ -253,11 +272,11 @@ namespace XA {
             return Result::SUCCESS;
         }
 
-        Result commit(const std::string& aID)
+        Result commit(const std::string& aName)
         {
-            log4cxx::NDC ndc(aID);
+            log4cxx::NDC ndc(aName);
             auto&        sStore = mi::get<typename Txn::by_name>(m_Log);
-            auto         sIt    = sStore.find(aID);
+            auto         sIt    = sStore.find(aName);
             if (sIt == sStore.end()) {
                 WARN("not found");
                 return Result::NOT_FOUND;
@@ -285,22 +304,13 @@ namespace XA {
             return Result::SUCCESS;
         }
 
-        Txn::Status status(const std::string& aID)
+        Txn::Status status(const std::string& aName)
         {
             auto& sStore = mi::get<typename Txn::by_name>(m_Log);
-            auto  sIt    = sStore.find(aID);
+            auto  sIt    = sStore.find(aName);
             if (sIt == sStore.end())
                 return Txn::Status::UNKNOWN;
             return sIt->status;
-        }
-
-        uint64_t next_serial()
-        {
-            auto& sStore = mi::get<typename Txn::by_serial>(m_Log);
-            if (sStore.empty())
-                return 1;
-            auto sIt = sStore.rbegin();
-            return sIt->serial + 1;
         }
 
         std::vector<std::string> list(Txn::Status aStatus = Txn::PREPARE)
@@ -312,28 +322,28 @@ namespace XA {
             return sResult;
         }
 
-        void trim(unsigned aLimit = 100)
+        void trim(const std::string& aNamePrefix)
         {
             log4cxx::NDC ndc("trim");
+            auto&        sStore = mi::get<typename Txn::by_name>(m_Log);
+            auto         sIt    = sStore.upper_bound(aNamePrefix);
+            std::string  sBound = aNamePrefix;
+            sBound[sBound.size() - 1]++;
+            auto sUntil = sStore.lower_bound(sBound);
+            while (sIt != sUntil) {
+                DEBUG("transaction " << sIt->name());
+                sIt = sStore.erase(sIt);
+            }
+        }
+
+        void trim_pending()
+        {
+            log4cxx::NDC ndc("trim_pending");
             auto&        sStore = mi::get<typename Txn::by_serial>(m_Log);
-            for (auto i = sStore.begin(); i != sStore.end();) {
-                if (i->serial == 0) {
-                    // skip not commited transactions
-                    i++;
-                    continue;
-                }
-                const unsigned sRest = std::distance(i, sStore.end());
-                if (sRest <= aLimit)
-                    return;
-                const unsigned sLimit = sRest - aLimit;
-                auto           sEnd   = i;
-                std::advance(sEnd, sLimit);
-                {
-                    for (auto j = i; j != sEnd; j++)
-                        INFO(j->txn.name);
-                }
-                sStore.erase(i, sEnd);
-                return;
+            auto         sRange = sStore.equal_range(0);
+            while (sRange.first != sRange.second) {
+                DEBUG("transaction " << sRange.first->name());
+                sRange.first = sStore.erase(sRange.first);
             }
         }
 
@@ -354,6 +364,7 @@ namespace XA {
         }
     };
 
+    _DECLARE_ENUM_TO_STRING(TxnBody::Operation, TxnBody::sOperationMap)
     _DECLARE_ENUM_TO_STRING(Txn::Status, Txn::sStatusMap)
     _DECLARE_ENUM_TO_STRING(Store::Result, Store::sResultMap)
 
