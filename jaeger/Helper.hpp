@@ -6,10 +6,10 @@
 
 namespace Jaeger::Helper {
 
-    inline auto create(const std::string& aParent, const std::string& aState, int64_t aBaseId, std::string_view aService)
+    inline auto create(const std::string& aParent, std::string_view aService)
     {
         if (!aParent.empty())
-            return std::make_unique<Trace>(Params::parse(aParent, aState, aBaseId, aService));
+            return std::make_unique<Trace>(Params::parse(aParent, aService));
         return std::unique_ptr<Trace>(nullptr);
     }
 

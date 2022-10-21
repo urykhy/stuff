@@ -192,7 +192,7 @@ private:
         {% endif %}
 
         {% if x_jaeger %}
-            auto sTrace = Jaeger::Helper::create(aRequest["traceparent"].to_string(), aRequest["tracestate"].to_string(), {{ doc['paths'][path][method].get('x-jaeger-base-id', 128) }}, "{{ name }}");
+            auto sTrace = Jaeger::Helper::create(aRequest["traceparent"].to_string(), "{{ name }}");
             Util::Raii sSendTrace([&sTrace]()
             {
                 if (sTrace)

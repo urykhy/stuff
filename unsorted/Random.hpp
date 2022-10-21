@@ -2,6 +2,7 @@
 
 #include <fcntl.h>
 #include <stdlib.h>
+#include <sys/random.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -21,7 +22,12 @@ namespace Util {
     public:
         Drand48()
         {
-            long int sSeed = m_Seed > 0 ? m_Seed : gettid();
+            long int sSeed = m_Seed;
+            if (sSeed == 0) {
+                if (sizeof(sSeed) != getrandom(&sSeed, sizeof(sSeed), 0)) {
+                    sSeed = gettid();
+                }
+            }
             srand48_r(sSeed, &m_Data);
         }
         static void seed(long int aSeed)
@@ -48,20 +54,30 @@ namespace Util {
         Drand48::seed(aSeed);
     }
 
-    // return number in range [0 ... aMax);
-    inline uint64_t randomInt(uint64_t aMax)
+    inline uint32_t random4()
     {
-        return std::min(uint64_t(std::floor(drand48() * aMax)), aMax - 1);
+        return round(drand48() * std::numeric_limits<std::uint32_t>::max());
     }
 
-    inline std::string randomStr(int size = 8)
+    inline uint64_t random8()
+    {
+        return ((uint64_t)random4()) << 32 | random4();
+    }
+
+    // return number in range [0 ... aMax);
+    inline uint32_t randomInt(uint32_t aMax)
+    {
+        return std::min(uint32_t(std::floor(drand48() * aMax)), aMax - 1);
+    }
+
+    inline std::string randomStr(uint32_t aSize = 8)
     {
         static const char sAlNum[] = "0123456789"
                                      "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
                                      "abcdefghijklmnopqrstuvwxyz";
         std::string       sResult;
-        sResult.reserve(size);
-        for (int i = 0; i < size; i++)
+        sResult.reserve(aSize);
+        for (uint32_t i = 0; i < aSize; i++)
             // off by one since sAlnum contains terminating zero
             sResult.push_back(sAlNum[randomInt(sizeof(sAlNum) - 1)]);
         return sResult;
@@ -93,32 +109,6 @@ namespace Util {
         {
             auto sIt = std::upper_bound(m_Dist.begin(), m_Dist.end(), drand48());
             return std::distance(m_Dist.begin(), sIt) - 1;
-        }
-    };
-
-    class Random
-    {
-        int m_Fd;
-
-    public:
-        Random()
-        {
-            const std::string fname = "/dev/urandom";
-
-            m_Fd = open(fname.c_str(), O_RDONLY);
-            if (m_Fd == -1)
-                throw Exception::ErrnoError("fail to open urandom");
-        }
-
-        ~Random() { close(m_Fd); }
-
-        std::string operator()(int size)
-        {
-            std::string res(size, '\0');
-            int         rc = read(m_Fd, &res[0], size);
-            if (rc != size)
-                throw Exception::ErrnoError("fail to read from urandom");
-            return res;
         }
     };
 } // namespace Util

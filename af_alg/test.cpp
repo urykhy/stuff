@@ -20,8 +20,7 @@ const std::string PASSSWORD16{"secure_password1"};
 BOOST_AUTO_TEST_SUITE(af_alg)
 BOOST_AUTO_TEST_CASE(random)
 {
-    Util::Random sRND;
-    const auto sTmp = sRND(12);
+    const auto sTmp = Util::randomStr(12);
     BOOST_CHECK_EQUAL(sTmp.size(), 12);
     BOOST_TEST_MESSAGE("random: " << Format::to_hex(sTmp));
 }

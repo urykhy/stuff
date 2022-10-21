@@ -500,7 +500,7 @@ BOOST_FIXTURE_TEST_CASE(jaeger, WithServer)
     {
         Jaeger::Span sTraceSpan(sTrace, "make test");
 
-        auto sR = sClient.get_parameters({.id = "test-id", .string_required = "abcdefg"}, &sTraceSpan, 0x1a);
+        auto sR = sClient.get_parameters({.id = "test-id", .string_required = "abcdefg"}, &sTraceSpan);
         BOOST_TEST_MESSAGE("request: " << sR.body);
     }
     Jaeger::send(sTrace);

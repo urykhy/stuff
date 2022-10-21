@@ -20,6 +20,7 @@
 #include <parser/Url.hpp>
 #include <time/Meter.hpp>
 #include <unsorted/Env.hpp>
+#include <unsorted/Random.hpp>
 #include <unsorted/Uuid.hpp>
 
 namespace Jaeger {
@@ -29,7 +30,6 @@ namespace Jaeger {
         int64_t     traceIdHigh = 0;
         int64_t     traceIdLow  = 0;
         int64_t     parentId    = 0;
-        int64_t     baseId      = 1;
         std::string service{};
 
         std::string traceparent() const
@@ -41,7 +41,7 @@ namespace Jaeger {
                    "00"; // flags
         };
 
-        static Params parse(std::string_view aParent, std::string_view aState = {})
+        static Params parse(std::string_view aParent)
         {
             Params sNew;
             Parser::simple(
@@ -65,18 +65,12 @@ namespace Jaeger {
                     }
                 },
                 '-');
-            Parser::http_header_kv(aState, [&sNew](auto aName, auto aValue) {
-                if (aName == "span_offset")
-                    sNew.baseId |= int64_t(Parser::from_hex<int8_t>(aValue)) << 56;
-            });
             return sNew;
         }
 
-        static Params parse(std::string_view aParent, std::string_view aState, int64_t aBaseId, std::string_view aService)
+        static Params parse(std::string_view aParent, std::string_view aService)
         {
-            auto sParams = parse(aParent, aState);
-            sParams.baseId &= 0xFF00000000000000; // preserving high byte (offset)
-            sParams.baseId |= aBaseId;            // apply new base id
+            auto sParams    = parse(aParent);
             sParams.service = aService;
             return sParams;
         }
@@ -136,9 +130,6 @@ namespace Jaeger {
     private:
         jaegertracing::thrift::Batch m_Batch;
         const Params                 m_Params;
-        size_t                       m_Counter = 0;
-
-        size_t nextSpanID() { return m_Params.baseId + m_Counter++; }
 
     public:
         Trace(const Params& aParams)
@@ -172,13 +163,13 @@ namespace Jaeger {
         bool                        m_Alive = true;
 
     public:
-        Span(Trace& aTrace, const std::string& aName, size_t aParentSpanId = 0)
+        Span(Trace& aTrace, const std::string& aName, int64_t aParentSpanId = 0)
         : m_XCount(std::uncaught_exceptions())
         , m_Trace(aTrace)
         {
             m_Span.traceIdHigh = m_Trace.m_Params.traceIdHigh;
             m_Span.traceIdLow  = m_Trace.m_Params.traceIdLow;
-            m_Span.spanId      = m_Trace.nextSpanID();
+            m_Span.spanId      = Util::random8();
             if (aParentSpanId == 0)
                 m_Span.parentSpanId = m_Trace.m_Params.parentId;
             else
@@ -187,8 +178,6 @@ namespace Jaeger {
             m_Span.flags         = 0;
             m_Span.startTime     = Time::get_time().to_us();
             m_Span.duration      = 0;
-
-            // BOOST_TEST_MESSAGE("new span " << aName << "(" << m_Span.spanId << ") with parent " << m_Span.parentSpanId);
         }
 
         Span(Span&& aOld)

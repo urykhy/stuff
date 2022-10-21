@@ -14,7 +14,6 @@ namespace af_alg
 
     class Password
     {
-        Util::Random m_RND;
         DigestImpl m_Digest;
     public:
 
@@ -26,7 +25,7 @@ namespace af_alg
 
         std::string create(const std::string& aPass)
         {
-            const std::string sSalt = m_RND(SALT_LEN);
+            const std::string sSalt = Util::randomStr(SALT_LEN);
             const std::string sHash = Digest(m_Digest, aPass, sSalt);
             return sHash + sSalt;
         }

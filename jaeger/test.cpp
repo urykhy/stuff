@@ -14,14 +14,11 @@ BOOST_AUTO_TEST_CASE(params)
     const auto sParams = Jaeger::Params::uuid("test");
     BOOST_TEST_MESSAGE("parent: " << sParams.traceparent());
 
-    const std::string sState = "span_offset=1a";
-
-    const auto sParsed = Jaeger::Params::parse(sParams.traceparent(), sState);
+    const auto sParsed = Jaeger::Params::parse(sParams.traceparent());
 
     BOOST_CHECK_EQUAL(sParsed.traceIdHigh, sParams.traceIdHigh);
     BOOST_CHECK_EQUAL(sParsed.traceIdLow, sParams.traceIdLow);
     BOOST_CHECK_EQUAL(sParsed.parentId, sParams.parentId);
-    BOOST_CHECK_EQUAL(sParsed.baseId, 0x1a00000000000001);
     BOOST_CHECK_EQUAL(sParsed.service, "");
 }
 BOOST_AUTO_TEST_CASE(simple)
@@ -86,7 +83,6 @@ BOOST_AUTO_TEST_CASE(parts)
         BOOST_TEST_MESSAGE("parent: " << sState.traceparent());
 
         // remote side
-        sState.baseId  = 50;
         sState.service = "s3";
         Jaeger::Trace sTrace2(sState);
         {
