@@ -1,5 +1,7 @@
 #pragma once
 
+#include <concepts>
+
 #include <boost/beast/http/field.hpp>
 
 #include <format/Json.hpp>
@@ -14,11 +16,8 @@ namespace swagger {
     // format
 
     template <class T>
-    typename std::enable_if<Format::Json::has_to_json_v<T>, std::string>::type format(const T& t)
-    {
-        return Format::Json::to_string(t.to_json());
-    }
-
+    requires std::is_member_function_pointer_v<decltype(&T::to_json)>
+    std::string        format(const T& t) { return Format::Json::to_string(t.to_json()); }
     inline std::string format(const bool v) { return (v ? "true" : "false"); }
     inline std::string format(const std::string& v) { return v; }
     inline std::string format(const int64_t v) { return std::to_string(v); }
@@ -42,11 +41,8 @@ namespace swagger {
     // parsing
 
     template <class T>
-    typename std::enable_if<Parser::Json::has_from_json_v<T>, void>::type parse(const std::string& s, T& v)
-    {
-        v.from_json(Parser::Json::parse(s));
-    }
-
+    requires std::is_member_function_pointer_v<decltype(&T::from_json)>
+    void        parse(const std::string& s, T& t) { t.from_json(Parser::Json::parse(s)); }
     inline void parse(const std::string& s, bool& v) { v = (s == "true" or s == "yes" or s == "1"); }
     inline void parse(const std::string& s, std::string& v) { v = s; }
     inline void parse(const std::string& s, int64_t& v) { v = Parser::Atoi<int64_t>(s); }
@@ -83,7 +79,7 @@ namespace swagger {
     // make header name
     inline boost::beast::string_view header(const char* aName)
     {
-        namespace http = boost::beast::http;
+        namespace http  = boost::beast::http;
         auto sFieldName = http::string_to_field(aName);
         if (sFieldName != http::field::unknown)
             return http::to_string(sFieldName);

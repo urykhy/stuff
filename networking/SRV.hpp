@@ -40,7 +40,7 @@ namespace Util {
 
             int rc = res_nquery(&m_State, aName.c_str(), ns_c_in, ns_t_srv, sBuf, sizeof(sBuf));
             if (rc == -1)
-                throw Exception::ErrnoError("resolver error");
+                throw std::runtime_error("resolver error: " + std::string(hstrerror(h_errno)));
 
             ns_msg sMsg;
             ns_initparse(sBuf, rc, &sMsg);

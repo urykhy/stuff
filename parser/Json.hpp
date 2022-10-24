@@ -2,6 +2,7 @@
 
 #include <json/json.h>
 
+#include <concepts>
 #include <optional>
 
 namespace Parser::Json {
@@ -18,21 +19,9 @@ namespace Parser::Json {
         return sJson;
     }
 
-    // helpers to call t.from_json for structs
-    template <typename T, typename = void>
-    struct has_from_json : std::false_type
-    {};
-
-    template <typename T>
-    struct has_from_json<T, std::void_t<decltype(&T::from_json)>> : std::true_type
-    {};
-
     template <class T>
-    constexpr bool has_from_json_v = has_from_json<T>::value;
-
-    template <class T>
-    typename std::enable_if<has_from_json_v<T>, void>::type from_value(const Value& aJson, T& t) { t.from_json(aJson); }
-    // end helpers
+    requires std::is_member_function_pointer_v<decltype(&T::from_json)>
+    void from_value(const Value& aJson, T& t) { t.from_json(aJson); }
 
     template <class T>
     typename std::enable_if<std::is_signed<T>::value, void>::type
