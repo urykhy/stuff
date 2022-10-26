@@ -53,6 +53,7 @@ make_server_cert "racoon"
 make_server_cert "vpn" "mserver"
 make_server_cert "kube" "k8s"
 make_server_cert "unbound" "unbound"
+make_server_cert "kms.hadoop.docker" "kms"
 
 function make_client_cert {
     USAGE=""

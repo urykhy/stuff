@@ -30,3 +30,6 @@ subjectAltName = IP:172.16.9.3, IP:172.16.9.1, DNS:kubernetes, DNS:master.kubern
 
 [unbound]
 subjectAltName = IP:5.2.77.146
+
+[kms]
+subjectAltName=DNS:kms.hadoop.docker
