@@ -5,15 +5,14 @@
 
 #include <threads/Group.hpp>
 
+using namespace std::chrono_literals;
+
 /*
-    kafkactl create topic test_source --partitions 3 --replication-factor 3
-    kafkactl create topic test_destination --partitions 3 --replication-factor 3
-
-    kafkactl describe consumer-group test_basic
-    kafkactl describe consumer-group test_transform
-
-    kafkactl consume test_source -b -e --print-headers --print-keys
-*/
+ * use Taskfile.yml for kafka ops
+ *
+ * task kafkactl:install
+ * task topics:create
+ */
 
 // options["debug"] = "all";
 auto producerOptions(const std::string& aName, bool aTransactional)
@@ -24,12 +23,12 @@ auto producerOptions(const std::string& aName, bool aTransactional)
     sOpt["client.id"]         = aName;
     if (aTransactional) {
         sOpt["transactional.id"]       = aName;
-        sOpt["transaction.timeout.ms"] = "5000";
+        sOpt["transaction.timeout.ms"] = "30000";
     }
     return sOpt;
 }
 
-auto consumerOptions(const std::string& aGroup, const std::string& aName)
+auto consumerOptions(const std::string& aName, const std::string& aGroup)
 {
     Kafka::Options sOpt;
     sOpt["auto.offset.reset"]  = "earliest";
@@ -50,6 +49,7 @@ void tryMessages(Kafka::Consumer& aConsumer, int32_t aCount)
                                << ": partition: " << sMsg->partition()
                                << "; offset: " << sMsg->offset()
                                << "; data: " << Kafka::Help::value(sMsg));
+            aConsumer.sync();
         }
     }
 }
@@ -72,19 +72,17 @@ BOOST_AUTO_TEST_CASE(nx_topic)
 }
 BOOST_AUTO_TEST_CASE(basic)
 {
-    Kafka::Consumer sConsumer(consumerOptions("test_basic", "test_basic/consumer"), "test_source");
-    sConsumer.consume();
-
     const std::string              sKey   = "some-key";
     const std::string              sValue = "basic: " + std::to_string(::time(nullptr));
     const Kafka::Producer::Headers sHeaders{{"header1", "value1"}, {"header2", "value2"}};
     {
-        Kafka::Producer sKafka(producerOptions("test_basic/producer", false), "test_source");
+        Kafka::Producer sKafka(producerOptions("basic/producer", false), "t_source");
         sKafka.push(RdKafka::Topic::PARTITION_UA, sKey, sValue, sHeaders);
         sKafka.flush();
         BOOST_TEST_MESSAGE("data inserted");
     }
 
+    Kafka::Consumer      sConsumer(consumerOptions("basic/consumer", "g_basic"), "t_source");
     Kafka::Help::Message sMsg;
     while (true) {
         sMsg = sConsumer.consume();
@@ -113,15 +111,11 @@ BOOST_AUTO_TEST_CASE(basic)
 }
 BOOST_AUTO_TEST_CASE(transform)
 {
-    Kafka::Transform::Config sConfig;
-    sConfig.consumer.options = consumerOptions("test_transform", "test_transform/consumer");
-    sConfig.producer.options = producerOptions("test_transform/producer", true);
-    sConfig.max_size         = 5;
-
+    constexpr unsigned MSG_COUNT = 5;
     // push some data to source queue
     {
-        Kafka::Producer sKafka(producerOptions("test_transform/prepare", false), "test_source");
-        for (unsigned i = 0; i < sConfig.max_size; i++) {
+        Kafka::Producer sKafka(producerOptions("transform/prepare", false), "t_source");
+        for (unsigned i = 0; i < MSG_COUNT; i++) {
             sKafka.push(RdKafka::Topic::PARTITION_UA,
                         {},
                         "transform: " + std::to_string(::time(nullptr)) + ": " + std::to_string(i));
@@ -130,8 +124,9 @@ BOOST_AUTO_TEST_CASE(transform)
         BOOST_TEST_MESSAGE("data inserted");
     }
 
-    // transform
-    auto sHandler = [](RdKafka::Message* aMsg, Kafka::Producer& aProducer) {
+    // handler
+    unsigned sPushCount = 0;
+    auto     sHandler   = [&sPushCount](RdKafka::Message* aMsg, Kafka::Producer& aProducer) {
         static unsigned sCounter = 0;
         sCounter++;
         if (sCounter == 4)
@@ -139,22 +134,31 @@ BOOST_AUTO_TEST_CASE(transform)
         if (aMsg == nullptr)
             return;
         std::string sPayload(static_cast<const char*>(aMsg->payload()), aMsg->len());
-        BOOST_TEST_MESSAGE("got message"
-                           << ": partition: " << aMsg->partition()
-                           << "; offset: " << aMsg->offset()
-                           << "; data: " << sPayload);
+        BOOST_TEST_MESSAGE("transform message"
+                                 << ": partition: " << aMsg->partition()
+                                 << "; offset: " << aMsg->offset()
+                                 << "; data: " << sPayload);
         std::string sResult("processed: " + sPayload);
         aProducer.push(RdKafka::Topic::PARTITION_UA, {}, sResult);
+        sPushCount++;
     };
 
+    // transform
+    Kafka::Transform::Config sConfig;
+    sConfig.consumer.options = consumerOptions("transform/consumer", "g_transform");
+    sConfig.producer.options = producerOptions("transform/producer", true);
+    sConfig.max_size         = MSG_COUNT;
     Kafka::Transform sKafka(sConfig);
     BOOST_CHECK_THROW(sKafka(sHandler), std::runtime_error); // ensure we interrupt transaction by handler request
+    // resume (auto recover)
+    sPushCount = 0;
     sKafka(sHandler);
+    BOOST_CHECK_EQUAL(sPushCount, MSG_COUNT);
 }
 BOOST_AUTO_TEST_CASE(rebalance)
 {
     constexpr int TOPIC_COUNT = 3;
-    constexpr int MSG_COUNT   = 6;
+    constexpr int MSG_COUNT   = 10;
 
     std::atomic_bool sStage1 = false;
 
@@ -163,10 +167,11 @@ BOOST_AUTO_TEST_CASE(rebalance)
         BOOST_TEST_MESSAGE("1: begin transformation");
 
         Kafka::Transform::Config sConfig;
-        sConfig.consumer.options = consumerOptions("test_rebalance", "test_rebalance/consumer-1");
-        sConfig.producer.options = producerOptions("test_rebalance/producer", true);
-        sConfig.max_size         = 100500; // unlim messages..
-        sConfig.time_limit       = 10;
+        sConfig.consumer.options = consumerOptions("rebalance/consumer-1", "g_rebalance");
+        sConfig.producer.options = producerOptions("rebalance/producer", true);
+        // sConfig.producer.options["debug"]="broker,topic,msg,eos";
+        sConfig.max_size   = 100500; // unlim messages..
+        sConfig.time_limit = 20;     // less than transaction.timeout.ms
 
         bool             sSuccess = false;
         int              sCount   = 0;
@@ -183,20 +188,24 @@ BOOST_AUTO_TEST_CASE(rebalance)
                 std::string sResult("transformed: " + sPayload);
                 aProducer.push(RdKafka::Topic::PARTITION_UA, {}, sResult);
                 sCount++;
-                if (sCount == MSG_COUNT) {
+                if (sCount >= 2 and !sStage1) {
                     BOOST_TEST_MESSAGE("1: allow 2nd consumer");
                     sStage1 = true;
                 }
+                if (sStage1)
+                    std::this_thread::sleep_for(1s);
             });
         } catch (const std::exception& e) {
             BOOST_CHECK_EQUAL("Kafka::Transform: rebalance", e.what());
             sSuccess = true;
+            sTransform.recover();
+            BOOST_TEST_MESSAGE("1: recovered");
         }
         BOOST_TEST(sSuccess, "rollback as expected");
     });
     sGroup.start([&]() {
         BOOST_TEST_MESSAGE("2: insert data");
-        Kafka::Producer sKafka(producerOptions("test_rebalance/fill", false), "test_source");
+        Kafka::Producer sKafka(producerOptions("rebalance/fill", false), "t_source");
         for (int i = 0; i < MSG_COUNT; i++) {
             sKafka.push(i % TOPIC_COUNT,
                         {},
@@ -205,12 +214,11 @@ BOOST_AUTO_TEST_CASE(rebalance)
         }
 
         BOOST_TEST_MESSAGE("2: wait for transaction to start ...");
-        using namespace std::chrono_literals;
         while (!sStage1)
             std::this_thread::sleep_for(100ms);
 
         BOOST_TEST_MESSAGE("2: start second consumer");
-        Kafka::Consumer sConsumer(consumerOptions("test_rebalance", "test_rebalance/consumer-2"), "test_source");
+        Kafka::Consumer sConsumer(consumerOptions("rebalance/consumer-2", "g_rebalance"), "t_source");
         tryMessages(sConsumer, 10);
 
         BOOST_TEST_MESSAGE("2: finish second consumer");

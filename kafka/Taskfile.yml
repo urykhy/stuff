@@ -1,0 +1,99 @@
+version: '3'
+
+vars:
+  topics: |
+    t_source
+    t_destination
+  groups: |
+    g_basic
+    g_transform
+    g_rebalance
+  topic_options: --partitions 3 --replication-factor 3 -c retention.ms=86400000 -c retention.bytes=10485760 -c segment.ms=10000 -c message.timestamp.type=LogAppendTime
+
+tasks:
+  kafkactl:install:
+    desc: install kafkactl
+    cmds:
+      - go install github.com/deviceinsight/kafkactl@latest
+      - ln -sf ${GOPATH}/bin/kafkactl ~/bin/
+      - mkdir -p ~/.config/kafkactl/
+      - echo -e "{{.config}}" > ~/.config/kafkactl/config.yml
+    status:
+      - test -f ~/bin/kafkactl
+      - test -f ~/.config/kafkactl/config.yml
+    vars:
+      config: |
+        contexts:
+          default:
+            brokers:
+            - broker-1.kafka:9092
+            - broker-2.kafka:9092
+            - broker-3.kafka:9092
+
+  topics:create:
+    desc: create topics
+    cmds:
+      - |
+        {{ range $i, $T := .topics | splitLines }}{{ if $T }}
+        if [ `kafkactl get topics | grep {{$T}} | wc -l` -ne "1" ]; then
+            kafkactl create topic {{$T}} {{$.topic_options}}
+        fi
+        {{ end }}{{ end }}
+
+  topics:delete:
+    desc: delete topics
+    cmds:
+      - |
+        {{ range $i, $T := .topics | splitLines }}{{ if $T }}
+        if [ `kafkactl get topics | grep {{$T}} | wc -l` -ne "0" ]; then
+            kafkactl delete topic {{$T}}
+        fi
+        {{ end }}{{ end }}
+
+  topics:recreate:
+    desc: delete and then create topics
+    cmds:
+      - task: topics:delete
+      - sleep 2
+      - task: topics:create
+
+  topics:show:
+    desc: show topic details
+    silent: true
+    cmds:
+      - |
+        {{ range $i, $T := .topics | splitLines }}{{ if $T }}
+        echo "*** TOPIC {{$T}} ***"
+        kafkactl describe topic {{$T}}
+        echo
+        {{ end }}{{ end }}
+
+  topics:consume:
+    desc: show data from 't_source' topic
+    cmds:
+      - kafkactl consume t_source -b -e --print-headers --print-keys
+
+  broker:show:
+    desc: show brokers
+    cmds:
+      - kafkactl get brokers
+
+  consumers:show:
+    desc: show consumer-group details
+    silent: true
+    cmds:
+      - |
+        {{ range $i, $G := .groups | splitLines }}{{ if $G }}
+        echo "*** GROUP {{$G}} ***"
+        kafkactl describe consumer-group {{$G}}
+        echo
+        {{ end }}{{ end }}
+
+  metrics:heap:
+    desc: show zookeeper and broker heap metrics
+    silent: true
+    cmds:
+      - echo -n "ZK "
+      - curl -s zookeeper.kafka:7070/metrics | grep 'jvm_memory_bytes_used.*area="heap"' | awk '{printf "%.f\n", $2}' | numfmt --to=iec
+      - echo -n "BROKER "
+      - curl -s broker-1.kafka:7071/metrics | grep 'jvm_memory_bytes_used.*area="heap"' | awk '{printf "%.f\n", $2}' | numfmt --to=iec

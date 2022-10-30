@@ -12,16 +12,16 @@ namespace Kafka {
             struct
             {
                 Options     options;
-                std::string topic = "test_source";
+                std::string topic = "t_source";
             } consumer;
             struct
             {
                 Options     options;
-                std::string topic = "test_destination";
+                std::string topic = "t_destination";
             } producer;
 
             unsigned max_size   = 10;
-            time_t   time_limit = 30;
+            time_t   time_limit = 25; // less than transaction.timeout.ms
         };
 
     private:
@@ -32,11 +32,6 @@ namespace Kafka {
         bool         m_Rewind{false};
 
         std::atomic<unsigned> m_RebalanceId{0};
-
-        void rebalance_i()
-        {
-            m_RebalanceId++;
-        }
 
     public:
         Transform(const Config& aConfig)
@@ -68,8 +63,8 @@ namespace Kafka {
                 auto sMsg = m_Consumer.consume();
                 sRebalanceCheck();
                 if (sMsg->err() == RdKafka::ERR_NO_ERROR) {
-                    sPos++;
                     aHandler(sMsg.get(), m_Producer);
+                    sPos++;
                 }
             }
 
@@ -82,14 +77,19 @@ namespace Kafka {
 
         void recover()
         {
-            if (m_Rewind) {
-                m_Consumer.rewind_and_wait();
-                m_Rewind = false;
-            }
             if (m_Rollback) {
                 m_Producer.rollback();
                 m_Rollback = false;
             }
+            if (m_Rewind) {
+                m_Consumer.rewind();
+                m_Rewind = false;
+            }
+        }
+
+        bool is_failed() const
+        {
+            return m_Consumer.is_failed() || m_Producer.is_failed();
         }
 
     private:
@@ -101,7 +101,7 @@ namespace Kafka {
             if (aErrCode == RdKafka::ERR__ASSIGN_PARTITIONS) {
                 aConsumer->assign(aPartitions);
             } else {
-                rebalance_i();
+                m_RebalanceId++;
                 aConsumer->unassign();
             }
         }

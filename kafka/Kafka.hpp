@@ -129,7 +129,22 @@ namespace Kafka {
             check(m_Consumer->subscribe(m_Topics), "Consumer: subscribe");
         }
 
-        auto consume(int aTimeout = TIMEOUT)
+        ~Consumer()
+        {
+            m_Consumer->unsubscribe();
+            // wait for empty assignment...
+            for (int i = 0; i < 10; i++) {
+                try {
+                    consume(100);
+                    if (position().vector.empty())
+                        break;
+                } catch (...) {
+                }
+            }
+            m_Consumer->close();
+        }
+
+        std::unique_ptr<RdKafka::Message> consume(int aTimeout = TIMEOUT)
         {
             return std::unique_ptr<RdKafka::Message>(m_Consumer->consume(aTimeout));
         }
@@ -142,6 +157,9 @@ namespace Kafka {
         struct Position : boost::noncopyable
         {
             std::vector<RdKafka::TopicPartition*> vector;
+            Position()
+            {
+            }
             Position(std::vector<RdKafka::TopicPartition*>&& aFrom)
             : vector(std::move(aFrom))
             {
@@ -150,18 +168,66 @@ namespace Kafka {
             : vector(std::move(aFrom.vector))
             {
             }
+            Position& operator=(Position&& aFrom)
+            {
+                clear();
+                vector = std::move(aFrom.vector);
+                aFrom.vector.clear();
+                return *this;
+            }
+            void clear()
+            {
+                if (!vector.empty()) {
+                    RdKafka::TopicPartition::destroy(vector);
+                    vector.clear();
+                }
+            }
             ~Position()
             {
-                RdKafka::TopicPartition::destroy(vector);
+                clear();
             }
         };
 
+        // get consumer position information
         Position position()
         {
             std::vector<RdKafka::TopicPartition*> sPosition;
             check(m_Consumer->assignment(sPosition), "Consumer: assignment");
             check(m_Consumer->position(sPosition), "Consumer: position");
             return Position(std::move(sPosition));
+        }
+
+        // position from broker (commited or earliest available)
+        // FIXME: respect auto.offset.reset if query_watermark_offsets used
+        Position broker_position()
+        {
+            std::vector<RdKafka::TopicPartition*> sPosition;
+            check(m_Consumer->assignment(sPosition), "Consumer: assignment");
+            for (auto& x : sPosition) {
+                std::vector<RdKafka::TopicPartition*> sTmp;
+                sTmp.push_back(x);
+                auto sCode = m_Consumer->committed(sTmp, TIMEOUT);
+                check(sCode, "Consumer: position/commited");
+                if (sCode == RdKafka::ERR_NO_ERROR and x->offset() == RdKafka::Topic::OFFSET_INVALID) {
+                    int64_t sBegin = -1;
+                    int64_t sEnd   = -1;
+                    check(m_Consumer->query_watermark_offsets(x->topic(), x->partition(), &sBegin, &sEnd, TIMEOUT), "Consumer: position/watermarks");
+                    x->set_offset(sBegin);
+                }
+            }
+            return Position(std::move(sPosition));
+        }
+
+        void seek(const Position& aPos)
+        {
+            for (auto& x : aPos.vector) {
+                check(m_Consumer->seek(*x, TIMEOUT), "Consumer: seek");
+            }
+        }
+
+        void rewind()
+        {
+            seek(broker_position());
         }
 
         void pause()
@@ -176,29 +242,17 @@ namespace Kafka {
             check(m_Consumer->resume(sPosition.vector), "Consumer: resume");
         }
 
-        void rewind()
-        {
-            check(m_Consumer->subscribe(m_Topics), "Consumer: rewind topic");
-        }
-
-        void rewind_and_wait(int aTimeout = TIMEOUT)
-        {
-            pause();
-            rewind();
-            for (int i = 0; i < aTimeout; i++) {
-                consume(1);
-                auto sPos = position();
-                if (sPos.vector.size() > 0) {
-                    resume();
-                    return;
-                }
-            }
-            throw std::runtime_error("Kafka::Consumer: rewind_and_wait timeout");
-        }
-
         void sync()
         {
-            check(m_Consumer->commitSync(), "Consumer: commitSync");
+            const auto sCode = m_Consumer->commitSync();
+            if (sCode != RdKafka::ERR__NO_OFFSET)
+                check(sCode, "Consumer: commitSync");
+        }
+
+        bool is_failed() const
+        {
+            std::string sTmp;
+            return m_Consumer->fatal_error(sTmp) != RdKafka::ERR_NO_ERROR;
         }
     };
 
@@ -257,6 +311,13 @@ namespace Kafka {
             if (sCode == RdKafka::ERR_NO_ERROR)
                 sHeaders.release(); // headers will be freed/deleted if the produce() call succeeds
             check(sCode, "Producer: produce");
+            poll();
+        }
+
+        // call to handle callbacks
+        void poll(int aTimeout = 0)
+        {
+            m_Producer->poll(aTimeout);
         }
 
         void flush()
@@ -306,6 +367,12 @@ namespace Kafka {
         void rollback()
         {
             check(m_Producer->abort_transaction(-1), "Producer: abort_transaction");
+        }
+
+        bool is_failed() const
+        {
+            std::string sTmp;
+            return m_Producer->fatal_error(sTmp) != RdKafka::ERR_NO_ERROR;
         }
     };
 } // namespace Kafka
