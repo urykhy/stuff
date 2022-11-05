@@ -1,2 +1,3 @@
-DROP TABLE message_state;
-DROP TABLE message_queue;
+DROP TABLE mq_producer;
+DROP TABLE mq_consumer;
+DROP TABLE mq_data;

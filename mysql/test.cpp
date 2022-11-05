@@ -369,20 +369,21 @@ BOOST_AUTO_TEST_CASE(simple)
     MySQL::Config     sCfg = MySQL::Config{.database = "test"};
     MySQL::Connection sConnection(sCfg);
 
-    sConnection.Query("TRUNCATE TABLE message_state");
-    sConnection.Query("TRUNCATE TABLE message_queue");
+    sConnection.Query("TRUNCATE TABLE mq_producer");
+    sConnection.Query("TRUNCATE TABLE mq_consumer");
+    sConnection.Query("TRUNCATE TABLE mq_data");
 
     MySQL::MessageQueue::Producer sProducer(sProducerCfg, &sConnection);
     sConnection.Query("BEGIN");
-    BOOST_CHECK_EQUAL(sProducer.insert("task 1", "a"), MySQL::MessageQueue::Producer::OK);
-    BOOST_CHECK_EQUAL(sProducer.insert("task 1", "a"), MySQL::MessageQueue::Producer::ALREADY);
-    BOOST_CHECK_EQUAL(sProducer.insert("task 2", "b"), MySQL::MessageQueue::Producer::OK);
+    BOOST_CHECK_EQUAL(sProducer.insert("task 1"), MySQL::MessageQueue::Producer::OK);
+    BOOST_CHECK_EQUAL(sProducer.insert("task 1"), MySQL::MessageQueue::Producer::ALREADY);
+    BOOST_CHECK_EQUAL(sProducer.insert("task 2"), MySQL::MessageQueue::Producer::OK);
     sConnection.Query("COMMIT");
 
     MySQL::MessageQueue::Consumer::Config     sConsumerCfg;
     MySQL::MessageQueue::Consumer             sConsumer(sConsumerCfg, &sConnection);
     auto                                      sTasks    = sConsumer.select();
-    const MySQL::MessageQueue::Consumer::List sExpected = {{1, "task 1", "a"}, {2, "task 2", "b"}};
+    const MySQL::MessageQueue::Consumer::List sExpected = {{1, "task 1"}, {2, "task 2"}};
     BOOST_CHECK_EQUAL(sTasks == sExpected, true);
     sConsumer.update();
     sTasks = sConsumer.select();
