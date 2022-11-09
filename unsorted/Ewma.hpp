@@ -3,11 +3,11 @@
 namespace Util {
     class Ewma
     {
-        const double m_Factor;
-        double       m_Value;
+        double m_Factor;
+        double m_Value;
 
     public:
-        explicit Ewma(double aFactor, double aValue = 0)
+        explicit Ewma(double aFactor = 0.95, double aValue = 0)
         : m_Factor(aFactor)
         , m_Value(aValue)
         {

@@ -9,12 +9,15 @@
 #include <boost/asio/coroutine.hpp> // for pipeline::task
 
 #include "Asio.hpp"
+#include "FairQueueExecutor.hpp"
 #include "ForEach.hpp"
 #include "MapReduce.hpp"
 #include "OrderedWorker.hpp"
 #include "Periodic.hpp" // for sleep
 #include "Pipeline.hpp"
 #include "WaitGroup.hpp"
+
+#include <unsorted/Random.hpp>
 
 using namespace std::chrono_literals;
 
@@ -27,7 +30,8 @@ BOOST_AUTO_TEST_CASE(simple)
         const uint64_t m_ID;
         Task(uint64_t aID)
         : m_ID(aID)
-        {}
+        {
+        }
 
         virtual void operator()(Wrap&& aWrap)
         {
@@ -136,6 +140,91 @@ BOOST_AUTO_TEST_CASE(for_each)
         std::this_thread::sleep_for(1ms);
         sResult += a; });
     BOOST_CHECK_EQUAL(500500, sResult);
+}
+BOOST_AUTO_TEST_CASE(fair_queue_1)
+{
+    Threads::FairQueueExecutor sFair;
+    Util::Ewma                 sEwma;
+
+    // prepare state
+    // user-1 used 0.1 second
+    sFair.m_UserInfo["user-1"] = Threads::FairQueueExecutor::Info{
+        .ewma  = sEwma,
+        .spent = 0.1,
+    };
+    // user-2 used 10 seconds
+    sFair.m_UserInfo["user-2"] = Threads::FairQueueExecutor::Info{
+        .ewma  = sEwma,
+        .spent = 10,
+    };
+    sFair.refresh(time(nullptr) + 10); // disable auto refreshes for a while
+
+    BOOST_CHECK_EQUAL(sFair.m_UserQueue["user-1"], 0);
+    BOOST_CHECK_EQUAL(sFair.m_UserQueue["user-2"], 3);
+
+    // push tasks
+    std::list<std::string> sOrder;
+    sFair.insert("user-2", [&sOrder]() { sOrder.push_back("user-2"); });
+    for (int i = 0; i < 10; i++)
+        sFair.insert("user-1", [&sOrder]() { sOrder.push_back("user-1"); });
+
+    // process tasks
+    while (true) {
+        Threads::FairQueueExecutor::Lock sLock(sFair.m_Mutex);
+        if (sFair.one_step(sLock))
+            break;
+    }
+
+    // check order
+    std::list<std::string> sExpected{
+        "user-1", "user-1", "user-1", "user-1", "user-1", "user-1", "user-1", "user-1", "user-2", "user-1", "user-1"};
+    BOOST_CHECK_EQUAL_COLLECTIONS(sOrder.begin(), sOrder.end(), sExpected.begin(), sExpected.end());
+}
+BOOST_AUTO_TEST_CASE(fair_queue_2)
+{
+    constexpr int COUNT = 2000;
+
+    Threads::FairQueueExecutor sFair(COUNT);
+    Threads::Group             tg;
+    sFair.start(tg, 6);
+
+    // ~ time share by users:
+    //  4 % - user-0
+    // 10 % - user-1
+    // 86 % - user-2
+    std::atomic<size_t> sCount = 0;
+    for (int i = 0; i < COUNT; i++) {
+        double      sRnd  = Util::drand48();
+        std::string sUser = "user-";
+        if (sRnd < 0.04)
+            sUser += "0";
+        else if (sRnd < 0.14)
+            sUser += "1";
+        else
+            sUser += "2";
+        sFair.insert(sUser, [&sCount]() {
+            sCount++;
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        });
+    }
+
+    // force refresh assotiations
+    for (int i = 0; i < 40 and !sFair.idle(); i++) {
+        sFair.refresh(time(nullptr) + i);
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+
+    tg.wait();
+    BOOST_CHECK_EQUAL(sCount, COUNT);
+
+    // check assotiations
+    for (auto& [sUser, sOrder] : sFair.m_UserQueue) {
+        BOOST_TEST_MESSAGE(sUser << ": " << sOrder << " (" << sFair.m_UserInfo[sUser].ewma.estimate() << ")");
+    }
+
+    BOOST_CHECK_EQUAL(sFair.m_UserQueue["user-0"], 0);
+    BOOST_CHECK_EQUAL(sFair.m_UserQueue["user-1"], 1);
+    BOOST_CHECK_EQUAL(sFair.m_UserQueue["user-2"], 3);
 }
 BOOST_AUTO_TEST_SUITE_END() // Threads
 
