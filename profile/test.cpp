@@ -32,25 +32,6 @@ static void spin_load()
 }
 
 BOOST_AUTO_TEST_SUITE(profile)
-
-BOOST_AUTO_TEST_SUITE(off)
-BOOST_AUTO_TEST_CASE(sleep)
-{
-    std::thread sProfiler([]() { Profile::Off("/tmp/flamegraph-off-sleep.svg", 1); });
-    Threads::sleep(0.1);
-    sleep_load();
-    sProfiler.join();
-}
-BOOST_AUTO_TEST_CASE(spin)
-{
-    std::thread sProfiler([]() { Profile::Off("/tmp/flamegraph-off-spin.svg", 1); });
-    Threads::sleep(0.1);
-    spin_load();
-    sProfiler.join();
-}
-BOOST_AUTO_TEST_SUITE_END() // offcpu
-
-BOOST_AUTO_TEST_SUITE(cpu)
 BOOST_AUTO_TEST_CASE(sleep)
 {
     std::thread sProfiler([]() { Profile::CPU("/tmp/flamegraph-cpu-sleep.svg", 1, 1000); });
@@ -65,8 +46,6 @@ BOOST_AUTO_TEST_CASE(spin)
     spin_load();
     sProfiler.join();
 }
-BOOST_AUTO_TEST_SUITE_END() // cpu
-
 BOOST_AUTO_TEST_SUITE_END() // profile
 
 BOOST_AUTO_TEST_SUITE(catapult)
