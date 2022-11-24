@@ -15,11 +15,10 @@ tasks:
     desc: install kafkactl
     cmds:
       - go install github.com/deviceinsight/kafkactl@latest
-      - ln -sf ${GOPATH}/bin/kafkactl ~/bin/
       - mkdir -p ~/.config/kafkactl/
       - echo -e "{{.config}}" > ~/.config/kafkactl/config.yml
     status:
-      - test -f ~/bin/kafkactl
+      - test -f ${GOPATH}/bin/kafkactl
       - test -f ~/.config/kafkactl/config.yml
     vars:
       config: |
