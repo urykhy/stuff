@@ -69,6 +69,28 @@ BOOST_AUTO_TEST_CASE(simple)
 BOOST_AUTO_TEST_SUITE_END() // pipeline
 
 BOOST_AUTO_TEST_SUITE(Threads)
+BOOST_AUTO_TEST_CASE(cancel)
+{
+    struct A
+    {
+        A() { BOOST_TEST_MESSAGE("A constructed"); }
+        ~A() { BOOST_TEST_MESSAGE("A destroyed"); }
+    };
+    std::thread sTmp([]() {
+        A a;
+        BOOST_TEST_MESSAGE("start sleep");
+        try {
+            sleep(1);
+        } catch (const abi::__forced_unwind&) {
+            BOOST_CHECK_MESSAGE(true, "got exception");
+            throw;
+        }
+        BOOST_CHECK_MESSAGE(false, "no exception");
+    });
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    pthread_cancel(sTmp.native_handle());
+    sTmp.join();
+}
 BOOST_AUTO_TEST_CASE(wg)
 {
     Threads::Group tg;
