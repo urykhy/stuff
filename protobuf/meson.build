@@ -47,3 +47,11 @@ foreach x : [a, b, b2]
 endforeach
 conf.set('BINARIES', ' '.join(binaries))
 package_file = configure_file(input: 'package.sh.in', output: 'package.sh', configuration: conf)
+
+# play with clang fuzzer/coverage
+# meson test fuzz
+if meson.get_compiler('cpp').get_id() == 'clang'
+    flags = ['-fsanitize=fuzzer,address,signed-integer-overflow', '-fprofile-instr-generate', '-fcoverage-mapping']
+    f = executable('f.out', 'fuzz.cpp', api_src, cpp_args: flags, link_args: flags, dependencies : [tutorial_dep], include_directories : includes)
+    test('fuzz', f, args : ['-jobs=3', '-max_total_time=10','-use_value_profile=1'])
+endif

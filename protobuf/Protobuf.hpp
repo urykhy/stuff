@@ -139,7 +139,10 @@ namespace Protobuf {
         {
             size_t sSize = aField.decodeSize();
             if (sSize == 4 || sSize == 8) {
-                m_Buffer.remove_prefix(sSize);
+                if (sSize > m_Buffer.size())
+                    throw BadInput();
+                else
+                    m_Buffer.remove_prefix(sSize);
                 return;
             }
 

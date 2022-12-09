@@ -30,9 +30,25 @@
       }
     },
     {
-      "label": "meson: run test",
+      "label": "meson: run tests",
       "type": "shell",
-      "command": "./a.out -l all",
+      "command": "meson test",
+      "problemMatcher": [],
+      "options": {
+        "cwd": "${workspaceFolder}/${relativeFileDirname}/build"
+      },
+      "dependsOn": [
+        "meson: build all"
+      ],
+      "presentation": {
+        "showReuseMessage": false,
+        "reveal": "always"
+      }
+    },
+    {
+      "label": "meson: run benchmarks",
+      "type": "shell",
+      "command": "meson test --benchmark",
       "problemMatcher": [],
       "options": {
         "cwd": "${workspaceFolder}/${relativeFileDirname}/build"

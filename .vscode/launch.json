@@ -1,0 +1,14 @@
+{
+    "version": "2.0.0",
+    "configurations": [
+        {
+            "name": "Debug build/a.out",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/${relativeFileDirname}/build/a.out",
+            "cwd": "${workspaceFolder}/${relativeFileDirname}/build",
+            "externalConsole": false,
+            "preLaunchTask": "meson: build all"
+        },
+    ]
+}
