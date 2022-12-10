@@ -39,3 +39,4 @@ rpc.pb.*
 erl_crash.dump
 build*
 .vscode
+__pycache__
