@@ -12,5 +12,15 @@ tutorial_dep = declare_dependency(link_with : tutorial_lib, include_directories:
 
 a  = executable('a.out',  'test.cpp', dependencies : [boost, tutorial_dep], include_directories : includes)
 test('basic test', a, args : ['-l', 'all'])
-#b  = executable('b.out',  'benchmark.cpp',  dependencies : [boost, benchmark, tutorial_dep])
-#benchmark('protobuf', b)
+
+# play with clang fuzzer/coverage
+# meson test fuzz
+# meson compile fuzz-cover
+if meson.get_compiler('cpp').get_id() == 'clang'
+    flags = ['-fsanitize=fuzzer,address,signed-integer-overflow', '-fprofile-instr-generate', '-fcoverage-mapping']
+    f = executable('f.out', 'fuzz.cpp', cpp_args: flags, link_args: flags, include_directories : includes)
+    test('fuzz', f, args : ['-jobs=3', '-max_total_time=10','-use_value_profile=1','-max_len=128'])
+
+    fuzz_cover = find_program('fuzz-cover.sh', required : true)
+    run_target('fuzz-cover', command : fuzz_cover, depends: f)
+endif

@@ -20,7 +20,7 @@ namespace cbor {
     }
 
     template <class... T>
-    inline void from_string(const std::string& aStr, T&... t)
+    inline void from_string(std::string_view aStr, T&... t)
     {
         cbor::imemstream sStream(aStr);
         cbor::read(sStream, t...);

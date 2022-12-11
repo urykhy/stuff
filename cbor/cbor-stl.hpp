@@ -7,14 +7,22 @@ namespace cbor {
     inline void read(istream& s, std::string& str)
     {
         size_t len = get_uint(s, ensure_type(s, CBOR_STR));
+#ifdef FUZZING_BUILD_MODE
+        if (len > 1024 * 1024)
+            throw std::bad_alloc();
+#endif
         str.resize(len);
         s.read(&str[0], len);
     }
 
-    inline void read(File::IMemReader& s, std::string_view& str)
+    inline void read(imemstream& s, std::string_view& str)
     {
         size_t len = get_uint(s, ensure_type(s, CBOR_STR));
-        str        = s.substring(len);
+#ifdef FUZZING_BUILD_MODE
+        if (len > 1024 * 1024)
+            throw std::bad_alloc();
+#endif
+        str = s.substring(len);
     }
 
     inline void write(ostream& out, const std::string_view& str)
@@ -58,6 +66,12 @@ namespace cbor {
     {
         size_t len = get_uint(s, ensure_type(s, CBOR_BINARY));
         data.clear();
+#ifdef FUZZING_BUILD_MODE
+        if (len / sizeof(T) > 1024 * 1024)
+            throw std::bad_alloc();
+#endif
+        if (len % sizeof(T) > 0)
+            throw std::invalid_argument("read " + std::to_string(len) + " bytes to vector of " + std::to_string(sizeof(T)));
         data.resize(len / sizeof(T));
         s.read(&data[0], len);
     }
@@ -76,6 +90,10 @@ namespace cbor {
     {
         size_t mt = get_uint(s, ensure_type(s, CBOR_LIST));
         l.clear();
+#ifdef FUZZING_BUILD_MODE
+        if (mt > 1024 * 1024)
+            throw std::bad_alloc();
+#endif
         l.reserve(mt);
         for (size_t i = 0; i < mt; i++) {
             l.emplace_back();

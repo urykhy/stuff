@@ -26,5 +26,23 @@ namespace Mpl {
         using Ts::operator()...;
     };
     template <class... Ts>
-    overloaded(Ts...)->overloaded<Ts...>;
+    overloaded(Ts...) -> overloaded<Ts...>;
+
+    // signature from function (used in cbor-proxy)
+    template <typename S>
+    struct signature : public signature<decltype(&S::operator())>
+    {};
+    template <typename R, typename... Args>
+    struct signature<R (*)(Args...)>
+    {
+        using return_type   = R;
+        using argument_type = std::tuple<Args...>;
+    };
+    template <typename C, typename R, typename... Args>
+    struct signature<R (C::*)(Args...) const>
+    {
+        using return_type   = R;
+        using argument_type = std::tuple<Args...>;
+    };
+
 } // namespace Mpl

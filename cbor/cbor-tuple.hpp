@@ -14,9 +14,9 @@ namespace cbor {
     struct is_tuple<std::tuple<T...>> : std::true_type
     {};
 
-    template <class T>
+    template <class S, class T>
     typename std::enable_if<is_tuple<T>::value, void>::type
-    read(istream& in, T& t)
+    read(S& in, T& t)
     {
         const auto sCount = get_uint(in, ensure_type(in, CBOR_LIST));
         if (sCount != std::tuple_size<T>::value) {
@@ -41,9 +41,9 @@ namespace cbor {
             t);
     }
 
-    template <class... T>
+    template <class S, class... T>
     typename std::enable_if<(sizeof...(T) > 1), void>::type
-    read(istream& in, T&... t)
+    read(S& in, T&... t)
     {
         const auto sCount = get_uint(in, ensure_type(in, CBOR_LIST));
         if (sCount != sizeof...(t)) {
