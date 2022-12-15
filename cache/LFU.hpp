@@ -1,7 +1,10 @@
 #pragma once
+
 #include <array>
 #include <list>
 #include <unordered_map>
+
+#include <boost/core/noncopyable.hpp>
 
 #include <bloom/Bloom.hpp>
 
@@ -77,7 +80,9 @@ namespace Cache {
     };
 
     // O(1) LFU
-    template <class Key, class Value>
+    template <class Key,
+              class Value,
+              template <typename, typename> typename Map = std::unordered_map>
     class LFU : public boost::noncopyable
     {
     protected:
@@ -86,7 +91,7 @@ namespace Cache {
         using Age = RingAge<Key, Value, BUCKET_COUNT>;
         Age m_Age;
 
-        std::unordered_map<Key, typename Age::List::iterator> m_Keys;
+        Map<Key, typename Age::List::iterator> m_Keys;
 
         const size_t   m_MaxSize;
         const unsigned m_Cost;
@@ -103,7 +108,8 @@ namespace Cache {
         : m_Keys(aSize)
         , m_MaxSize(aSize)
         , m_Cost(aCost)
-        {}
+        {
+        }
 
         const Value* Get(const Key& aKey)
         {
@@ -141,17 +147,20 @@ namespace Cache {
     };
 
     // BloomFilter in front of LFU
-    template <class Key, class Value>
-    class BF_LFU : public LFU<Key, Value>
+    template <class Key,
+              class Value,
+              template <typename, typename> typename Map = std::unordered_map>
+    class BF_LFU : public LFU<Key, Value, Map>
     {
-        using Parent = LFU<Key, Value>;
+        using Parent = LFU<Key, Value, Map>;
         Bloom::Filter m_Bloom;
 
     public:
-        BF_LFU(size_t aSize, unsigned aCost = 20, unsigned aBloomBits = 8 * 512 * 1024, unsigned aRotate = 128 * 1024)
+        BF_LFU(size_t aSize, unsigned aCost = 20, unsigned aBloomBits = 16 * 1024 * 1024, unsigned aRotate = 128 * 1024)
         : Parent(aSize, aCost)
         , m_Bloom(aBloomBits, aRotate)
-        {}
+        {
+        }
 
         void Put(const Key& aKey, const Value& aValue)
         {

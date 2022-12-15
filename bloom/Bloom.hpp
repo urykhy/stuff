@@ -50,7 +50,7 @@ namespace Bloom {
 
         std::pair<unsigned, uint8_t> prepare(uint32_t aBit) const
         {
-            return std::make_pair(aBit >> 3, 1 << (aBit & 0x07));
+            return std::make_pair(aBit / 8, 1 << (aBit % 8));
         }
 
         void set(uint32_t aKey)

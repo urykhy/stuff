@@ -15,7 +15,7 @@ namespace Format {
         s << std::setprecision(precision) << v;
         std::string tmp = s.str();
 
-        while (tmp.size() > 1 and tmp.back() == '0')
+        while (tmp.size() > 1 and tmp.back() == '0' and precision > 0)
             tmp.pop_back();
         if (tmp.size() > 1 and tmp.back() == '.')
             tmp.pop_back();

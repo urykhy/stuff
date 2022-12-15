@@ -1,0 +1,4 @@
+Name: hopscotch
+Description: C++ implementation of a fast hash map and hash set using open-addressing and hopscotch hashing to resolve collisions
+Version: 1.0
+Cflags: -I/u03/git/_c/hopscotch-map/include
