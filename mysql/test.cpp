@@ -81,22 +81,37 @@ BOOST_AUTO_TEST_CASE(updateable)
     {
         using Container = std::map<std::string, std::string>;
         using Timestamp = time_t;
+        using Pair = std::pair<std::string, std::string>;
 
-        static void        parse(Container& aDest, const MySQL::Row& aRow) { aDest[aRow[0]] = aRow[1]; }
-        static std::string query(Timestamp aTimestamp) { return "select dept_no, dept_name from departments"; }
-        static Timestamp   merge(Container& aSrc, Container& aDst)
+        static Pair parse(const MySQL::Row& aRow)
+        {
+            return Pair(aRow[0].as_string(), aRow[1].as_string());
+        }
+        static std::string query(Timestamp aTimestamp)
+        {
+            return "SELECT dept_no, dept_name FROM departments WHERE dept_no > 'd004'";
+        }
+        static Timestamp merge(Container& aSrc, Container& aDst)
         {
             std::swap(aSrc, aDst);
             return 0;
+        }
+        static std::string fallback(const std::string& aKey)
+        {
+            return "SELECT dept_no, dept_name FROM departments WHERE dept_no = '" + aKey + "'";
         }
     };
 
     MySQL::Connection              c(cfg);
     MySQL::Updateable<Departments> upd;
     upd.update(c);
-    auto r = upd.find("d008");
-    BOOST_CHECK(r);
-    BOOST_CHECK_EQUAL(r.value(), "Research");
+    BOOST_CHECK_EQUAL(upd.find("d008").value(), "Research");
+
+    // check fallback
+    BOOST_CHECK(!upd.find("d001"));
+    BOOST_CHECK_EQUAL(upd.find("d001", c).value(), "Marketing");
+    BOOST_CHECK_EQUAL(upd.find("d001").value(), "Marketing");
+    BOOST_CHECK(!upd.find("nx-entry", c));
 
     // dump and restore
     cbor::omemstream sDump;
@@ -106,8 +121,7 @@ BOOST_AUTO_TEST_CASE(updateable)
     cbor::imemstream               sRestore(sDump.str());
     MySQL::Updateable<Departments> upd2;
     upd2.restore(&sRestore);
-    r = upd2.find("d006");
-    BOOST_CHECK_EQUAL(r.value(), "Quality Management");
+    BOOST_CHECK_EQUAL(upd2.find("d006").value(), "Quality Management");
 }
 BOOST_AUTO_TEST_CASE(once)
 {
@@ -221,8 +235,8 @@ BOOST_AUTO_TEST_CASE(format)
 {
     std::list<std::pair<int, std::string>> sData{{1, "one"}, {2, "two"}, {3, "three"}, {4, "four"}};
     std::list<std::string>                 sExpected{
-        {"INSERT INTO newdata (id, name) VALUES (1, 'one'), (2, 'two'), (3, 'three') ON DUPLICATE KEY UPDATE name=name"},
-        {"INSERT INTO newdata (id, name) VALUES (4, 'four') ON DUPLICATE KEY UPDATE name=name"}};
+                        {"INSERT INTO newdata (id, name) VALUES (1, 'one'), (2, 'two'), (3, 'three') ON DUPLICATE KEY UPDATE name=name"},
+                        {"INSERT INTO newdata (id, name) VALUES (4, 'four') ON DUPLICATE KEY UPDATE name=name"}};
     const auto sResult = MySQL::Format<FormatPolicy>(sData);
     BOOST_CHECK_EQUAL_COLLECTIONS(sResult.begin(), sResult.end(), sExpected.begin(), sExpected.end());
 }
