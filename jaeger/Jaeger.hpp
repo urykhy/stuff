@@ -122,7 +122,7 @@ namespace Jaeger {
         }
     };
 
-    struct Span;
+    class Span;
     struct Trace : boost::noncopyable
     {
         friend class Span;

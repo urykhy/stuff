@@ -1,0 +1,52 @@
+{% macro complex_schema(schema, name='body', opt=False, decl=True, level=0) %}
+    {%- set current_type = schema.get('type','') %}
+    {%- if current_type == 'object' %}
+        struct {{ name }}_t {
+            {%- for k,v in schema.properties.items() %}
+                {{ complex_schema(v, k, opt, True, level+1) }}
+            {%- endfor %}
+            ::Json::Value to_json() const {
+                ::Json::Value sValue(::Json::objectValue);
+                {%- for t in schema.properties | sort %}sValue["{{ t }}"] = Format::Json::to_value({{ t }});{%- endfor %}
+                return sValue;
+            }
+            void from_json(const ::Json::Value& aJson) {
+                {%- for t in schema.properties | sort %}Parser::Json::from_object(aJson, "{{ t }}", {{ t }});{%- endfor %}
+            }
+            void cbor_write(cbor::ostream& aOut) const {
+                cbor::write(aOut, {{ schema.properties | sort | join(',') }});
+            }
+            void cbor_read(cbor::istream& aIn) {
+                cbor::read(aIn, {{ schema.properties | sort | join(',') }});
+            }
+        };
+        {%- if level == 0 %}
+            {%- if opt == True %}std::optional<{% endif %}{{ name }}_t {%- if opt %}>{% endif %} {{ name }} = {};
+        {%- endif %}
+    {%- elif current_type == 'array' %}
+        {%- set array_type = schema['items']['type'] %}
+        {%- if array_type == 'object' %}
+            {{- complex_schema(schema['items'], name, opt, True, level+1) }}
+            {%- if decl == True %}
+                std::vector<{{ name }}_t> {{ name }} = {};
+            {%- else %}
+                using {{ name }} = std::vector<{{ name }}_t>;
+            {%- endif %}
+        {%- elif array_type == 'array' -%}
+            {{ complex_schema(schema['items'], name + '_a', opt, False, level+1) }}
+            {%- if decl == True %}
+                std::vector<{{ name }}_a> {{ name }} = {};
+            {%- else %}
+                using {{ name }} = std::vector<{{ name }}_a>;
+            {%- endif %}
+        {%- else %}
+            {%- if decl == True %}
+                std::vector<{{ array_type | swagger_type }}> {{ name }} = {};
+            {%- else %}
+                using {{ name }} = std::vector<{{ array_type | swagger_type }}>;
+            {%- endif %}
+        {%- endif %}
+    {%- else %}
+        {%- if opt == True %}std::optional<{% endif %}{{ current_type | swagger_type }}{%- if opt %}>{% endif %} {{ name }} = {};
+    {%- endif %}
+{%- endmacro %}

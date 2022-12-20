@@ -40,6 +40,7 @@
         {%- endif %}
 
         Parser::http_query(sQueryView, [this](auto aName, auto aValue) {
+            (void)this; // make clang happy
             {%- for param in params if param['in'] == 'query' %}
                 if (aName == "{{ param.name }}") { swagger::parse(std::string(aValue), {{ _name(param) }}); {{ _limit(param) }} return; }
             {%- endfor %}
