@@ -17,7 +17,7 @@ NSPACE_UDP="-i space+ -p udp -m multiport --dports 53"
 NSPACE_FWD="-i space+ -o wlan1"
 
 # via tor
-VIA_TOR=("rutracker.org" "booktracker.org" "flibusta.is" "ru.linkedin.com" "linkedin.com")
+VIA_TOR=("rutracker.org" "booktracker.org" "flibusta.is" "ru.linkedin.com" "linkedin.com" "proton.me" "mail.proton.me")
 
 VIA_PROXY=("bt.rutracker.org" "bt2.rutracker.org" "bt3.rutracker.org" "bt4.rutracker.org" "bt.booktracker.work")
 
@@ -136,7 +136,7 @@ case "$1" in
             # redirects
             $ipt -t nat -A OUTPUT -d 127.192.0.0/10 -p tcp -j DNAT --to-destination 127.0.0.1:9052 # tor
             $ipt -t nat -A OUTPUT -m set --match-set PROXY dst -p tcp -m multiport --dports 80     -j DNAT --to-destination 127.0.0.1:9050 # privoxy
-            $ipt -t nat -A OUTPUT -m set --match-set TOR   dst -p tcp -m multiport --dports 80,443 -j DNAT --to-destination 127.0.0.1:9052 # tor
+            $ipt -t nat -A OUTPUT -m set --match-set TOR   dst -p tcp -m multiport --dports 80,443,8443,5995 -j DNAT --to-destination 127.0.0.1:9052 # tor
             #$ipt -t nat -A PREROUTING -i br0 -p tcp --dport 80 -j REDIRECT --to-ports 3128
 
             # redirect to tor from network namespaces
