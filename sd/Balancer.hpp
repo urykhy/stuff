@@ -33,7 +33,7 @@ namespace SD {
             }
         };
 
-        using List = std::vector<Entry>;
+        using State = std::map<double, Entry>;
 
     private:
         const Params              m_Params;
@@ -43,18 +43,16 @@ namespace SD {
 
         using Lock = std::unique_lock<std::mutex>;
         mutable std::mutex m_Mutex;
-        List               m_State;
-        uint64_t           m_TotalWeight;
+        State              m_State;
         std::string        m_LastError;
 
         using Error = std::runtime_error;
 
         void read_i(boost::asio::yield_context yield)
         {
-            Etcd::Client sClient(m_Service, m_Params.addr, yield);
-            auto         sList = sClient.list(m_Params.prefix, 0);
-            List         sState;
-            uint64_t     sWeight = 0;
+            Etcd::Client       sClient(m_Service, m_Params.addr, yield);
+            auto               sList = sClient.list(m_Params.prefix, 0);
+            std::vector<Entry> sState;
 
             for (auto&& x : sList) {
                 x.key.erase(0, m_Params.prefix.size());
@@ -70,16 +68,34 @@ namespace SD {
                 if (!m_Params.location.empty() and m_Params.location != sTmp.location)
                     continue;
                 sState.push_back(std::move(sTmp));
-                sWeight += sState.back().weight;
             }
 
-            Lock lk(m_Mutex);
-            m_State.swap(sState);
-            m_TotalWeight = sWeight;
-            m_LastError.clear();
-            lk.unlock();
+            update(sState);
         }
 
+#ifdef BOOST_TEST_MODULE
+    public:
+#endif
+        void update(std::vector<Entry>& sState)
+        {
+            uint64_t sTotalWeight = [&sState]() {
+                uint64_t sSum = 0;
+                for (auto& x : sState)
+                    sSum += x.weight;
+                return sSum;
+            }();
+
+            Lock lk(m_Mutex);
+            m_State.clear();
+            double sWeight = 0;
+            for (auto& x : sState) {
+                sWeight += (x.weight / (double)sTotalWeight);
+                m_State[sWeight] = x;
+            }
+            m_LastError.clear();
+        }
+
+    private:
         void read(boost::asio::yield_context yield)
         {
             try {
@@ -94,7 +110,6 @@ namespace SD {
         {
             Lock lk(m_Mutex);
             m_State.clear();
-            m_TotalWeight = 0;
         }
 
     public:
@@ -105,7 +120,7 @@ namespace SD {
         {
         }
 
-        List state() const
+        State state() const
         {
             Lock lk(m_Mutex);
             return m_State;
@@ -113,16 +128,15 @@ namespace SD {
 
         Entry random()
         {
-            Lock     lk(m_Mutex);
-            uint64_t sKey = Util::randomInt(m_TotalWeight);
-
-            for (const auto& x : m_State)
-                if (sKey < x.weight)
-                    return x;
-                else
-                    sKey -= x.weight;
-
-            throw Error("SD: fail to pick item");
+            Lock lk(m_Mutex);
+            if (m_State.empty())
+                throw Error("SD: no peers available");
+            auto sIt = m_State.lower_bound(Util::drand48());
+            if (sIt != m_State.end()) {
+                return sIt->second;
+            } else {
+                return m_State.rbegin()->second;
+            }
         }
 
         std::string lastError() const

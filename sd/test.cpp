@@ -27,6 +27,30 @@ struct WithClient
 };
 
 BOOST_FIXTURE_TEST_SUITE(notify, WithClient)
+BOOST_AUTO_TEST_CASE(lb)
+{
+    SD::Balancer::Params sBalancerParams;
+    sBalancerParams.prefix = "notify/instance/";
+    auto sBalancer         = std::make_shared<SD::Balancer>(m_Asio.service(), sBalancerParams);
+
+    const double                     TOTALW = 1 + 3 + 6;
+    std::vector<SD::Balancer::Entry> sData{{"a", 1, ""}, {"b", 3, ""}, {"c", 6, ""}};
+    sBalancer->update(sData);
+
+    std::map<std::string, size_t> sStat;
+    const size_t                  COUNT = 20000;
+    for (size_t i = 0; i < COUNT; i++) {
+        sStat[sBalancer->random().key]++;
+    }
+    for (auto& x : sStat) {
+        if (x.first == "a")
+            BOOST_CHECK_CLOSE(1 / TOTALW, x.second / (double)COUNT, 5);
+        else if (x.first == "b")
+            BOOST_CHECK_CLOSE(3 / TOTALW, x.second / (double)COUNT, 5);
+        else if (x.first == "c")
+            BOOST_CHECK_CLOSE(6 / TOTALW, x.second / (double)COUNT, 5);
+    }
+}
 BOOST_AUTO_TEST_CASE(simple)
 {
     SD::Notify::Params sParams;
@@ -59,7 +83,7 @@ BOOST_AUTO_TEST_CASE(simple)
     const auto sState = sBalancer->state();
 
     BOOST_REQUIRE_EQUAL(1, sState.size());
-    const auto& sEntry = sState.front();
+    const auto& sEntry = sState.begin()->second;
     BOOST_CHECK_EQUAL("a01", sEntry.key);
     BOOST_CHECK_EQUAL(10, sEntry.weight);
 
