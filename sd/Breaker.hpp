@@ -126,7 +126,7 @@ namespace SD {
 
     class Breaker
     {
-        const std::string m_API;
+        const std::string m_AVS;
         std::atomic<bool> m_Stop{false};
 
         using Counter = Prometheus::Counter<>;
@@ -136,10 +136,10 @@ namespace SD {
         using Lock = std::unique_lock<std::mutex>;
         std::map<std::string, std::shared_ptr<PeerState>> m_State;
 
-        std::shared_ptr<PeerState> getOrCreate(const std::string& aKey)
+        std::shared_ptr<PeerState> getOrCreate(const std::string& aPeer)
         {
             Lock  sLock(m_Mutex);
-            auto& sVal = m_State[aKey];
+            auto& sVal = m_State[aPeer];
             if (!sVal)
                 sVal = std::make_shared<PeerState>();
             return sVal;
@@ -152,53 +152,53 @@ namespace SD {
             return !sBad;
         }
 
-        void tick(const std::string& aKey, std::string_view aAction)
+        void tick(const std::string& aPeer, std::string_view aAction)
         {
-            const auto sKey = fmt::format(R"(sd_request_count{{api="{}",peer="{}",request="{}"}})",
-                                          m_API, aKey, aAction);
+            const auto sKey = fmt::format(R"(sd_request_count{{{},peer="{}",request="{}"}})",
+                                          m_AVS, aPeer, aAction);
             m_Metrics.get<Counter>(sKey)->tick();
         }
 
     public:
         using Error = Exception::Error<Breaker>;
 
-        Breaker(const std::string& aAPI)
-        : m_API(aAPI)
+        Breaker(const std::string& aAVS)
+        : m_AVS(aAVS)
         {
         }
 
         template <class T>
-        asio_http::Response wrap(const std::string& aKey, T&& aHandler)
+        asio_http::Response wrap(const std::string& aPeer, T&& aHandler)
         {
             static const std::string_view BLOCK("block");
             static const std::string_view PERMIT("permit");
             static const std::string_view FAIL("fail");
 
-            auto sState = getOrCreate(aKey);
+            auto sState = getOrCreate(aPeer);
             if (!sState->test(time(nullptr))) {
-                tick(aKey, BLOCK);
-                throw Error("request to " + aKey + " blocked by circuit breaker");
+                tick(aPeer, BLOCK);
+                throw Error("request to " + aPeer + " blocked by circuit breaker");
             }
             try {
-                tick(aKey, PERMIT);
+                tick(aPeer, PERMIT);
                 asio_http::Response sResponse = aHandler();
                 if (goodResponse(sResponse)) {
                     sState->insert(time(nullptr), true);
                 } else {
-                    tick(aKey, FAIL);
+                    tick(aPeer, FAIL);
                     sState->insert(time(nullptr), false);
                 }
                 return sResponse;
             } catch (...) {
-                tick(aKey, FAIL);
+                tick(aPeer, FAIL);
                 sState->insert(time(nullptr), false);
                 throw;
             }
         }
 
-        double success_rate(const std::string& aKey)
+        double success_rate(const std::string& aPeer)
         {
-            return getOrCreate(aKey)->success_rate();
+            return getOrCreate(aPeer)->success_rate();
         }
     };
 
@@ -213,22 +213,23 @@ namespace SD {
         std::map<std::string, WeakPtr> m_Info;
 
     public:
-        Ptr get(const std::string& aAPI)
+        Ptr get(const std::string& aAVS)
         {
             Lock sLock(m_Mutex);
-            auto sIt = m_Info.find(aAPI);
+            auto sIt = m_Info.find(aAVS);
             if (sIt != m_Info.end() and !sIt->second.expired())
                 return sIt->second.lock();
-            auto sNew    = std::make_shared<Breaker>(aAPI);
-            m_Info[aAPI] = sNew;
+            auto sNew    = std::make_shared<Breaker>(aAVS);
+            m_Info[aAVS] = sNew;
             return sNew;
         }
     };
 
-    inline BreakerManager::Ptr getBreaker(const std::string& aAPI)
+    // AVS ~ api="common", version="1.0", service="get_profile"
+    inline BreakerManager::Ptr getBreaker(const std::string& aAVS)
     {
         static BreakerManager sManager;
-        return sManager.get(aAPI);
+        return sManager.get(aAVS);
     }
 
 } // namespace SD

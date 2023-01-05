@@ -73,7 +73,8 @@ public:
         }
         void client::with_breaker()
         {
-            m_Breaker = SD::getBreaker(m_Service + "/{{ doc['info']['title'] }}/{{ doc['info']['version'] }}");
+            const std::string sAVS = "api=\"{{ doc['info']['title'] }}\",version=\"{{ doc['info']['version'] }}\",service=\"" + m_Service + '\"';
+            m_Breaker = SD::getBreaker(sAVS);
         }
     {% else %}
         client::client(asio_http::ClientPtr aHttpClient, const std::string& aBase)
