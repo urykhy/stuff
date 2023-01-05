@@ -563,7 +563,16 @@ BOOST_FIXTURE_TEST_CASE(discovery, WithServer)
     api::discovery_1_0::client sClient(m_HttpClient, m_Asio.service(), "test-service");
     sClient.with_breaker();
     Threads::sleep(0.1); // wait until we collect peers from etcd
-    auto sResponse = sClient.get_discovery({});
+    auto sResponse = [&sClient]() {
+        while (true) {
+            try {
+                return sClient.get_discovery({});
+            } catch (const Exception::Error<SD::Breaker>& e) {
+                BOOST_TEST_MESSAGE("retry on: " << e.what());
+            };
+        }
+    }();
+
     BOOST_CHECK_EQUAL(sResponse.body, "success");
 
     // test prometheus exporter
