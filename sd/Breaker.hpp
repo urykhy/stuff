@@ -47,7 +47,7 @@ namespace SD {
             if (m_Zone == Zone::HEAL) {
                 if (m_Spent < HEAL_SECONDS)
                     return;
-                m_Zone  = estimate();
+                m_Zone = estimate();
                 return;
             }
             if (m_Zone == Zone::RED) {
@@ -80,7 +80,7 @@ namespace SD {
         static constexpr double EWMA_FACTOR      = 0.95;
         static constexpr double HEAL_RATE        = 0.25;
         static constexpr double RED_RATE         = 0.50;
-        static constexpr double INITIAL_RATE     = 0.75;
+        static constexpr double INITIAL_RATE     = 1.0;
         static constexpr double YELLOW_RATE      = 0.95;
         static constexpr time_t COOLDOWN_SECONDS = 10;
         static constexpr time_t HEAL_SECONDS     = 10;

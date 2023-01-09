@@ -22,6 +22,7 @@
 #include <resource/Server.hpp>
 #include <sd/Balancer.hpp>
 #include <sd/Breaker.hpp>
+#include <sd/NotifyWeight.hpp>
 #include <sentry/Client.hpp>
 
 DECLARE_RESOURCE(swagger_ui_tar, "swagger_ui.tar")
@@ -545,8 +546,10 @@ BOOST_FIXTURE_TEST_CASE(redirect, WithServer)
 }
 BOOST_FIXTURE_TEST_CASE(discovery, WithServer)
 {
-    Discovery sDiscovery;
-    sDiscovery.with_discovery(m_Asio.service(), "127.0.0.1:3000", "test-service", "test-location", 10);
+    Discovery                sDiscovery;
+    SD::NotifyWeight::Params sParams;
+    sParams.location = "test-location";
+    sDiscovery.with_discovery(m_Asio.service(), "127.0.0.1:3000", "test-service", sParams);
 
     sDiscovery.configure(m_Router);
     Threads::sleep(0.1); // wait until etcd updated
@@ -557,22 +560,13 @@ BOOST_FIXTURE_TEST_CASE(discovery, WithServer)
         auto                 sList = sClient.list("discovery/swagger");
         BOOST_REQUIRE_EQUAL(1, sList.size());
         BOOST_CHECK_EQUAL(sList[0].key, "discovery/swagger/test-service/discovery/1.0/127.0.0.1:3000");
-        BOOST_CHECK_EQUAL(sList[0].value, R"({"location":"test-location","weight":10})");
+        BOOST_CHECK_EQUAL(sList[0].value, R"({"location":"test-location","weight":10.0})");
     }
 
     api::discovery_1_0::client sClient(m_HttpClient, m_Asio.service(), "test-service");
     sClient.with_breaker();
     Threads::sleep(0.1); // wait until we collect peers from etcd
-    auto sResponse = [&sClient]() {
-        while (true) {
-            try {
-                return sClient.get_discovery({});
-            } catch (const Exception::Error<SD::Breaker>& e) {
-                BOOST_TEST_MESSAGE("retry on: " << e.what());
-            };
-        }
-    }();
-
+    auto sResponse = sClient.get_discovery({});
     BOOST_CHECK_EQUAL(sResponse.body, "success");
 
     // test prometheus exporter
@@ -595,8 +589,10 @@ BOOST_FIXTURE_TEST_CASE(discovery, WithServer)
 }
 BOOST_FIXTURE_TEST_CASE(breaker, WithServer)
 {
-    Discovery500 sDiscovery;
-    sDiscovery.with_discovery(m_Asio.service(), "127.0.0.1:3000", "test-service", "test-location", 10);
+    Discovery500             sDiscovery;
+    SD::NotifyWeight::Params sParams;
+    sParams.location = "test-location";
+    sDiscovery.with_discovery(m_Asio.service(), "127.0.0.1:3000", "test-service", sParams);
 
     sDiscovery.configure(m_Router);
     Threads::sleep(0.1); // wait until etcd updated

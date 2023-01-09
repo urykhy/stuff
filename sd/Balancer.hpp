@@ -23,7 +23,7 @@ namespace SD {
         struct Entry
         {
             std::string key;
-            uint64_t    weight = 0;
+            double      weight = 0;
             std::string location;
 
             void from_json(const ::Json::Value& aJson)
@@ -78,8 +78,8 @@ namespace SD {
 #endif
         void update(std::vector<Entry>& sState)
         {
-            uint64_t sTotalWeight = [&sState]() {
-                uint64_t sSum = 0;
+            const double sTotalWeight = [&sState]() {
+                double sSum = 0;
                 for (auto& x : sState)
                     sSum += x.weight;
                 return sSum;
@@ -89,7 +89,7 @@ namespace SD {
             m_State.clear();
             double sWeight = 0;
             for (auto& x : sState) {
-                sWeight += (x.weight / (double)sTotalWeight);
+                sWeight += (x.weight / sTotalWeight);
                 m_State[sWeight] = x;
             }
             m_LastError.clear();

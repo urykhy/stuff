@@ -34,7 +34,7 @@ class server
     Jwt::Claim __auth_helper(const asio_http::Request& aRequest);
 {% endif %}
 {% if x_discovery %}
-    std::shared_ptr<SD::Notify> m_Notify;
+    std::unique_ptr<SD::NotifyWeight> m_Notify;
 {% endif %}
 
 public:
@@ -49,7 +49,7 @@ public:
     void with_authorization(const Jwt::IFace* aManager);
 {% endif %}
 {% if x_discovery %}
-    void with_discovery(boost::asio::io_service& aAsio, const std::string& aAddr, const std::string& aService, const std::string& aLocation, unsigned aWeight);
+    void with_discovery(boost::asio::io_service& aAsio, const std::string& aAddr, const std::string& aService, const SD::NotifyWeight::Params& aParams);
 {% endif %}
     void configure(asio_http::RouterPtr aRouter);
     virtual ~server() {};
@@ -131,16 +131,11 @@ private:
     }
 {% endif %}
 {% if x_discovery %}
-    void server::with_discovery(boost::asio::io_service& aAsio, const std::string& aAddr, const std::string& aService, const std::string& aLocation, unsigned aWeight)
+    void server::with_discovery(boost::asio::io_service& aAsio, const std::string& aAddr, const std::string& aService, const SD::NotifyWeight::Params& aParams)
     {
-        SD::Notify::Params sParams;
-        sParams.key        = "discovery/swagger/" + aService + "/{{ doc['info']['title'] }}/{{ doc['info']['version'] }}/" + aAddr;
-        Format::Json::Value sJson(::Json::objectValue);
-        Format::Json::write(sJson, "weight", aWeight);
-        Format::Json::write(sJson, "location", aLocation);
-        std::string sValue = Format::Json::to_string(sJson, false /* indent */);
-        m_Notify = std::make_shared<SD::Notify>(aAsio, sParams, sValue);
-        m_Notify->start();
+        SD::NotifyWeight::Params sParams = aParams;
+        sParams.notify.key        = "discovery/swagger/" + aService + "/{{ doc['info']['title'] }}/{{ doc['info']['version'] }}/" + aAddr;
+        m_Notify = std::make_unique<SD::NotifyWeight>(aAsio, sParams);
     }
 {% endif %}
 {% call(doc, path, method, name) _for_every_method(doc) %}
@@ -188,6 +183,13 @@ private:
                 if (aResponse.result() >= http::status::ok and aResponse.result() < http::status::multiple_choices) m_Metrics.responses_{{ name }}_2xx.tick();
                 else if (aResponse.result() >= http::status::bad_request and aResponse.result() < http::status::internal_server_error) m_Metrics.responses_{{ name }}_4xx.tick();
                 else if (aResponse.result() >= http::status::internal_server_error) m_Metrics.responses_{{ name }}_5xx.tick();
+            });
+        {% endif %}
+        {% if x_discovery %}
+            Util::Raii sNotify([&](){
+                if (m_Notify and aResponse.result_int() < 300) {
+                    m_Notify->add(sTimeMeter.get().to_double(), time(nullptr));
+                }
             });
         {% endif %}
 
