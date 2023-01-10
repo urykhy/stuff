@@ -27,7 +27,7 @@ class client
 public:
     {% if x_discovery %}
         client(asio_http::ClientPtr aHttpClient, boost::asio::io_service& aAsio, const std::string& aService, const std::string& aLocation = {});
-        void with_breaker();
+        std::shared_ptr<SD::Breaker> with_breaker();
     {% else %}
         client(asio_http::ClientPtr aHttpClient, const std::string& aBase);
     {% endif %}
@@ -71,10 +71,11 @@ public:
             m_Balancer = std::make_shared<SD::Balancer>(aAsio, sParams);
             m_Balancer->start();
         }
-        void client::with_breaker()
+        std::shared_ptr<SD::Breaker> client::with_breaker()
         {
             const std::string sAVS = "api=\"{{ doc['info']['title'] }}\",version=\"{{ doc['info']['version'] }}\",service=\"" + m_Service + '\"';
-            m_Breaker = SD::getBreaker(sAVS);
+            m_Breaker = std::make_shared<SD::Breaker>(sAVS);
+            return m_Breaker;
         }
     {% else %}
         client::client(asio_http::ClientPtr aHttpClient, const std::string& aBase)

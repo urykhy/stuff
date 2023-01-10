@@ -127,7 +127,6 @@ namespace SD {
     class Breaker
     {
         const std::string m_AVS;
-        std::atomic<bool> m_Stop{false};
 
         using Counter = Prometheus::Counter<>;
         Prometheus::GetOrCreate m_Metrics;
@@ -201,35 +200,5 @@ namespace SD {
             return getOrCreate(aPeer)->success_rate();
         }
     };
-
-    struct BreakerManager
-    {
-        using Ptr     = std::shared_ptr<Breaker>;
-        using WeakPtr = std::weak_ptr<Breaker>;
-
-    private:
-        mutable std::mutex m_Mutex;
-        using Lock = std::unique_lock<std::mutex>;
-        std::map<std::string, WeakPtr> m_Info;
-
-    public:
-        Ptr get(const std::string& aAVS)
-        {
-            Lock sLock(m_Mutex);
-            auto sIt = m_Info.find(aAVS);
-            if (sIt != m_Info.end() and !sIt->second.expired())
-                return sIt->second.lock();
-            auto sNew    = std::make_shared<Breaker>(aAVS);
-            m_Info[aAVS] = sNew;
-            return sNew;
-        }
-    };
-
-    // AVS ~ api="common", version="1.0", service="get_profile"
-    inline BreakerManager::Ptr getBreaker(const std::string& aAVS)
-    {
-        static BreakerManager sManager;
-        return sManager.get(aAVS);
-    }
 
 } // namespace SD
