@@ -604,7 +604,7 @@ BOOST_FIXTURE_TEST_CASE(breaker, WithServer)
     bool sBreaked = false;
     for (int i = 0; i < 15 and !sBreaked; i++) {
         try {
-            BOOST_TEST_MESSAGE("success rate: " << sBreaker->success_rate("127.0.0.1:3000"));
+            BOOST_TEST_MESSAGE("success rate: " << sBreaker->peer_stat("127.0.0.1:3000").success_rate);
             auto sResponse = sClient.get_discovery({});
             BOOST_CHECK_EQUAL(sResponse.body, "success");
         } catch (const SD::Breaker::Error& e) {

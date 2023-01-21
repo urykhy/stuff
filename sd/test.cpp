@@ -10,8 +10,8 @@ using namespace std::chrono_literals;
 
 #include "Balancer.hpp"
 #include "Breaker.hpp"
-#include "NotifyWeight.hpp"
 #include "Notify.hpp"
+#include "NotifyWeight.hpp"
 
 struct WithClient
 {
@@ -27,31 +27,7 @@ struct WithClient
     }
 };
 
-BOOST_FIXTURE_TEST_SUITE(notify, WithClient)
-BOOST_AUTO_TEST_CASE(lb)
-{
-    SD::Balancer::Params sBalancerParams;
-    sBalancerParams.prefix = "notify/instance/";
-    auto sBalancer         = std::make_shared<SD::Balancer>(m_Asio.service(), sBalancerParams);
-
-    const double                     TOTALW = 1 + 3 + 6;
-    std::vector<SD::Balancer::Entry> sData{{"a", 1, ""}, {"b", 3, ""}, {"c", 6, ""}};
-    sBalancer->update(sData);
-
-    std::map<std::string, size_t> sStat;
-    const size_t                  COUNT = 20000;
-    for (size_t i = 0; i < COUNT; i++) {
-        sStat[sBalancer->random().key]++;
-    }
-    for (auto& x : sStat) {
-        if (x.first == "a")
-            BOOST_CHECK_CLOSE(1 / TOTALW, x.second / (double)COUNT, 5);
-        else if (x.first == "b")
-            BOOST_CHECK_CLOSE(3 / TOTALW, x.second / (double)COUNT, 5);
-        else if (x.first == "c")
-            BOOST_CHECK_CLOSE(6 / TOTALW, x.second / (double)COUNT, 5);
-    }
-}
+BOOST_FIXTURE_TEST_SUITE(sd, WithClient)
 BOOST_AUTO_TEST_CASE(simple)
 {
     SD::Notify::Params sParams;
@@ -98,7 +74,7 @@ BOOST_AUTO_TEST_CASE(simple)
     // ensure key deleted from etcd
     BOOST_CHECK_EQUAL("", m_Client.get(sParams.key));
 }
-BOOST_AUTO_TEST_CASE(dynamic)
+BOOST_AUTO_TEST_CASE(notify_weight)
 {
     SD::NotifyWeight::Params sParams;
     sParams.notify.key = "notify/instance/a01";
@@ -118,11 +94,84 @@ BOOST_AUTO_TEST_CASE(dynamic)
     auto sRoot = Parser::Json::parse(sValue);
     BOOST_CHECK_CLOSE(sRoot["weight"].asDouble(), sNotify.weight(), 5 /* % */);
 }
+BOOST_AUTO_TEST_CASE(balance_by_weight)
+{
+    SD::Balancer::Params sBalancerParams;
+    sBalancerParams.prefix = "notify/instance/";
+    auto sBalancer         = std::make_shared<SD::Balancer>(m_Asio.service(), sBalancerParams);
+
+    const double                     TOTALW = 1 + 3 + 6;
+    std::vector<SD::Balancer::Entry> sData{{"a", 1, ""}, {"b", 3, ""}, {"c", 6, ""}};
+    sBalancer->update(sData);
+
+    std::map<std::string, size_t> sStat;
+    const size_t                  COUNT = 20000;
+    for (size_t i = 0; i < COUNT; i++) {
+        sStat[sBalancer->random().key]++;
+    }
+    for (auto& x : sStat) {
+        if (x.first == "a")
+            BOOST_CHECK_CLOSE(1 / TOTALW, x.second / (double)COUNT, 5);
+        else if (x.first == "b")
+            BOOST_CHECK_CLOSE(3 / TOTALW, x.second / (double)COUNT, 5);
+        else if (x.first == "c")
+            BOOST_CHECK_CLOSE(6 / TOTALW, x.second / (double)COUNT, 5);
+    }
+}
+BOOST_AUTO_TEST_CASE(balance_with_breaker)
+{
+    // prepare breaker state
+    auto sBreaker = std::make_shared<SD::Breaker>("not-used");
+    sBreaker->reset("a", 1.0, 0);
+    sBreaker->reset("b", 0.8, 0); // reduced weight
+    sBreaker->reset("c", 0.6, 0); // reduced weight + drops
+
+    // prepare balancer and link to breaker
+    SD::Balancer::Params sBalancerParams;
+    auto                 sBalancer = std::make_shared<SD::Balancer>(m_Asio.service(), sBalancerParams);
+    sBalancer->with_peer_stat(sBreaker); // use breaker success rate
+    std::vector<SD::Balancer::Entry> sData{{"a", 1, ""}, {"b", 1, ""}, {"c", 1, ""}};
+    sBalancer->update(sData);
+
+    // balancer state
+    {
+        auto sState = sBalancer->state();
+        for (auto& [_, sPeer] : sState)
+            BOOST_TEST_MESSAGE(fmt::format("{} | weight {:>4.2f}", sPeer.key, sPeer.weight));
+    }
+
+    // put load
+    struct Stat
+    {
+        unsigned success = 0;
+        unsigned fail    = 0;
+    };
+    std::map<std::string, Stat> sStat;
+    const size_t                COUNT = 20000;
+    for (size_t i = 0; i < COUNT; i++) {
+        const std::string sPeer = sBalancer->random().key;
+        if (sBreaker->test(sPeer))
+            sStat[sPeer].success++;
+        else
+            sStat[sPeer].fail++;
+    }
+
+    // output stats
+    for (auto& x : sStat) {
+        const double sSuccessPct = 100 * x.second.success / double(COUNT);
+        const double sFailPct    = 100 * x.second.fail / double(COUNT);
+        const double sTotalPct   = 100 * (x.second.fail + x.second.success) / double(COUNT);
+        BOOST_TEST_MESSAGE(fmt::format("{} | total share ({:>4.1f}%) | success {:>5} ({:>4.1f}%) | fail {:>5} ({:>4.1f}%)",
+                                       x.first, sTotalPct, x.second.success, sSuccessPct, x.second.fail, sFailPct));
+        if (x.first == "c")
+            BOOST_CHECK_CLOSE(sFailPct, 10, 10);
+    }
+}
 BOOST_AUTO_TEST_SUITE_END()
 
-BOOST_AUTO_TEST_SUITE(breaker)
+BOOST_AUTO_TEST_SUITE(peer_state)
 BOOST_DATA_TEST_CASE(constant_probability,
-                     std::vector<double>({0, 0.25, 0.5, 0.60, 0.75, 0.95, 1}),
+                     std::vector<double>({0, 0.25, 0.5, 0.60, 0.75, 1}),
                      sProb)
 {
     constexpr unsigned SECONDS  = 500;
@@ -134,7 +183,7 @@ BOOST_DATA_TEST_CASE(constant_probability,
         for (unsigned i = 0; i < RPS; i++) {
             if (sStat.test(sTimestamp)) {
                 sAllowed++;
-                sStat.insert(sTimestamp, Util::drand48() < sProb);
+                sStat.add(0, sTimestamp, Util::drand48() < sProb);
             }
         }
     }
@@ -146,6 +195,8 @@ BOOST_DATA_TEST_CASE(constant_probability,
         BOOST_CHECK_CLOSE(0.135, sActualRate, 15);
     else if (abs(sProb - 0.5) < 0.01)
         BOOST_CHECK_CLOSE(0.23, sActualRate, 25);
+    else if (abs(sProb - 0.75) < 0.01)
+        BOOST_CHECK_CLOSE(0.9, sActualRate, 25);
     else
         BOOST_CHECK_CLOSE(sProb, sActualRate, 5);
 }

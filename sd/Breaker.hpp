@@ -5,6 +5,8 @@
 #include <array>
 #include <memory>
 
+#include "Balancer.hpp"
+
 #include <exception/Error.hpp>
 #include <prometheus/GetOrCreate.hpp>
 #include <unsorted/Ewma.hpp>
@@ -17,9 +19,10 @@ namespace SD {
         using Lock = std::unique_lock<std::mutex>;
         mutable std::mutex m_Mutex;
 
-        unsigned   m_Success = 0;
-        unsigned   m_Fail    = 0;
-        Util::Ewma m_Ewma;
+        unsigned     m_Success = 0;
+        unsigned     m_Fail    = 0;
+        Util::Ewma   m_SuccessRate;
+        Util::EwmaTs m_Latency;
 
         enum class Zone
         {
@@ -35,9 +38,9 @@ namespace SD {
         Zone estimate()
         {
             m_Spent = 0;
-            if (m_Ewma.estimate() > YELLOW_RATE)
+            if (m_SuccessRate.estimate() > YELLOW_RATE)
                 return Zone::GREEN;
-            if (m_Ewma.estimate() > RED_RATE)
+            if (m_SuccessRate.estimate() > RED_RATE)
                 return Zone::YELLOW;
             return Zone::RED;
         }
@@ -55,7 +58,7 @@ namespace SD {
                     return;
                 m_Zone  = Zone::HEAL;
                 m_Spent = 0;
-                m_Ewma.reset(HEAL_RATE);
+                m_SuccessRate.reset(HEAL_RATE);
                 return;
             }
             m_Zone = estimate();
@@ -69,7 +72,7 @@ namespace SD {
             m_Spent++;
 
             if (m_Success + m_Fail > 0) {
-                m_Ewma.add(m_Success / double(m_Success + m_Fail));
+                m_SuccessRate.add(m_Success / double(m_Success + m_Fail));
                 m_Success = 0;
                 m_Fail    = 0;
             }
@@ -81,21 +84,26 @@ namespace SD {
         static constexpr double HEAL_RATE        = 0.25;
         static constexpr double RED_RATE         = 0.50;
         static constexpr double INITIAL_RATE     = 1.0;
-        static constexpr double YELLOW_RATE      = 0.95;
+        static constexpr double YELLOW_RATE      = 0.75;
         static constexpr time_t COOLDOWN_SECONDS = 10;
         static constexpr time_t HEAL_SECONDS     = 10;
+        static constexpr double INITIAL_LATENCY  = 0;
 
         PeerState()
-        : m_Ewma(EWMA_FACTOR, INITIAL_RATE)
+        : m_SuccessRate(EWMA_FACTOR, INITIAL_RATE)
+        , m_Latency(EWMA_FACTOR, INITIAL_LATENCY)
         {
         }
 
-        void insert(time_t aNow, bool aSuccess)
+        void add(double aLatency, time_t aNow, bool aSuccess)
         {
             Lock sLock(m_Mutex);
             prepare(aNow);
             if (aSuccess)
+            {
                 m_Success++;
+                m_Latency.add(aLatency, aNow);
+            }
             else
                 m_Fail++;
         }
@@ -110,21 +118,36 @@ namespace SD {
                 return false;
             case Zone::HEAL:
             case Zone::YELLOW:
-                return Util::drand48() < m_Ewma.estimate();
+                return Util::drand48() < m_SuccessRate.estimate();
             case Zone::GREEN:
             default:
                 return true;
             }
         }
 
-        double success_rate() const
+        PeerStat peer_stat() const
         {
             Lock sLock(m_Mutex);
-            return m_Ewma.estimate();
+            return
+            {
+                .success_rate = m_SuccessRate.estimate(),
+                .latency      = m_Latency.estimate()
+            };
+        }
+
+        void reset(double aRate, double aLatency)
+        {
+            Lock sLock(m_Mutex);
+            m_Success = 0;
+            m_Fail    = 0;
+            m_SuccessRate.reset(aRate);
+            m_Latency.reset(aLatency);
+            m_Zone        = estimate();
+            m_CurrentTime = 0;
         }
     };
 
-    class Breaker
+    class Breaker : public PeerStatProvider
     {
         const std::string m_AVS;
 
@@ -167,37 +190,50 @@ namespace SD {
         }
 
         template <class T>
-        asio_http::Response wrap(const std::string& aPeer, T&& aHandler)
+        asio_http::Response wrap(const std::string& aPeer, T&& aHandler, time_t aNow = time(nullptr))
         {
             static const std::string_view BLOCK("block");
             static const std::string_view PERMIT("permit");
             static const std::string_view FAIL("fail");
 
             auto sState = getOrCreate(aPeer);
-            if (!sState->test(time(nullptr))) {
+            if (!sState->test(aNow)) {
                 tick(aPeer, BLOCK);
                 throw Error("request to " + aPeer + " blocked by circuit breaker");
             }
+
             try {
                 tick(aPeer, PERMIT);
+                Time::Meter sMeter;
                 asio_http::Response sResponse = aHandler();
+                const double sELA = sMeter.get().to_double();
                 if (goodResponse(sResponse)) {
-                    sState->insert(time(nullptr), true);
+                    sState->add(sELA, aNow, true);
                 } else {
                     tick(aPeer, FAIL);
-                    sState->insert(time(nullptr), false);
+                    sState->add(0, aNow, false);
                 }
                 return sResponse;
             } catch (...) {
                 tick(aPeer, FAIL);
-                sState->insert(time(nullptr), false);
+                sState->add(0, aNow, false);
                 throw;
             }
         }
 
-        double success_rate(const std::string& aPeer)
+        PeerStat peer_stat(const std::string& aPeer) override
         {
-            return getOrCreate(aPeer)->success_rate();
+            return getOrCreate(aPeer)->peer_stat();
+        }
+
+        void reset(const std::string& aPeer, double aRate, double aLatency)
+        {
+            getOrCreate(aPeer)->reset(aRate, aLatency);
+        }
+
+        bool test(const std::string& aPeer, time_t aNow = time(nullptr))
+        {
+            return getOrCreate(aPeer)->test(aNow);
         }
     };
 

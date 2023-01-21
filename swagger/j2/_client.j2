@@ -75,6 +75,7 @@ public:
         {
             const std::string sAVS = "api=\"{{ doc['info']['title'] }}\",version=\"{{ doc['info']['version'] }}\",service=\"" + m_Service + '\"';
             m_Breaker = std::make_shared<SD::Breaker>(sAVS);
+            m_Balancer->with_peer_stat(m_Breaker);
             return m_Breaker;
         }
     {% else %}

@@ -10,6 +10,19 @@
 
 namespace SD {
 
+    struct PeerStat
+    {
+        double success_rate = 0;
+        double latency = 0;
+    };
+
+    struct PeerStatProvider
+    {
+        virtual PeerStat peer_stat(const std::string& aPeer) = 0;
+        virtual ~PeerStatProvider(){};
+    };
+    using ProviderPtr = std::shared_ptr<PeerStatProvider>;
+
     struct Balancer : public std::enable_shared_from_this<Balancer>
     {
         struct Params
@@ -45,6 +58,7 @@ namespace SD {
         mutable std::mutex m_Mutex;
         State              m_State;
         std::string        m_LastError;
+        ProviderPtr        m_Provider;
 
         using Error = std::runtime_error;
 
@@ -78,6 +92,17 @@ namespace SD {
 #endif
         void update(std::vector<Entry>& sState)
         {
+            Lock lk(m_Mutex);
+            if (m_Provider) {
+                for (auto& x : sState)
+                {
+                    const auto sStat = m_Provider->peer_stat(x.key);
+                    if (sStat.success_rate < 0.95) {
+                        x.weight *= sStat.success_rate;
+                    }
+                }
+            }
+
             const double sTotalWeight = [&sState]() {
                 double sSum = 0;
                 for (auto& x : sState)
@@ -85,7 +110,6 @@ namespace SD {
                 return sSum;
             }();
 
-            Lock lk(m_Mutex);
             m_State.clear();
             double sWeight = 0;
             for (auto& x : sState) {
@@ -118,6 +142,12 @@ namespace SD {
         , m_Service(aService)
         , m_Timer(aService)
         {
+        }
+
+        void with_peer_stat(ProviderPtr aProvider)
+        {
+            Lock lk(m_Mutex);
+            m_Provider = aProvider;
         }
 
         State state() const
