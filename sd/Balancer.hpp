@@ -79,7 +79,7 @@ namespace SD {
                 Entry sTmp;
                 sTmp.key = x.key;
                 Parser::Json::from_value(sRoot, sTmp);
-                if (!m_Params.location.empty() and m_Params.location != sTmp.location)
+                if (!m_Params.location.empty() and String::starts_with(sTmp.location, m_Params.location))
                     continue;
                 sState.push_back(std::move(sTmp));
             }
