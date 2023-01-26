@@ -7,7 +7,7 @@ import sys
 def gen_tuple(ns, i):
     for t in ("", "const"):
         print(
-            f"auto {ns}::{i.spelling}::__introspect() {t} {{ \n return std::make_tuple("
+            f"inline auto {ns}::{i.spelling}::__introspect() {t} {{ \n return std::make_tuple("
         )
         comma = False
         for j in i.get_children():

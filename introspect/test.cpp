@@ -6,7 +6,7 @@
 BOOST_AUTO_TEST_SUITE(Introspect)
 BOOST_AUTO_TEST_CASE(basic)
 {
-    Tmp::Msg1 sMsg{{}, 1, 2.5, "test"}; // workaround inheritance in Msg1
+    const Tmp::Msg1 sMsg{{}, 1, 2.5, "test"}; // workaround inheritance in Msg1
     Mpl::for_each_element(
         [](auto&& x) {
             BOOST_TEST_MESSAGE(x.first << "=" << x.second);

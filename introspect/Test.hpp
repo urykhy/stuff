@@ -15,6 +15,7 @@ namespace Tmp {
         auto __introspect();
         auto __introspect() const;
 
+        // for tests
         auto as_tuple() const
         {
             return std::tie(aaa, bbb, ccc);
