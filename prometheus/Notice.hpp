@@ -3,35 +3,38 @@
 #include "GetOrCreate.hpp"
 
 namespace Prometheus {
-    class Notice
+    class Notice : public boost::noncopyable
     {
         using C = Counter<uint8_t>;
-        GetOrCreate       m_Store;
-        const std::string m_Name;
+        static GetOrCreate m_Store;
 
     public:
-        Notice(const std::string& aName = "status")
-        : m_Name(aName)
-        {}
-
         struct Key
         {
+            std::string metric   = "status";
             std::string priority = "notice";
             std::string message;
 
-            std::string tag() const
+            std::string operator()() const
             {
-                return "{priority=\"" + priority + "\",message=\"" + message + "\"}";
+                return metric + "{priority=\"" + priority + "\",message=\"" + message + "\"}";
             }
         };
 
-        void set(const Key& aKey)
+        static void set(const Key& aKey)
         {
-            m_Store.get<C>(m_Name + aKey.tag())->set(1);
+            m_Store.get<C>(aKey())->set(1);
         }
-        void clear(const Key& aKey)
+        static void reset(const Key& aKey)
         {
-            m_Store.get<C>(m_Name + aKey.tag())->set(0);
+            m_Store.erase(aKey());
+        }
+        static void flag(const std::string& aName, bool aValue = true)
+        {
+            m_Store.get<C>(aName)->set(aValue);
         }
     };
+
+    inline GetOrCreate Notice::m_Store;
+
 } // namespace Prometheus

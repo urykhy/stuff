@@ -4,7 +4,7 @@
 #include <container/Algorithm.hpp>
 #include <parser/Json.hpp>
 #include <parser/Parser.hpp>
-#include <prometheus/Metrics.hpp>
+#include <prometheus/Notice.hpp>
 #include <sd/Balancer.hpp>
 
 namespace Swagger {
@@ -68,10 +68,9 @@ namespace Swagger {
         boost::asio::steady_timer  m_Timer;
 
         using Lock = std::unique_lock<std::mutex>;
-        mutable std::mutex    m_Mutex;
-        List                  m_List;
-        std::string           m_LastError;
-        Prometheus::Counter<> m_Status;
+        mutable std::mutex m_Mutex;
+        List               m_List;
+        std::string        m_LastError;
 
         void on_timer_i(boost::asio::yield_context yield)
         {
@@ -117,7 +116,7 @@ namespace Swagger {
             Lock lk(m_Mutex);
             m_List.swap(sList);
             m_LastError.clear();
-            m_Status.set(1);
+            Prometheus::Notice::flag("metrics_discovery_up");
         }
         void on_timer(boost::asio::yield_context yield)
         {
@@ -126,7 +125,7 @@ namespace Swagger {
             } catch (const std::exception& e) {
                 Lock lk(m_Mutex);
                 m_LastError = e.what();
-                m_Status.set(0);
+                Prometheus::Notice::flag("metrics_discovery_up", false);
             }
         }
 
@@ -135,7 +134,6 @@ namespace Swagger {
         : m_Params(aParams)
         , m_Service(aService)
         , m_Timer(aService)
-        , m_Status("metrics_discovery_up")
         {
         }
 
@@ -148,6 +146,7 @@ namespace Swagger {
                     m_Timer.expires_from_now(std::chrono::seconds(m_Params.period));
                     m_Timer.async_wait(yield[ec]);
                 }
+                Prometheus::Notice::flag("metrics_discovery_up", false);
             });
         }
 

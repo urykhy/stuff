@@ -61,11 +61,12 @@ namespace Prometheus {
             m_Complex.erase(aMetric);
         }
 
+        static Manager m_Instance;
+
     public:
         static Manager& instance()
         {
-            static Manager sManager;
-            return sManager;
+            return m_Instance;
         }
 
         // row set without \n
@@ -94,6 +95,8 @@ namespace Prometheus {
                 x->update();
         }
     };
+
+    inline Manager Manager::m_Instance;
 
     inline MetricFace::MetricFace(const std::string& aName)
     : m_Name(aName)

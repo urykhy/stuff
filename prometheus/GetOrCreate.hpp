@@ -26,5 +26,11 @@ namespace Prometheus {
                 sVal = std::make_shared<T>(aName);
             return boost::any_cast<Ptr>(sVal).get();
         }
+
+        void erase(const std::string& aName)
+        {
+            Lock sLock(m_Mutex);
+            m_Map.erase(aName);
+        }
     };
 } // namespace Prometheus

@@ -68,10 +68,9 @@ BOOST_AUTO_TEST_CASE(get_or_create)
 }
 BOOST_AUTO_TEST_CASE(notice)
 {
-    Prometheus::Notice      sNotice;
     Prometheus::Notice::Key sKey{.message = "connection error"};
 
-    auto sTest = [](std::string_view aVal) {
+    auto sTest = [](std::string_view aVal, unsigned aExpected = 1) {
         unsigned   sCount  = 0;
         const auto sActual = Prometheus::Manager::instance().toPrometheus();
         for (auto x : sActual) {
@@ -79,12 +78,15 @@ BOOST_AUTO_TEST_CASE(notice)
             if (x == aVal)
                 sCount++;
         }
-        BOOST_CHECK_EQUAL(sCount, 1);
+        BOOST_CHECK_EQUAL(sCount, aExpected);
     };
 
-    sNotice.set(sKey);
+    Prometheus::Notice::set(sKey);
     sTest(R"(status{priority="notice",message="connection error"} 1)");
-    sNotice.clear(sKey);
-    sTest(R"(status{priority="notice",message="connection error"} 0)");
+    Prometheus::Notice::reset(sKey);
+    sTest(R"(status{priority="notice",message="connection error"} 0)", 0);
+
+    Prometheus::Notice::flag("metrics_up");
+    sTest(R"(metrics_up 1)");
 }
 BOOST_AUTO_TEST_SUITE_END()
