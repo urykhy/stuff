@@ -25,7 +25,7 @@ namespace SD {
 
         using Lock = std::unique_lock<std::mutex>;
         mutable std::mutex m_Mutex;
-        Util::EwmaTs       m_Ewma;
+        Util::EwmaTs       m_Latency;
         double             m_LastWeight   = 0;
         time_t             m_LastUpdateTs = 0;
 
@@ -33,20 +33,21 @@ namespace SD {
         {
             Format::Json::Value sJson(::Json::objectValue);
             Format::Json::write(sJson, "weight", weight_i());
+            Format::Json::write(sJson, "threads", m_Params.threads);
             Format::Json::write(sJson, "location", m_Params.location);
             return Format::Json::to_string(sJson, false /* indent */);
         }
 
         double weight_i() const
         {
-            const double sLatency = std::clamp(m_Ewma.estimate(), m_Params.latency_min, m_Params.latency_max);
+            const double sLatency = std::clamp(m_Latency.estimate(), m_Params.latency_min, m_Params.latency_max);
             return m_Params.threads / sLatency;
         }
 
     public:
         NotifyWeight(boost::asio::io_service& aAsio, const Params& aParams)
         : m_Params(aParams)
-        , m_Ewma(0.95, m_Params.latency)
+        , m_Latency(0.95, m_Params.latency)
         {
             m_LastWeight   = weight_i();
             m_LastUpdateTs = time(nullptr);
@@ -57,7 +58,7 @@ namespace SD {
         void add(double aLatency, time_t aNow)
         {
             Lock lk(m_Mutex);
-            bool sNewSecond = m_Ewma.add(aLatency, aNow);
+            bool sNewSecond = m_Latency.add(aLatency, aNow);
             if (sNewSecond) {
                 constexpr int MAX_CHANGE = 10;
                 const double  sWeight    = weight_i();

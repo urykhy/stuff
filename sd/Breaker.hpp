@@ -50,6 +50,7 @@ namespace SD {
             if (m_Zone == Zone::HEAL) {
                 if (m_Spent < HEAL_SECONDS)
                     return;
+                m_Spent = 0;
                 m_Zone = estimate();
                 return;
             }
@@ -99,12 +100,10 @@ namespace SD {
         {
             Lock sLock(m_Mutex);
             prepare(aNow);
-            if (aSuccess)
-            {
+            if (aSuccess) {
                 m_Success++;
                 m_Latency.add(aLatency, aNow);
-            }
-            else
+            } else
                 m_Fail++;
         }
 
@@ -128,11 +127,9 @@ namespace SD {
         PeerStat peer_stat() const
         {
             Lock sLock(m_Mutex);
-            return
-            {
+            return {
                 .success_rate = m_SuccessRate.estimate(),
-                .latency      = m_Latency.estimate()
-            };
+                .latency      = m_Latency.estimate()};
         }
 
         void reset(double aRate, double aLatency)
@@ -144,6 +141,7 @@ namespace SD {
             m_Latency.reset(aLatency);
             m_Zone        = estimate();
             m_CurrentTime = 0;
+            m_Spent       = 0;
         }
     };
 
@@ -204,9 +202,9 @@ namespace SD {
 
             try {
                 tick(aPeer, PERMIT);
-                Time::Meter sMeter;
+                Time::Meter         sMeter;
                 asio_http::Response sResponse = aHandler();
-                const double sELA = sMeter.get().to_double();
+                const double        sELA      = sMeter.get().to_double();
                 if (goodResponse(sResponse)) {
                     sState->add(sELA, aNow, true);
                 } else {

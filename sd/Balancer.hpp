@@ -13,7 +13,7 @@ namespace SD {
     struct PeerStat
     {
         double success_rate = 0;
-        double latency = 0;
+        double latency      = 0;
     };
 
     struct PeerStatProvider
@@ -36,12 +36,14 @@ namespace SD {
         struct Entry
         {
             std::string key;
-            double      weight = 0;
-            std::string location;
+            double      weight   = 0;
+            uint32_t    threads  = 1;
+            std::string location = {};
 
             void from_json(const ::Json::Value& aJson)
             {
                 Parser::Json::from_object(aJson, "weight", weight);
+                Parser::Json::from_object(aJson, "threads", threads);
                 Parser::Json::from_object(aJson, "location", location);
             }
         };
@@ -59,6 +61,12 @@ namespace SD {
         State              m_State;
         std::string        m_LastError;
         ProviderPtr        m_Provider;
+
+        struct History
+        {
+            double weight = 0;
+        };
+        std::map<std::string, History> m_History;
 
         using Error = std::runtime_error;
 
@@ -87,32 +95,55 @@ namespace SD {
             update(sState);
         }
 
+        void adjust_weights(std::vector<Entry>& aState)
+        {
+            const double LOSS_MAX     = 0.5;
+            const double LOSS_FACTOR  = 0.90;
+            const double BOOST_FACTOR = 1.05;
+
+            for (auto& x : aState) {
+                const auto   sStat           = m_Provider->peer_stat(x.key);
+                auto&        sHistory        = m_History[x.key];
+                const double sPreviousWeight = sHistory.weight > 0 ? sHistory.weight : x.weight;
+                double       sTargetWeight   = x.weight;
+                if (sStat.latency > x.threads / x.weight /* server latency */) {
+                    const double sClientWeight = x.threads / sStat.latency;
+                    sTargetWeight              = std::max(sClientWeight, sTargetWeight * LOSS_MAX);
+                }
+                if (sStat.success_rate < 0.95) {
+                    sTargetWeight *= std::max(sStat.success_rate, LOSS_MAX);
+                }
+                if (sTargetWeight >= sPreviousWeight) {
+                    sTargetWeight = std::min(sTargetWeight, sPreviousWeight * BOOST_FACTOR);
+                } else {
+                    sTargetWeight = std::max(sTargetWeight, sPreviousWeight * LOSS_FACTOR);
+                }
+                x.weight        = sTargetWeight;
+                sHistory.weight = sTargetWeight;
+            }
+        }
+
 #ifdef BOOST_TEST_MODULE
     public:
 #endif
-        void update(std::vector<Entry>& sState)
+        // change aState
+        void
+        update(std::vector<Entry>& aState)
         {
             Lock lk(m_Mutex);
-            if (m_Provider) {
-                for (auto& x : sState)
-                {
-                    const auto sStat = m_Provider->peer_stat(x.key);
-                    if (sStat.success_rate < 0.95) {
-                        x.weight *= sStat.success_rate;
-                    }
-                }
-            }
+            if (m_Provider)
+                adjust_weights(aState);
 
-            const double sTotalWeight = [&sState]() {
+            const double sTotalWeight = [&aState]() {
                 double sSum = 0;
-                for (auto& x : sState)
+                for (auto& x : aState)
                     sSum += x.weight;
                 return sSum;
             }();
 
             m_State.clear();
             double sWeight = 0;
-            for (auto& x : sState) {
+            for (auto& x : aState) {
                 sWeight += (x.weight / sTotalWeight);
                 m_State[sWeight] = x;
             }
