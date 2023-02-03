@@ -22,34 +22,46 @@ namespace SD {
     private:
         const Params            m_Params;
         std::shared_ptr<Notify> m_Notify;
+        using Info = Util::EwmaRps::Info;
 
         using Lock = std::unique_lock<std::mutex>;
         mutable std::mutex m_Mutex;
-        Util::EwmaTs       m_Latency;
+        Util::EwmaRps      m_Ewma;
         double             m_LastWeight   = 0;
+        double             m_LastRPS      = 0;
         time_t             m_LastUpdateTs = 0;
+
+        Info info_i() const
+        {
+            auto sInfo    = m_Ewma.estimate();
+            sInfo.latency = std::clamp(m_Ewma.estimate().latency, m_Params.latency_min, m_Params.latency_max);
+            sInfo.rps     = std::clamp(m_Ewma.estimate().rps, m_Params.threads / m_Params.latency_max, m_Params.threads / m_Params.latency_min);
+            return sInfo;
+        }
 
         std::string format_i()
         {
             Format::Json::Value sJson(::Json::objectValue);
-            Format::Json::write(sJson, "weight", weight_i());
+            auto [sLatency, sRPS] = info_i();
+            Format::Json::write(sJson, "weight", m_Params.threads / sLatency);
+            Format::Json::write(sJson, "rps", sRPS);
             Format::Json::write(sJson, "threads", m_Params.threads);
             Format::Json::write(sJson, "location", m_Params.location);
             return Format::Json::to_string(sJson, false /* indent */);
         }
 
-        double weight_i() const
+        static int relative(double a, double b)
         {
-            const double sLatency = std::clamp(m_Latency.estimate(), m_Params.latency_min, m_Params.latency_max);
-            return m_Params.threads / sLatency;
+            const double sChange = std::abs(a - b) / std::max(a, b);
+            return std::lround(sChange * 100);
         }
 
     public:
         NotifyWeight(boost::asio::io_service& aAsio, const Params& aParams)
         : m_Params(aParams)
-        , m_Latency(0.95, m_Params.latency)
+        , m_Ewma(0.95, m_Params.latency)
         {
-            m_LastWeight   = weight_i();
+            m_LastWeight   = m_Params.threads / info_i().latency;
             m_LastUpdateTs = time(nullptr);
             m_Notify       = std::make_shared<SD::Notify>(aAsio, aParams.notify, format_i());
             m_Notify->start();
@@ -58,26 +70,28 @@ namespace SD {
         void add(double aLatency, time_t aNow)
         {
             Lock lk(m_Mutex);
-            bool sNewSecond = m_Latency.add(aLatency, aNow);
+            bool sNewSecond = m_Ewma.add(aLatency, aNow);
             if (sNewSecond) {
                 constexpr int MAX_CHANGE = 10;
-                const double  sWeight    = weight_i();
-                const double  sChange    = std::abs(m_LastWeight - sWeight) / std::max(m_LastWeight, sWeight);
-                const int     sRelative  = std::lround(sChange * 100);
+                auto [sLatency, sRPS]    = info_i();
+                const double sWeight     = m_Params.threads / sLatency;
+                const int    sRelative   = std::max(
+                    relative(m_LastWeight, sWeight),
+                    relative(m_LastRPS, sRPS));
                 if (sRelative > MAX_CHANGE or
-                    (sRelative > 0 and aNow >= m_LastUpdateTs + MAX_CHANGE - sRelative)) {
-                    // BOOST_TEST_MESSAGE("new weight: " << sWeight << ", relative change: " << sRelative << ", step " << aNow - m_LastUpdateTs);
+                    (sRelative > 3 and aNow >= m_LastUpdateTs + MAX_CHANGE - sRelative)) {
                     m_Notify->update(format_i());
                     m_LastWeight   = sWeight;
+                    m_LastRPS      = sRPS;
                     m_LastUpdateTs = aNow;
                 }
             }
         }
 
-        double weight() const
+        Info info() const
         {
             Lock lk(m_Mutex);
-            return weight_i();
+            return info_i();
         }
     };
 } // namespace SD

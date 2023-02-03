@@ -75,7 +75,8 @@ namespace Etcd {
         : m_Service(aService)
         , m_Params(aParams)
         , m_Coro(aCoro)
-        {}
+        {
+        }
 
         std::string get(const std::string& aKey)
         {
@@ -100,7 +101,7 @@ namespace Etcd {
             const auto sResult = request("kv/range", Protocol::list(m_Params.prefix + aKey, aLimit, aKeysOnly));
 
             List sList;
-            if (sResult.isObject()) {
+            if (sResult.isObject() and sResult.isMember("kvs")) {
                 Parser::Json::from_value(sResult["kvs"], sList);
                 for (auto& sItem : sList)
                     sItem.key.erase(0, m_Params.prefix.size());

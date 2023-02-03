@@ -5,24 +5,43 @@
 #include <array>
 #include <memory>
 
-#include "Balancer.hpp"
-
+#include <asio_http/API.hpp>
 #include <exception/Error.hpp>
 #include <prometheus/GetOrCreate.hpp>
+#include <time/Meter.hpp>
 #include <unsorted/Ewma.hpp>
 #include <unsorted/Random.hpp>
 
 namespace SD {
+
+    struct Statistics
+    {
+        double success_rate = 0;
+        double latency      = 0;
+    };
+
+    struct IBreaker
+    {
+        virtual asio_http::Response wrap(
+            const std::string&                   aPeer,
+            std::function<asio_http::Response()> aHandler,
+            time_t                               aNow = time(nullptr)) = 0;
+
+        virtual Statistics statistics(const std::string& aPeer)                     = 0;
+        virtual void       ensure(const std::string& aPeer, time_t aNow = time(nullptr)) = 0;
+        virtual ~IBreaker(){};
+    };
+    using BreakerPtr = std::shared_ptr<IBreaker>;
 
     class PeerState
     {
         using Lock = std::unique_lock<std::mutex>;
         mutable std::mutex m_Mutex;
 
-        unsigned     m_Success = 0;
-        unsigned     m_Fail    = 0;
-        Util::Ewma   m_SuccessRate;
-        Util::EwmaTs m_Latency;
+        unsigned      m_Success = 0;
+        unsigned      m_Fail    = 0;
+        Util::Ewma    m_SuccessRate;
+        Util::EwmaRps m_Latency;
 
         enum class Zone
         {
@@ -51,7 +70,7 @@ namespace SD {
                 if (m_Spent < HEAL_SECONDS)
                     return;
                 m_Spent = 0;
-                m_Zone = estimate();
+                m_Zone  = estimate();
                 return;
             }
             if (m_Zone == Zone::RED) {
@@ -124,12 +143,12 @@ namespace SD {
             }
         }
 
-        PeerStat peer_stat() const
+        Statistics statistics() const
         {
             Lock sLock(m_Mutex);
             return {
                 .success_rate = m_SuccessRate.estimate(),
-                .latency      = m_Latency.estimate()};
+                .latency      = m_Latency.estimate().latency};
         }
 
         void reset(double aRate, double aLatency)
@@ -138,14 +157,14 @@ namespace SD {
             m_Success = 0;
             m_Fail    = 0;
             m_SuccessRate.reset(aRate);
-            m_Latency.reset(aLatency);
+            m_Latency.reset({aLatency, 0});
             m_Zone        = estimate();
             m_CurrentTime = 0;
             m_Spent       = 0;
         }
     };
 
-    class Breaker : public PeerStatProvider
+    class Breaker : public IBreaker
     {
         const std::string m_AVS;
 
@@ -187,19 +206,15 @@ namespace SD {
         {
         }
 
-        template <class T>
-        asio_http::Response wrap(const std::string& aPeer, T&& aHandler, time_t aNow = time(nullptr))
+        asio_http::Response wrap(
+            const std::string&                   aPeer,
+            std::function<asio_http::Response()> aHandler,
+            time_t                               aNow = time(nullptr)) override
         {
-            static const std::string_view BLOCK("block");
             static const std::string_view PERMIT("permit");
             static const std::string_view FAIL("fail");
 
             auto sState = getOrCreate(aPeer);
-            if (!sState->test(aNow)) {
-                tick(aPeer, BLOCK);
-                throw Error("request to " + aPeer + " blocked by circuit breaker");
-            }
-
             try {
                 tick(aPeer, PERMIT);
                 Time::Meter         sMeter;
@@ -219,9 +234,13 @@ namespace SD {
             }
         }
 
-        PeerStat peer_stat(const std::string& aPeer) override
+        void ensure(const std::string& aPeer, time_t aNow = time(nullptr)) override
         {
-            return getOrCreate(aPeer)->peer_stat();
+            static const std::string_view BLOCK("block");
+            if (!getOrCreate(aPeer)->test(aNow)) {
+                tick(aPeer, BLOCK);
+                throw Breaker::Error("SD: request to " + aPeer + " blocked by circuit breaker");
+            }
         }
 
         void reset(const std::string& aPeer, double aRate, double aLatency)
@@ -229,9 +248,9 @@ namespace SD {
             getOrCreate(aPeer)->reset(aRate, aLatency);
         }
 
-        bool test(const std::string& aPeer, time_t aNow = time(nullptr))
+        Statistics statistics(const std::string& aPeer) override
         {
-            return getOrCreate(aPeer)->test(aNow);
+            return getOrCreate(aPeer)->statistics();
         }
     };
 

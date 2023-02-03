@@ -4,24 +4,13 @@
 
 #include <boost/asio/steady_timer.hpp>
 
+#include "Breaker.hpp"
+
 #include <etcd/Etcd.hpp>
 #include <parser/Json.hpp>
 #include <unsorted/Random.hpp>
 
 namespace SD {
-
-    struct PeerStat
-    {
-        double success_rate = 0;
-        double latency      = 0;
-    };
-
-    struct PeerStatProvider
-    {
-        virtual PeerStat peer_stat(const std::string& aPeer) = 0;
-        virtual ~PeerStatProvider(){};
-    };
-    using ProviderPtr = std::shared_ptr<PeerStatProvider>;
 
     struct Balancer : public std::enable_shared_from_this<Balancer>
     {
@@ -31,24 +20,37 @@ namespace SD {
             std::string          prefix;
             int                  period = 10;
             std::string          location;
+            bool                 use_client_latency = true;
+            bool                 use_server_rps     = false;
         };
 
         struct Entry
         {
             std::string key;
             double      weight   = 0;
+            double      rps      = 0;
             uint32_t    threads  = 1;
             std::string location = {};
 
             void from_json(const ::Json::Value& aJson)
             {
                 Parser::Json::from_object(aJson, "weight", weight);
+                Parser::Json::from_object(aJson, "rps", rps);
                 Parser::Json::from_object(aJson, "threads", threads);
                 Parser::Json::from_object(aJson, "location", location);
+            }
+            double latency() const
+            {
+                return threads / weight;
+            }
+            double utilization() const
+            {
+                return rps / weight;
             }
         };
 
         using State = std::map<double, Entry>;
+        using Error = std::runtime_error;
 
     private:
         const Params              m_Params;
@@ -60,15 +62,13 @@ namespace SD {
         mutable std::mutex m_Mutex;
         State              m_State;
         std::string        m_LastError;
-        ProviderPtr        m_Provider;
+        BreakerPtr         m_Breaker;
 
         struct History
         {
             double weight = 0;
         };
         std::map<std::string, History> m_History;
-
-        using Error = std::runtime_error;
 
         void read_i(boost::asio::yield_context yield)
         {
@@ -100,15 +100,20 @@ namespace SD {
             const double LOSS_MAX     = 0.5;
             const double LOSS_FACTOR  = 0.90;
             const double BOOST_FACTOR = 1.05;
+            const double UTIL_MAX     = 0.75;
 
             for (auto& x : aState) {
-                const auto   sStat           = m_Provider->peer_stat(x.key);
+                const auto   sStat           = m_Breaker->statistics(x.key);
                 auto&        sHistory        = m_History[x.key];
                 const double sPreviousWeight = sHistory.weight > 0 ? sHistory.weight : x.weight;
                 double       sTargetWeight   = x.weight;
-                if (sStat.latency > x.threads / x.weight /* server latency */) {
-                    const double sClientWeight = x.threads / sStat.latency;
-                    sTargetWeight              = std::max(sClientWeight, sTargetWeight * LOSS_MAX);
+                if (m_Params.use_client_latency and sStat.latency > x.latency()) {
+                    double sClientWeight = x.threads / sStat.latency;
+                    sTargetWeight        = std::max(sClientWeight, sTargetWeight * LOSS_MAX);
+                }
+                if (m_Params.use_server_rps and x.utilization() > UTIL_MAX) {
+                    double sUtil = std::min(x.utilization(), 1.);
+                    sTargetWeight *= (1. + UTIL_MAX - sUtil);
                 }
                 if (sStat.success_rate < 0.95) {
                     sTargetWeight *= std::max(sStat.success_rate, LOSS_MAX);
@@ -131,7 +136,7 @@ namespace SD {
         update(std::vector<Entry>& aState)
         {
             Lock lk(m_Mutex);
-            if (m_Provider)
+            if (m_Breaker)
                 adjust_weights(aState);
 
             const double sTotalWeight = [&aState]() {
@@ -161,12 +166,6 @@ namespace SD {
             }
         }
 
-        void clear()
-        {
-            Lock lk(m_Mutex);
-            m_State.clear();
-        }
-
     public:
         Balancer(boost::asio::io_service& aService, const Params& aParams)
         : m_Params(aParams)
@@ -175,10 +174,10 @@ namespace SD {
         {
         }
 
-        void with_peer_stat(ProviderPtr aProvider)
+        void with_breaker(BreakerPtr aBreaker)
         {
             Lock lk(m_Mutex);
-            m_Provider = aProvider;
+            m_Breaker = aBreaker;
         }
 
         State state() const
@@ -187,17 +186,20 @@ namespace SD {
             return m_State;
         }
 
-        Entry random()
+        std::string random()
         {
             Lock lk(m_Mutex);
             if (m_State.empty())
                 throw Error("SD: no peers available");
-            auto sIt = m_State.lower_bound(Util::drand48());
-            if (sIt != m_State.end()) {
-                return sIt->second;
+            std::string sPeer;
+            if (auto sIt = m_State.lower_bound(Util::drand48()); sIt != m_State.end()) {
+                sPeer = sIt->second.key;
             } else {
-                return m_State.rbegin()->second;
+                sPeer = m_State.rbegin()->second.key;
             }
+            if (m_Breaker)
+                m_Breaker->ensure(sPeer);
+            return sPeer;
         }
 
         std::string lastError() const
@@ -206,17 +208,33 @@ namespace SD {
             return m_LastError;
         }
 
-        void start()
+        std::future<bool> start()
         {
-            boost::asio::spawn(m_Timer.get_executor(), [this, p = shared_from_this()](boost::asio::yield_context yield) {
-                boost::beast::error_code ec;
-                while (!m_Stop) {
-                    read(yield);
-                    m_Timer.expires_from_now(std::chrono::seconds(m_Params.period));
-                    m_Timer.async_wait(yield[ec]);
-                }
-                clear();
-            });
+            auto sPromise = std::make_shared<std::promise<bool>>();
+            boost::asio::spawn(
+                m_Timer.get_executor(),
+                [this, p = shared_from_this(), sPromise](boost::asio::yield_context yield) mutable {
+                    boost::beast::error_code ec;
+                    while (!m_Stop) {
+                        read(yield);
+                        if (sPromise) {
+                            Lock lk(m_Mutex);
+                            if (!m_State.empty()) {
+                                sPromise->set_value(true);
+                                sPromise.reset();
+                            }
+                        }
+                        if (sPromise)
+                            m_Timer.expires_from_now(std::chrono::milliseconds(100));
+                        else
+                            m_Timer.expires_from_now(std::chrono::seconds(m_Params.period));
+                        m_Timer.async_wait(yield[ec]);
+                    }
+                    Lock lk(m_Mutex);
+                    m_State.clear();
+                    m_LastError = "stopped";
+                });
+            return sPromise->get_future();
         }
 
         void stop()

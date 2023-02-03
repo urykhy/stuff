@@ -41,7 +41,7 @@ BOOST_AUTO_TEST_CASE(simple)
     std::this_thread::sleep_for(4s); // sleep more than ttl
 
     // ensure key still here
-    BOOST_CHECK_EQUAL(true, sNotify->status().first);
+    BOOST_CHECK_EQUAL(true, sNotify->status().empty());
     BOOST_CHECK_EQUAL(sValue, m_Client.get(sParams.key));
 
     // update value, it must be updated in etcd too
@@ -54,22 +54,24 @@ BOOST_AUTO_TEST_CASE(simple)
     SD::Balancer::Params sBalancerParams;
     sBalancerParams.prefix = "notify/instance/";
     auto sBalancer         = std::make_shared<SD::Balancer>(m_Asio.service(), sBalancerParams);
-    sBalancer->start();
+    sBalancer->start().get();
 
-    std::this_thread::sleep_for(10ms);
     const auto sState = sBalancer->state();
-
     BOOST_REQUIRE_EQUAL(1, sState.size());
     const auto& sEntry = sState.begin()->second;
     BOOST_CHECK_EQUAL("a01", sEntry.key);
     BOOST_CHECK_EQUAL(10, sEntry.weight);
 
     // pick
-    BOOST_CHECK_EQUAL("a01", sBalancer->random().key);
+    BOOST_CHECK_EQUAL("a01", sBalancer->random());
 
     // stop notifier
     sNotify->stop();
-    std::this_thread::sleep_for(100ms);
+    for (int i = 0; i < 10; i++) {
+        std::this_thread::sleep_for(100ms);
+        if (sNotify->status() == "stopped")
+            break;
+    }
 
     // ensure key deleted from etcd
     BOOST_CHECK_EQUAL("", m_Client.get(sParams.key));
@@ -88,11 +90,13 @@ BOOST_AUTO_TEST_CASE(notify_weight)
     }
     std::this_thread::sleep_for(0.2s);
 
-    BOOST_TEST_MESSAGE("current weight: " << sNotify.weight());
+    BOOST_TEST_MESSAGE("current weight: " << 1 / sNotify.info().latency);
+    BOOST_TEST_MESSAGE("current rps: " << sNotify.info().rps);
+    BOOST_CHECK_CLOSE(sNotify.info().rps, 10, 5 /* % */);
     const std::string sValue = m_Client.get(sParams.notify.key);
     BOOST_TEST_MESSAGE("etcd value: " << sValue);
     auto sRoot = Parser::Json::parse(sValue);
-    BOOST_CHECK_CLOSE(sRoot["weight"].asDouble(), sNotify.weight(), 5 /* % */);
+    BOOST_CHECK_CLOSE(sRoot["weight"].asDouble(), 1 / sNotify.info().latency, 5 /* % */);
 }
 BOOST_AUTO_TEST_CASE(balance_by_weight)
 {
@@ -107,7 +111,7 @@ BOOST_AUTO_TEST_CASE(balance_by_weight)
     std::map<std::string, size_t> sStat;
     const size_t                  COUNT = 20000;
     for (size_t i = 0; i < COUNT; i++) {
-        sStat[sBalancer->random().key]++;
+        sStat[sBalancer->random()]++;
     }
     for (auto& x : sStat) {
         if (x.first == "a")
@@ -118,27 +122,45 @@ BOOST_AUTO_TEST_CASE(balance_by_weight)
             BOOST_CHECK_CLOSE(6 / TOTALW, x.second / (double)COUNT, 5);
     }
 }
-BOOST_AUTO_TEST_CASE(balance_with_breaker)
+BOOST_AUTO_TEST_SUITE_END()
+
+struct WithBreaker : WithClient
+{
+    std::shared_ptr<SD::Breaker>  m_Breaker = std::make_shared<SD::Breaker>("not-used");
+    SD::Balancer::Params          m_BalancerParams;
+    std::shared_ptr<SD::Balancer> m_Balancer = std::make_shared<SD::Balancer>(m_Asio.service(), m_BalancerParams);
+
+    WithBreaker()
+    {
+        m_Balancer->with_breaker(m_Breaker); // use breaker success rate
+    }
+
+    void apply_weights(const std::vector<SD::Balancer::Entry>& aData)
+    {
+        // ajust and print weights
+        auto sStep = [&]() {
+            std::vector<SD::Balancer::Entry> sTmpData{aData}; // force tmp copy
+            m_Balancer->update(sTmpData);
+            {
+                auto sState = m_Balancer->state();
+                for (auto& [_, sPeer] : sState)
+                    BOOST_TEST_MESSAGE(fmt::format("{} | weight {:>4.2f}", sPeer.key, sPeer.weight));
+            }
+        };
+        const int UPD_COUNT = 10;
+        for (int i = 0; i < UPD_COUNT; i++)
+            sStep();
+    }
+};
+BOOST_FIXTURE_TEST_SUITE(balancer, WithBreaker)
+BOOST_AUTO_TEST_CASE(with_breaker)
 {
     // prepare breaker state
-    auto sBreaker = std::make_shared<SD::Breaker>("not-used");
-    sBreaker->reset("a", 1.0, 0);
-    sBreaker->reset("b", 0.8, 0); // reduced weight
-    sBreaker->reset("c", 0.6, 0); // reduced weight + drops
-
-    // prepare balancer and link to breaker
-    SD::Balancer::Params sBalancerParams;
-    auto                 sBalancer = std::make_shared<SD::Balancer>(m_Asio.service(), sBalancerParams);
-    sBalancer->with_peer_stat(sBreaker); // use breaker success rate
+    m_Breaker->reset("a", 1.0, 0);
+    m_Breaker->reset("b", 0.8, 0); // reduced weight
+    m_Breaker->reset("c", 0.6, 0); // reduced weight + drops
     std::vector<SD::Balancer::Entry> sData{{"a", 1}, {"b", 1}, {"c", 1}};
-    sBalancer->update(sData);
-
-    // balancer state
-    {
-        auto sState = sBalancer->state();
-        for (auto& [_, sPeer] : sState)
-            BOOST_TEST_MESSAGE(fmt::format("{} | weight {:>4.2f}", sPeer.key, sPeer.weight));
-    }
+    apply_weights(sData);
 
     // put load
     struct Stat
@@ -149,11 +171,15 @@ BOOST_AUTO_TEST_CASE(balance_with_breaker)
     std::map<std::string, Stat> sStat;
     const size_t                COUNT = 20000;
     for (size_t i = 0; i < COUNT; i++) {
-        const std::string sPeer = sBalancer->random().key;
-        if (sBreaker->test(sPeer))
+        try {
+            std::string sPeer = m_Balancer->random();
             sStat[sPeer].success++;
-        else
+        } catch (const SD::Breaker::Error& e) {
+            std::string sTmp = e.what();
+            size_t sPos = sTmp.find(" blocked by");
+            std::string sPeer = sTmp.substr(sPos-1, 1); // one-char names
             sStat[sPeer].fail++;
+        }
     }
 
     // output stats
@@ -164,42 +190,23 @@ BOOST_AUTO_TEST_CASE(balance_with_breaker)
         BOOST_TEST_MESSAGE(fmt::format("{} | total share ({:>4.1f}%) | success {:>5} ({:>4.1f}%) | fail {:>5} ({:>4.1f}%)",
                                        x.first, sTotalPct, x.second.success, sSuccessPct, x.second.fail, sFailPct));
         if (x.first == "c")
-            BOOST_CHECK_CLOSE(sFailPct, 10, 10);
+            BOOST_CHECK_CLOSE(sFailPct, 10, 5 /* % */);
     }
 }
-BOOST_AUTO_TEST_CASE(balance_with_client_latency)
+BOOST_AUTO_TEST_CASE(with_client_latency)
 {
     // prepare breaker state
-    auto         sBreaker = std::make_shared<SD::Breaker>("not-used");
-    sBreaker->reset("a", 1.0, 1.0); // peer, success_rate, latency
-    sBreaker->reset("b", 1.0, 1.5);
-    sBreaker->reset("c", 1.0, 2.0);
-
-    // prepare balancer and link to breaker
-    SD::Balancer::Params sBalancerParams;
-    auto                 sBalancer = std::make_shared<SD::Balancer>(m_Asio.service(), sBalancerParams);
-    sBalancer->with_peer_stat(sBreaker); // use breaker success rate
+    m_Breaker->reset("a", 1.0, 1.0); // peer, success_rate, latency
+    m_Breaker->reset("b", 1.0, 1.5);
+    m_Breaker->reset("c", 1.0, 2.0);
     std::vector<SD::Balancer::Entry> sData{{"a", 1}, {"b", 1}, {"c", 1}};
-
-    // ajust and print weights
-    auto sStep = [&]() {
-        std::vector<SD::Balancer::Entry> sTmpData{sData}; // force tmp copy
-        sBalancer->update(sTmpData);
-        {
-            auto sState = sBalancer->state();
-            for (auto& [_, sPeer] : sState)
-                BOOST_TEST_MESSAGE(fmt::format("{} | weight {:>4.2f}", sPeer.key, sPeer.weight));
-        }
-    };
-    const int COUNT = 10;
-    for (int i = 0; i < COUNT; i++)
-        sStep();
+    apply_weights(sData);
 
     // check
     auto sFinal = [&]() {
         std::map<std::string, double> sFinal;
 
-        auto sState = sBalancer->state();
+        auto sState = m_Balancer->state();
         for (auto& [_, sPeer] : sState)
             sFinal[sPeer.key] = sPeer.weight;
         return sFinal;

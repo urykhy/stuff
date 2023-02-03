@@ -18,16 +18,25 @@ namespace Util {
         void   reset(double aValue) { m_Value = aValue; }
     };
 
-    class EwmaTs
+    class EwmaRps
     {
-        Ewma     m_Ewma;
+        Ewma m_Latency;
+        Ewma m_RPS;
+
         time_t   m_LastUpdateTs = 0;
         double   m_Value        = 0;
         uint32_t m_Count        = 0;
 
     public:
-        EwmaTs(double aFactor = 0.95, double aValue = 0)
-        : m_Ewma(aFactor, aValue)
+        struct Info
+        {
+            double latency = 0;
+            double rps     = 0;
+        };
+
+        EwmaRps(double aFactor = 0.95, double aValue = 0)
+        : m_Latency(aFactor, aValue)
+        , m_RPS(aFactor, 0)
         {
         }
 
@@ -36,7 +45,9 @@ namespace Util {
             bool sNewSecond = false;
             if (aNow > m_LastUpdateTs) {
                 if (m_Count > 0) {
-                    m_Ewma.add(m_Value / (double)m_Count);
+                    double sTime = aNow - m_LastUpdateTs;
+                    m_Latency.add(m_Value / (double)m_Count);
+                    m_RPS.add(m_Count / sTime);
                 }
                 m_Value        = 0;
                 m_Count        = 0;
@@ -47,7 +58,14 @@ namespace Util {
             m_Count++;
             return sNewSecond;
         }
-        double estimate() const { return m_Ewma.estimate(); }
-        void   reset(double aValue) { m_Ewma.reset(aValue); }
+        Info estimate() const
+        {
+            return {m_Latency.estimate(), m_RPS.estimate()};
+        }
+        void reset(const Info& aInfo)
+        {
+            m_Latency.reset(aInfo.latency);
+            m_RPS.reset(aInfo.rps);
+        }
     };
 } // namespace Util

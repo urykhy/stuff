@@ -550,22 +550,22 @@ BOOST_FIXTURE_TEST_CASE(discovery, WithServer)
     SD::NotifyWeight::Params sParams;
     sParams.location = "test-location";
     sDiscovery.with_discovery(m_Asio.service(), "127.0.0.1:3000", "test-service", sParams);
-
     sDiscovery.configure(m_Router);
-    Threads::sleep(0.1); // wait until etcd updated
+
+    api::discovery_1_0::client sClient(m_HttpClient, m_Asio.service(), "test-service");
+    sClient.with_breaker();
+    sClient.__wait();
 
     {
+        // after client.__wait, to ensure server have registered
         Etcd::Client::Params sParams;
         Etcd::Client         sClient(m_Asio.service(), sParams);
         auto                 sList = sClient.list("discovery/swagger");
         BOOST_REQUIRE_EQUAL(1, sList.size());
         BOOST_CHECK_EQUAL(sList[0].key, "discovery/swagger/test-service/discovery/1.0/127.0.0.1:3000");
-        BOOST_CHECK_EQUAL(sList[0].value, R"({"location":"test-location","weight":10.0})");
+        BOOST_CHECK_EQUAL(sList[0].value, R"({"location":"test-location","rps":0.001,"threads":1,"weight":10.0})");
     }
 
-    api::discovery_1_0::client sClient(m_HttpClient, m_Asio.service(), "test-service");
-    sClient.with_breaker();
-    Threads::sleep(0.1); // wait until we collect peers from etcd
     auto sResponse = sClient.get_discovery({});
     BOOST_CHECK_EQUAL(sResponse.body, "success");
 
@@ -593,18 +593,16 @@ BOOST_FIXTURE_TEST_CASE(breaker, WithServer)
     SD::NotifyWeight::Params sParams;
     sParams.location = "test-location";
     sDiscovery.with_discovery(m_Asio.service(), "127.0.0.1:3000", "test-service", sParams);
-
     sDiscovery.configure(m_Router);
-    Threads::sleep(0.1); // wait until etcd updated
 
     api::discovery_1_0::client sClient(m_HttpClient, m_Asio.service(), "test-service");
     auto sBreaker = sClient.with_breaker();
-    Threads::sleep(0.1); // wait until we collect peers from etcd
+    sClient.__wait();
 
     bool sBreaked = false;
     for (int i = 0; i < 15 and !sBreaked; i++) {
         try {
-            BOOST_TEST_MESSAGE("success rate: " << sBreaker->peer_stat("127.0.0.1:3000").success_rate);
+            BOOST_TEST_MESSAGE("success rate: " << sBreaker->statistics("127.0.0.1:3000").success_rate);
             auto sResponse = sClient.get_discovery({});
             BOOST_CHECK_EQUAL(sResponse.body, "success");
         } catch (const SD::Breaker::Error& e) {

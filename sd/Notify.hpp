@@ -27,9 +27,9 @@ namespace SD {
         mutable std::mutex m_Mutex;
         int64_t            m_Lease = 0;
         std::string        m_Value;
-        bool               m_Refresh = false;
-        bool               m_Update  = false;
-        std::string        m_LastError;
+        bool               m_Refresh   = false;
+        bool               m_Update    = false;
+        std::string        m_LastError = "init";
 
         int64_t getLease()
         {
@@ -55,7 +55,7 @@ namespace SD {
             sClient.put(m_Params.key, sValue, sLease);
 
             Lock lk(m_Mutex);
-            m_Lease   = sLease;
+            m_Lease = sLease;
             m_LastError.clear();
             if (sValue != m_Value) // user make new update ?
                 return;
@@ -108,11 +108,10 @@ namespace SD {
             m_Timer.cancel();
         }
 
-        using Status = std::pair<bool, std::string>;
-        Status status() const
+        std::string status() const
         {
             Lock lk(m_Mutex);
-            return {m_Refresh, m_LastError};
+            return m_LastError;
         }
 
         void start()
@@ -121,13 +120,15 @@ namespace SD {
                 boost::beast::error_code ec;
                 while (!m_Stop) {
                     refresh(yield);
-                    if (m_Update)   // user's update pending
+                    if (m_Update) // user's update pending
                         m_Timer.expires_from_now(std::chrono::milliseconds(10));
                     else
                         m_Timer.expires_from_now(std::chrono::seconds(m_Params.period));
                     m_Timer.async_wait(yield[ec]);
                 }
                 cleanup(yield);
+                Lock lk(m_Mutex);
+                m_LastError = "stopped";
             });
         }
 
