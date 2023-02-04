@@ -94,5 +94,11 @@ tasks:
     cmds:
       - echo -n "ZK "
       - curl -s zookeeper.kafka:7070/metrics | grep 'jvm_memory_bytes_used.*area="heap"' | awk '{printf "%.f\n", $2}' | numfmt --to=iec
-      - echo -n "BROKER "
-      - curl -s broker-1.kafka:7071/metrics | grep 'jvm_memory_bytes_used.*area="heap"' | awk '{printf "%.f\n", $2}' | numfmt --to=iec
+      - |
+        {{ range $i, $B := .brokers | splitLines }}
+        echo -n "{{$B}} "
+        curl -s {{$B}}:7071/metrics | grep 'jvm_memory_bytes_used.*area="heap"' | awk '{printf "%.f\n", $2}' | numfmt --to=iec
+        {{ end }}
+    vars:
+      brokers:
+        sh: task broker:show | grep kafka | sed -ne 's/[[:digit:]]\+[[:space:]]\+\([^:]\+\):.*/\1/p'
