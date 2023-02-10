@@ -27,8 +27,8 @@ namespace SD {
             std::function<asio_http::Response()> aHandler,
             time_t                               aNow = time(nullptr)) = 0;
 
-        virtual Statistics statistics(const std::string& aPeer)                     = 0;
-        virtual void       ensure(const std::string& aPeer, time_t aNow = time(nullptr)) = 0;
+        virtual Statistics statistics(const std::string& aPeer)                          = 0;
+        virtual bool       test(const std::string& aPeer, time_t aNow = time(nullptr))   = 0;
         virtual ~IBreaker(){};
     };
     using BreakerPtr = std::shared_ptr<IBreaker>;
@@ -234,13 +234,14 @@ namespace SD {
             }
         }
 
-        void ensure(const std::string& aPeer, time_t aNow = time(nullptr)) override
+        bool test(const std::string& aPeer, time_t aNow = time(nullptr)) override
         {
             static const std::string_view BLOCK("block");
             if (!getOrCreate(aPeer)->test(aNow)) {
                 tick(aPeer, BLOCK);
-                throw Breaker::Error("SD: request to " + aPeer + " blocked by circuit breaker");
+                return false;
             }
+            return true;
         }
 
         void reset(const std::string& aPeer, double aRate, double aLatency)

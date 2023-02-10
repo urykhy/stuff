@@ -1,6 +1,7 @@
 #pragma once
 
 #include <mutex>
+#include <numeric>
 
 #include <boost/asio/steady_timer.hpp>
 
@@ -16,25 +17,28 @@ namespace SD {
     {
         struct Params
         {
-            Etcd::Client::Params addr;
-            std::string          prefix;
-            int                  period = 10;
-            std::string          location;
+            Etcd::Client::Params addr               = {};
+            std::string          prefix             = {};
+            int                  period             = 10;
+            std::string          location           = {};
             bool                 use_client_latency = true;
             bool                 use_server_rps     = false;
+            bool                 second_chance      = false;
         };
 
         struct Entry
         {
             std::string key;
-            double      weight   = 0;
-            double      rps      = 0;
-            uint32_t    threads  = 1;
-            std::string location = {};
+            double      weight    = 0;
+            double      avail_rps = 0;
+            double      rps       = 0;
+            uint32_t    threads   = 1;
+            std::string location  = {};
 
             void from_json(const ::Json::Value& aJson)
             {
                 Parser::Json::from_object(aJson, "weight", weight);
+                avail_rps = weight;
                 Parser::Json::from_object(aJson, "rps", rps);
                 Parser::Json::from_object(aJson, "threads", threads);
                 Parser::Json::from_object(aJson, "location", location);
@@ -61,8 +65,13 @@ namespace SD {
         using Lock = std::unique_lock<std::mutex>;
         mutable std::mutex m_Mutex;
         State              m_State;
-        std::string        m_LastError;
-        BreakerPtr         m_Breaker;
+
+        double m_RPS         = 0;
+        double m_AvailRPS    = 0;
+        double m_TotalWeight = 0;
+
+        std::string m_LastError;
+        BreakerPtr  m_Breaker;
 
         struct History
         {
@@ -139,12 +148,24 @@ namespace SD {
             if (m_Breaker)
                 adjust_weights(aState);
 
-            const double sTotalWeight = [&aState]() {
-                double sSum = 0;
-                for (auto& x : aState)
-                    sSum += x.weight;
-                return sSum;
-            }();
+            struct S
+            {
+                double rps       = 0;
+                double avail_rps = 0;
+                double weight    = 0;
+            };
+            auto [sRPS, sAvailRPS, sTotalWeight] = std::accumulate(
+                aState.begin(),
+                aState.end(),
+                S{},
+                [](const S& a, Entry& e) {
+                    S sStat = a;
+                    sStat.rps += e.rps;
+                    sStat.avail_rps += e.avail_rps;
+                    sStat.weight += e.weight;
+                    return sStat;
+                });
+            // BOOST_TEST_MESSAGE("XXX: rps: " << sRPS << ", avail rps: " << sAvailRPS << ", total weight: " << sTotalWeight);
 
             m_State.clear();
             double sWeight = 0;
@@ -152,6 +173,9 @@ namespace SD {
                 sWeight += (x.weight / sTotalWeight);
                 m_State[sWeight] = x;
             }
+            m_RPS         = sRPS;
+            m_AvailRPS    = sAvailRPS;
+            m_TotalWeight = sTotalWeight;
             m_LastError.clear();
         }
 
@@ -164,6 +188,32 @@ namespace SD {
                 Lock lk(m_Mutex);
                 m_LastError = e.what();
             }
+        }
+
+        using EntryW = std::pair<const Entry*, double>;
+        EntryW random_i(double aRandom = Util::drand48()) const
+        {
+            if (auto sIt = m_State.lower_bound(aRandom); sIt != m_State.end()) {
+                return EntryW{&sIt->second, aRandom};
+            } else {
+                return EntryW{&m_State.rbegin()->second, aRandom};
+            }
+        }
+
+        bool allow_second_chance(const Entry* aEntry)
+        {
+            constexpr double EDGE = 0.75;
+            return m_Params.second_chance and
+                   m_State.size() > 1 and
+                   (m_AvailRPS - aEntry->avail_rps) * EDGE > m_RPS;
+        }
+
+        EntryW second_chance(double aRelative, double aPos) const
+        {
+            double sRandom = Util::drand48() * (1 - aRelative);
+            if (sRandom >= aPos)
+                sRandom += aRelative;
+            return random_i(sRandom);
         }
 
     public:
@@ -191,15 +241,19 @@ namespace SD {
             Lock lk(m_Mutex);
             if (m_State.empty())
                 throw Error("SD: no peers available");
-            std::string sPeer;
-            if (auto sIt = m_State.lower_bound(Util::drand48()); sIt != m_State.end()) {
-                sPeer = sIt->second.key;
-            } else {
-                sPeer = m_State.rbegin()->second.key;
+            auto [sEntry, sWeight] = random_i();
+            if (m_Breaker) {
+                if (allow_second_chance(sEntry)) {
+                    if (m_Breaker->test(sEntry->key)) {
+                        return sEntry->key;
+                    } else {
+                        sEntry = second_chance(sEntry->weight / m_TotalWeight, sWeight).first;
+                    }
+                }
+                if (!m_Breaker->test(sEntry->key))
+                    throw Breaker::Error("SD: request to " + sEntry->key + " blocked by circuit breaker");
             }
-            if (m_Breaker)
-                m_Breaker->ensure(sPeer);
-            return sPeer;
+            return sEntry->key;
         }
 
         std::string lastError() const

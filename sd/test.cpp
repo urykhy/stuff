@@ -126,13 +126,34 @@ BOOST_AUTO_TEST_SUITE_END()
 
 struct WithBreaker : WithClient
 {
-    std::shared_ptr<SD::Breaker>  m_Breaker = std::make_shared<SD::Breaker>("not-used");
-    SD::Balancer::Params          m_BalancerParams;
-    std::shared_ptr<SD::Balancer> m_Balancer = std::make_shared<SD::Balancer>(m_Asio.service(), m_BalancerParams);
+    std::shared_ptr<SD::Breaker>  m_Breaker;
+    std::shared_ptr<SD::Balancer> m_Balancer;
+    struct Stat
+    {
+        unsigned success = 0;
+        unsigned fail    = 0;
+    };
+    std::map<std::string, Stat> m_Stat;
+    static constexpr size_t     COUNT = 20000;
 
-    WithBreaker()
+    WithBreaker(SD::Balancer::Params sParams = {})
+    : m_Breaker(std::make_shared<SD::Breaker>("not-used"))
+    , m_Balancer(std::make_shared<SD::Balancer>(m_Asio.service(), sParams))
     {
         m_Balancer->with_breaker(m_Breaker); // use breaker success rate
+    }
+
+    void init_state()
+    {
+        m_Breaker->reset("a", 1.0, 0); // peer, success_rate, latency
+        m_Breaker->reset("b", 0.8, 0); // reduced weight
+        m_Breaker->reset("c", 0.6, 0); // reduced weight + drops (rate < YELLOW_RATE (0.75))
+        std::vector<SD::Balancer::Entry> sData{
+            {.key = "a", .weight = 1, .avail_rps = 1, .rps = 0.3},
+            {.key = "b", .weight = 1, .avail_rps = 1, .rps = 0.3},
+            {.key = "c", .weight = 1, .avail_rps = 1, .rps = 0.3},
+        };
+        apply_weights(sData);
     }
 
     void apply_weights(const std::vector<SD::Balancer::Entry>& aData)
@@ -151,62 +172,69 @@ struct WithBreaker : WithClient
         for (int i = 0; i < UPD_COUNT; i++)
             sStep();
     }
-};
-BOOST_FIXTURE_TEST_SUITE(balancer, WithBreaker)
-BOOST_AUTO_TEST_CASE(with_breaker)
-{
-    // prepare breaker state
-    m_Breaker->reset("a", 1.0, 0);
-    m_Breaker->reset("b", 0.8, 0); // reduced weight
-    m_Breaker->reset("c", 0.6, 0); // reduced weight + drops
-    std::vector<SD::Balancer::Entry> sData{{"a", 1}, {"b", 1}, {"c", 1}};
-    apply_weights(sData);
-
-    // put load
-    struct Stat
+    void put_load()
     {
-        unsigned success = 0;
-        unsigned fail    = 0;
-    };
-    std::map<std::string, Stat> sStat;
-    const size_t                COUNT = 20000;
-    for (size_t i = 0; i < COUNT; i++) {
-        try {
-            std::string sPeer = m_Balancer->random();
-            sStat[sPeer].success++;
-        } catch (const SD::Breaker::Error& e) {
-            std::string sTmp = e.what();
-            size_t sPos = sTmp.find(" blocked by");
-            std::string sPeer = sTmp.substr(sPos-1, 1); // one-char names
-            sStat[sPeer].fail++;
+        for (size_t i = 0; i < COUNT; i++) {
+            try {
+                std::string sPeer = m_Balancer->random();
+                m_Stat[sPeer].success++;
+            } catch (const SD::Breaker::Error& e) {
+                std::string sTmp  = e.what();
+                size_t      sPos  = sTmp.find(" blocked by");
+                std::string sPeer = sTmp.substr(sPos - 1, 1); // one-char names
+                m_Stat[sPeer].fail++;
+            }
         }
     }
-
-    // output stats
-    for (auto& x : sStat) {
-        const double sSuccessPct = 100 * x.second.success / double(COUNT);
-        const double sFailPct    = 100 * x.second.fail / double(COUNT);
-        const double sTotalPct   = 100 * (x.second.fail + x.second.success) / double(COUNT);
-        BOOST_TEST_MESSAGE(fmt::format("{} | total share ({:>4.1f}%) | success {:>5} ({:>4.1f}%) | fail {:>5} ({:>4.1f}%)",
-                                       x.first, sTotalPct, x.second.success, sSuccessPct, x.second.fail, sFailPct));
-        if (x.first == "c")
-            BOOST_CHECK_CLOSE(sFailPct, 10, 5 /* % */);
+    void print_stats()
+    {
+        for (auto& x : m_Stat) {
+            const double sSuccessPct = 100 * x.second.success / double(COUNT);
+            const double sFailPct    = 100 * x.second.fail / double(COUNT);
+            const double sTotalPct   = 100 * (x.second.fail + x.second.success) / double(COUNT);
+            BOOST_TEST_MESSAGE(fmt::format("{} | total share ({:>4.1f}%) | success {:>5} ({:>4.1f}%) | fail {:>5} ({:>4.1f}%)",
+                                           x.first, sTotalPct, x.second.success, sSuccessPct, x.second.fail, sFailPct));
+        }
     }
+};
+BOOST_AUTO_TEST_SUITE(balancer)
+BOOST_AUTO_TEST_CASE(with_breaker)
+{
+    WithBreaker sFixture;
+    sFixture.init_state();
+    sFixture.put_load();
+    sFixture.print_stats();
+
+    BOOST_CHECK_EQUAL(3, sFixture.m_Stat.size());
+    BOOST_CHECK_CLOSE(sFixture.m_Stat["c"].fail * 100 / double(WithBreaker::COUNT), 10., 5 /* % */);
+}
+BOOST_AUTO_TEST_CASE(with_breaker_second_chance)
+{
+    WithBreaker sFixture({.second_chance = true});
+    sFixture.init_state();
+    sFixture.put_load();
+    sFixture.print_stats();
+
+    BOOST_CHECK_EQUAL(3, sFixture.m_Stat.size());
+    BOOST_CHECK_EQUAL(sFixture.m_Stat["c"].fail, 0.);
+    BOOST_CHECK_CLOSE(sFixture.m_Stat["c"].success * 100 / double(WithBreaker::COUNT), 15., 5 /* % */);
 }
 BOOST_AUTO_TEST_CASE(with_client_latency)
 {
+    WithBreaker sFixture;
+
     // prepare breaker state
-    m_Breaker->reset("a", 1.0, 1.0); // peer, success_rate, latency
-    m_Breaker->reset("b", 1.0, 1.5);
-    m_Breaker->reset("c", 1.0, 2.0);
+    sFixture.m_Breaker->reset("a", 1.0, 1.0); // peer, success_rate, latency
+    sFixture.m_Breaker->reset("b", 1.0, 1.5);
+    sFixture.m_Breaker->reset("c", 1.0, 2.0);
     std::vector<SD::Balancer::Entry> sData{{"a", 1}, {"b", 1}, {"c", 1}};
-    apply_weights(sData);
+    sFixture.apply_weights(sData);
 
     // check
     auto sFinal = [&]() {
         std::map<std::string, double> sFinal;
 
-        auto sState = m_Balancer->state();
+        auto sState = sFixture.m_Balancer->state();
         for (auto& [_, sPeer] : sState)
             sFinal[sPeer.key] = sPeer.weight;
         return sFinal;

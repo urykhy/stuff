@@ -118,15 +118,12 @@ public:
 
             {%- if x_discovery %}
             auto sCheckBreaker = [&, this](const std::string& aPeer) {
-                try {
-                    if (m_Breaker)
-                        m_Breaker->ensure(aPeer);
-                } catch (const SD::Breaker::Error& e) {
-                {% if x_jaeger %}
+                if (m_Breaker and !m_Breaker->test(aPeer)) {
+                    {% if x_jaeger %}
                     if (sTraceCall)
                         sTraceCall->set_tag(Jaeger::Tag{"circuit_breaker", 1});
-                {% endif -%}
-                    throw;
+                    {% endif -%}
+                    throw SD::Breaker::Error("SD: request to " + aPeer + " blocked by circuit breaker");
                 }
             };
             {% endif %}
