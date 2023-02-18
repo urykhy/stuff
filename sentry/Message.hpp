@@ -28,6 +28,13 @@ namespace Sentry {
             m_Root["logger"]      = aLogger;
             m_Root["platform"]    = "c";
             m_Root["server_name"] = Util::Servername();
+#ifdef GIT_RELEASE
+#define STRINGIFY2(X) #X
+#define STRINGIFY(X)  STRINGIFY2(X)
+            set_release(STRINGIFY(GIT_RELEASE));
+#undef STRINGIFY
+#undef STRINGIFY2
+#endif
         }
 
         // allowed: debug, info, warning, error, fatal

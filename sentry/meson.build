@@ -14,6 +14,9 @@ bfd       = compiler.find_library('bfd')
 dw        = compiler.find_library('dw')
 log4cxx   = dependency('liblog4cxx')
 
+TAG = run_command('git', 'rev-parse', '--short', 'HEAD', check: true).stdout().strip()
+add_project_arguments('-DGIT_RELEASE='+TAG, language : 'cpp')
+
 cxa_src = 'Cxa.cpp'
 cxa_lib = static_library('sentry_cxa', cxa_src, include_directories : includes, dependencies : [curl, dl, json, dw])
 cxa_dep = declare_dependency(link_with : cxa_lib)
