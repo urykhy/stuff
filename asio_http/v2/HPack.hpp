@@ -18,47 +18,26 @@ namespace asio_http::v2 {
     class Inflate
     {
         using InflaterT = std::unique_ptr<nghttp2_hd_inflater, void (*)(nghttp2_hd_inflater*)>;
-        InflaterT m_Inflate;
+        InflaterT m_Ptr;
 
-        void collect(nghttp2_nv sHeader, Request& aRequest)
+        template <class T>
+        void collect(nghttp2_nv sHeader, T& aObject)
         {
             std::string sName((const char*)sHeader.name, sHeader.namelen);
             std::string sValue((const char*)sHeader.value, sHeader.valuelen);
-            TRACE(sName << ": " << sValue);
-            if (sName == ":method")
-                aRequest.method(http::string_to_verb(sValue));
-            else if (sName == ":path")
-                aRequest.target(sValue);
-            else if (sName == ":authority")
-                aRequest.set(http::field::host, sValue);
-            else if (sName.size() > 1 and sName[0] == ':')
-                ;
-            else
-                aRequest.set(sName, sValue);
-        }
-
-        void collect(nghttp2_nv sHeader, Response& aResponse)
-        {
-            std::string sName((const char*)sHeader.name, sHeader.namelen);
-            std::string sValue((const char*)sHeader.value, sHeader.valuelen);
-            TRACE(sName << ": " << sValue);
-            if (sName == ":status")
-                aResponse.result(Parser::Atoi<unsigned>(sValue));
-            else if (sName.size() > 1 and sName[0] == ':')
-                ;
-            else
-                aResponse.set(sName, sValue);
+            aObject->set_header(sName, sValue);
         }
 
     public:
         Inflate()
-        : m_Inflate([]() {
+        : m_Ptr([]() {
             nghttp2_hd_inflater* sTmp = nullptr;
             if (nghttp2_hd_inflate_new(&sTmp))
                 throw std::runtime_error("fail to initialize nghttp/inflater");
             return InflaterT(sTmp, nghttp2_hd_inflate_del);
         }())
-        {}
+        {
+        }
 
         template <class T>
         void operator()(std::string_view aStr, T& aObject)
@@ -67,7 +46,7 @@ namespace asio_http::v2 {
                 nghttp2_nv sHeader;
                 int        sFlags = 0;
 
-                int sUsed = nghttp2_hd_inflate_hd2(m_Inflate.get(),
+                int sUsed = nghttp2_hd_inflate_hd2(m_Ptr.get(),
                                                    &sHeader,
                                                    &sFlags,
                                                    (const uint8_t*)aStr.data(),
@@ -75,12 +54,12 @@ namespace asio_http::v2 {
                                                    sHeader.flags & Flags::END_HEADERS);
 
                 if (sUsed < 0)
-                    throw std::runtime_error("fail to inflate headers");
+                    throw std::invalid_argument("fail to inflate headers");
                 aStr.remove_prefix(sUsed);
                 if (sFlags & NGHTTP2_HD_INFLATE_EMIT)
                     collect(sHeader, aObject);
                 if (sFlags & NGHTTP2_HD_INFLATE_FINAL)
-                    nghttp2_hd_inflate_end_headers(m_Inflate.get());
+                    nghttp2_hd_inflate_end_headers(m_Ptr.get());
             }
         }
 
@@ -97,7 +76,6 @@ namespace asio_http::v2 {
             }
             std::string_view sRest = sData.rest();
             sRest.remove_suffix(sPadLength);
-            TRACE("got headers block of " << sRest.size() << " bytes");
             operator()(sRest, aObject);
         }
     };
@@ -155,7 +133,8 @@ namespace asio_http::v2 {
                 throw std::runtime_error("fail to initialize nghttp/deflater");
             return DeflaterT(sTmp, nghttp2_hd_deflate_del);
         }())
-        {}
+        {
+        }
 
         std::string operator()(const ClientRequest& aRequest)
         {

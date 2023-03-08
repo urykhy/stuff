@@ -2,15 +2,15 @@
 
 #ifndef ASIO_HTTP_LIBRARY_HEADER
 #include "../v1/Server.hpp"
-#include "Input.hpp"
 #include "Output.hpp"
+#include "Parser.hpp"
 #endif
 
 namespace asio_http::v2 {
 #ifdef ASIO_HTTP_LIBRARY_HEADER
     void startServer(asio::io_service& aService, uint16_t aPort, RouterPtr aRouter);
 #else
-    class Session : public std::enable_shared_from_this<Session>, InputFace
+    class Session : public std::enable_shared_from_this<Session>, parser::API
     {
         asio::io_service&        m_Service;
         asio::io_service::strand m_Strand;
@@ -18,72 +18,17 @@ namespace asio_http::v2 {
         RouterPtr                m_Router;
         std::string              m_PeerName;
 
-        std::unique_ptr<CoroState> m_ReadCoro;
+        InputBuf     m_Input;
+        parser::Main m_Parser;
+        Output       m_Output;
 
-        Output m_Output;
-        Input  m_Input;
-
-        void process_settings(const Frame& aFrame) override
+        bool legacy(asio::yield_context yield)
         {
-            if (aFrame.header.flags != 0) // filter out ACK_SETTINGS
-                return;
-            Container::imemstream sData(aFrame.body);
-            while (!sData.eof()) {
-                SettingVal sVal;
-                sData.read(sVal);
-                sVal.to_host();
-                TRACE(sVal.key << ": " << sVal.value);
-            }
-            m_Output.enqueueSettings(true);
-            TRACE("ack settings");
-        }
-
-        void process_window_update(const Frame& aFrame) override
-        {
-            CATAPULT_MARK("server", "recv window update");
-            m_Output.recv_window_update(aFrame.header, aFrame.body);
-        }
-
-        void emit_window_update(uint32_t aStreamId, uint32_t aInc) override
-        {
-            CATAPULT_MARK("server", "emit window update");
-            m_Output.emit_window_update(aStreamId, aInc);
-        }
-
-        void process_request(uint32_t aStreamId, Request&& aRequest) override
-        {
-            TRACE("got complete request");
-
-            auto sCall = [p = shared_from_this(), aStreamId, aRequest = std::move(aRequest)](asio::yield_context yield) mutable {
-                beast::error_code ec;
-                Response          sResponse;
-
-                Container::Session::Set sPeer("peer", p->m_PeerName);
-                p->m_Router->call(p->m_Service, aRequest, sResponse, yield[ec]);
-                // FIXME: handle ec
-
-                sResponse.prepare_payload();
-                if (0 == sResponse.count(http::field::server))
-                    sResponse.set(http::field::server, "Beast/cxx");
-
-                p->m_Strand.post([p, aStreamId, sResponse = std::move(sResponse)]() mutable {
-                    p->m_Output.enqueue(aStreamId, sResponse);
-                });
-            };
-
-            // FIXME: why spawn synchronous without post ?
-            m_Service.post([p = shared_from_this(), sCall = std::move(sCall)]() {
-                asio::spawn(p->m_Service, sCall);
-            });
-            TRACE("handler spawned");
-        }
-
-        bool legacy()
-        {
+            beast::error_code ec;
             m_Stream.expires_after(std::chrono::seconds(30));
-            m_Stream.async_read_some(asio::null_buffers(), m_ReadCoro->yield[m_ReadCoro->ec]);
-            if (m_ReadCoro->ec)
-                throw m_ReadCoro->ec;
+            m_Stream.async_read_some(asio::null_buffers(), yield[ec]);
+            if (ec)
+                throw ec;
             int  sFd     = m_Stream.socket().native_handle();
             char sTmp[3] = {0, 0, 0};
             int  sRet    = ::recv(sFd, sTmp, sizeof(sTmp), MSG_PEEK);
@@ -106,21 +51,45 @@ namespace asio_http::v2 {
             });
         }
 
-        void hello()
+        // parser::API
+        parser::MessagePtr new_message(uint32_t aID) override
         {
-            const std::string_view sExpected("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n");
-            TRACE("wait for preface");
-            m_Stream.expires_after(std::chrono::seconds(30));
+            return std::make_shared<parser::AsioRequest>();
+        }
+        void process_message(uint32_t aID, parser::MessagePtr&& aMessage) override
+        {
+            TRACE("got complete request " << aID);
+            auto* sRequest = static_cast<parser::AsioRequest*>(aMessage.get());
 
-            std::string sTmp;
-            sTmp.resize(sExpected.size());
-            asio::async_read(m_Stream, asio::buffer(sTmp.data(), sTmp.size()), m_ReadCoro->yield[m_ReadCoro->ec]);
-            if (m_ReadCoro->ec)
-                throw m_ReadCoro->ec;
-            if (sTmp != sExpected)
-                throw std::runtime_error("not a http/2 peer");
+            auto sCall = [p = shared_from_this(), aID, aRequest = std::move(sRequest->request)](asio::yield_context yield) mutable {
+                beast::error_code ec;
+                Response          sResponse;
 
-            m_Output.enqueueSettings(false);
+                Container::Session::Set sPeer("peer", p->m_PeerName);
+                p->m_Router->call(p->m_Service, aRequest, sResponse, yield[ec]);
+                // FIXME: handle ec errors
+
+                sResponse.prepare_payload();
+                if (0 == sResponse.count(http::field::server))
+                    sResponse.set(http::field::server, "Beast/cxx");
+
+                p->m_Strand.post([p, aID, sResponse = std::move(sResponse)]() mutable {
+                    p->m_Output.enqueue(aID, sResponse);
+                });
+            };
+            // FIXME: why spawn synchronous without post ?
+            m_Service.post([p = shared_from_this(), sCall = std::move(sCall)]() {
+                asio::spawn(p->m_Service, sCall);
+            });
+            TRACE("handler spawned");
+        }
+        void window_update(uint32_t aID, uint32_t aInc) override
+        {
+            m_Output.process_window_update(aID, aInc);
+        }
+        void send(std::string&& aBuffer) override
+        {
+            m_Output.send(std::move(aBuffer));
         }
 
     public:
@@ -129,9 +98,10 @@ namespace asio_http::v2 {
         , m_Strand(m_Service)
         , m_Stream(std::move(aStream))
         , m_Router(aRouter)
+        , m_Parser(parser::SERVER, this)
         , m_Output(m_Stream, m_Strand)
-        , m_Input(m_Stream, this, true /* server */)
-        {}
+        {
+        }
 
         ~Session()
         {
@@ -159,19 +129,31 @@ namespace asio_http::v2 {
                              std::to_string(m_Stream.socket().remote_endpoint().port());
                 DEBUG("connection from " << m_PeerName);
 
-                m_ReadCoro = std::make_unique<CoroState>(CoroState{{}, yield});
-                if (legacy()) {
+                if (legacy(yield)) {
                     DEBUG("legacy 1.1 client");
                     v1::session(m_Service, m_Stream, m_Router, yield);
                     return;
                 }
-                m_Input.assign(m_ReadCoro.get());
                 spawn_write_coro();
-                hello();
-                TRACE("http/2 negotiated");
-                while (true)
-                    m_Input.process_frame();
-                // FIXME: check write error
+
+                beast::error_code ec;
+                std::string       sBuffer;
+                while (true) {
+                    sBuffer.resize(0);
+                    sBuffer.reserve(m_Parser.hint());
+                    while (true) {
+                        if (m_Input.append(sBuffer, m_Parser.hint() - sBuffer.size()))
+                            break;
+                        m_Stream.expires_after(std::chrono::seconds(30));
+                        //CATAPULT_EVENT("input", "async_read_some");
+                        size_t sNew = m_Stream.async_read_some(m_Input.buffer(), yield[ec]);
+                        if (ec)
+                            throw ec;
+                        m_Input.push(sNew);
+                    }
+                    assert(sBuffer.size() == m_Parser.hint());
+                    m_Parser.process(sBuffer);
+                }
             } catch (const beast::error_code e) {
                 ERROR("beast error: " << e.message());
             } catch (const std::exception& e) {
@@ -198,7 +180,7 @@ namespace asio_http::v2 {
 #ifndef ASIO_HTTP_LIBRARY_IMPL
     inline
 #endif
-    // clang-format off
+        // clang-format off
     void startServer(asio::io_service& aService, uint16_t aPort, RouterPtr aRouter)
     // clang-format on
     {

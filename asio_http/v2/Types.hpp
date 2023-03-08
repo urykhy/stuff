@@ -99,9 +99,6 @@ namespace asio_http::v2 {
         }
     } __attribute__((packed));
 
-    struct CoroState
-    {
-        beast::error_code   ec;
-        asio::yield_context yield;
-    };
+    inline const std::string_view PREFACE("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n");
+
 } // namespace asio_http::v2

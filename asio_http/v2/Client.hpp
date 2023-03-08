@@ -1,8 +1,8 @@
 #pragma once
 
 #ifndef ASIO_HTTP_LIBRARY_HEADER
-#include "Input.hpp"
 #include "Output.hpp"
+#include "Parser.hpp"
 #endif
 
 #include <unsorted/Raii.hpp>
@@ -11,7 +11,7 @@ namespace asio_http::v2 {
 #ifdef ASIO_HTTP_LIBRARY_HEADER
     std::shared_ptr<Client> makeClient(asio::io_service& aService);
 #else
-    struct Peer : public std::enable_shared_from_this<Peer>, InputFace
+    struct Peer : public std::enable_shared_from_this<Peer>, parser::API
     {
         using Notify = std::function<void(const std::string&)>;
 
@@ -21,9 +21,7 @@ namespace asio_http::v2 {
         const std::string        m_Port;
         asio::io_service::strand m_Strand;
         beast::tcp_stream        m_Stream;
-
-        std::unique_ptr<CoroState> m_ReadCoro;
-        uint32_t                   m_Serial = 1;
+        uint32_t                 m_Serial = 1;
 
         // pending requests
         struct PendingStream
@@ -36,10 +34,11 @@ namespace asio_http::v2 {
         // active streams
         std::map<uint32_t, Promise> m_Streams;
 
-        Input       m_Input;
-        Output      m_Output;
-        Notify      m_Notify;
-        std::string m_FailReason;
+        InputBuf     m_Input;
+        parser::Main m_Parser;
+        Output       m_Output;
+        Notify       m_Notify;
+        std::string  m_FailReason;
 
         void fail(const std::string& aMsg)
         {
@@ -94,55 +93,21 @@ namespace asio_http::v2 {
             m_Streams[sStreamId] = aPromise;
         }
 
-        void process_settings(const Frame& aFrame) override
+        void connect(asio::yield_context yield)
         {
-            if (aFrame.header.flags != 0) // filter out ACK_SETTINGS
-                return;
-            m_Output.enqueueSettings(true);
-            TRACE("ack settings");
-        }
-
-        void process_window_update(const Frame& aFrame) override
-        {
-            CATAPULT_MARK("client", "recv window update");
-            m_Output.recv_window_update(aFrame.header, aFrame.body);
-        }
-
-        void emit_window_update(uint32_t aStreamId, uint32_t aInc) override
-        {
-            CATAPULT_MARK("client", "emit window update");
-            m_Output.emit_window_update(aStreamId, aInc);
-        }
-
-        void process_response(uint32_t aStreamId, Response&& aResponse) override
-        {
-            TRACE("got complete response");
-
-            auto sIt = m_Streams.find(aStreamId);
-            assert(sIt != m_Streams.end());
-            sIt->second->set_value(std::move(aResponse));
-            m_Streams.erase(sIt);
-
-            if (!m_Pending.empty()) {
-                auto& [sRequest, sPromise] = m_Pending.front();
-                initiate(sRequest, sPromise);
-                m_Pending.pop_front();
-            }
-        }
-
-        void connect()
-        {
-            tcp::resolver sResolver{m_Service};
+            beast::error_code ec;
+            tcp::resolver     sResolver{m_Service};
             m_Stream.expires_after(std::chrono::milliseconds(100));
 
-            auto const sAddr = sResolver.async_resolve(m_Host, m_Port, m_ReadCoro->yield[m_ReadCoro->ec]);
-            if (m_ReadCoro->ec)
-                throw m_ReadCoro->ec;
-
-            m_Stream.async_connect(sAddr, m_ReadCoro->yield[m_ReadCoro->ec]);
-            if (m_ReadCoro->ec)
-                throw m_ReadCoro->ec;
+            auto const sAddr = sResolver.async_resolve(m_Host, m_Port, yield[ec]);
+            if (ec)
+                throw ec;
+            m_Stream.async_connect(sAddr, yield[ec]);
+            if (ec)
+                throw ec;
             m_Stream.socket().set_option(tcp::no_delay(true));
+
+            DEBUG("connected to " << m_Host << ':' << m_Port);
         }
 
         void spawn_write_coro()
@@ -158,20 +123,39 @@ namespace asio_http::v2 {
             });
         }
 
-        void hello()
+        // parser::API
+        void established() override
         {
-            const std::string_view sRequest("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n");
-            m_Stream.expires_after(std::chrono::seconds(3));
-            asio::async_write(m_Stream, asio::const_buffer(sRequest.data(), sRequest.size()), m_ReadCoro->yield[m_ReadCoro->ec]);
-            if (m_ReadCoro->ec)
-                throw m_ReadCoro->ec;
-            TRACE("sent http/2 connection preface");
-            m_Output.enqueueSettings(false);
+            if (m_Notify)
+                m_Notify("connected");
+        }
+        parser::MessagePtr new_message(uint32_t aID) override
+        {
+            return std::make_shared<parser::AsioResponse>();
+        }
+        void process_message(uint32_t aID, parser::MessagePtr&& aMessage) override
+        {
+            TRACE("got complete response " << aID);
+            auto* sResponse = static_cast<parser::AsioResponse*>(aMessage.get());
 
-            auto sFrame = m_Input.recv();
-            if (sFrame.header.type != Type::SETTINGS)
-                throw std::runtime_error("not a http/2 peer");
-            process_settings(sFrame);
+            auto sIt = m_Streams.find(aID);
+            assert(sIt != m_Streams.end());
+            sIt->second->set_value(std::move(sResponse->response));
+            m_Streams.erase(sIt);
+
+            if (!m_Pending.empty()) {
+                auto& [sRequest, sPromise] = m_Pending.front();
+                initiate(sRequest, sPromise);
+                m_Pending.pop_front();
+            }
+        }
+        void window_update(uint32_t aID, uint32_t aInc) override
+        {
+            m_Output.process_window_update(aID, aInc);
+        }
+        void send(std::string&& aBuffer) override
+        {
+            m_Output.send(std::move(aBuffer));
         }
 
     public:
@@ -181,7 +165,7 @@ namespace asio_http::v2 {
         , m_Port(aPort)
         , m_Strand(m_Service)
         , m_Stream(m_Service)
-        , m_Input(m_Stream, this, false /* client */)
+        , m_Parser(parser::CLIENT, this)
         , m_Output(m_Stream, m_Strand)
         , m_Notify(std::move(aNotify))
         {
@@ -226,17 +210,28 @@ namespace asio_http::v2 {
         {
             CATAPULT_THREAD("client")
             try {
-                m_ReadCoro = std::make_unique<CoroState>(CoroState{{}, yield});
-                m_Input.assign(m_ReadCoro.get());
-                connect();
-                DEBUG("connected to " << m_Host << ':' << m_Port);
+                connect(yield);
                 spawn_write_coro();
-                hello();
-                TRACE("http/2 negotiated");
-                if (m_Notify)
-                    m_Notify("connected");
-                while (m_FailReason.empty())
-                    m_Input.process_frame();
+
+                // FIXME: read-loop ~ copy-paste from Server
+                beast::error_code ec;
+                std::string       sBuffer;
+                while (m_FailReason.empty()) {
+                    sBuffer.resize(0);
+                    sBuffer.reserve(m_Parser.hint());
+                    while (m_Parser.hint() > 0) {
+                        if (m_Input.append(sBuffer, m_Parser.hint() - sBuffer.size()))
+                            break;
+                        m_Stream.expires_after(std::chrono::seconds(30));
+                        //CATAPULT_EVENT("input", "async_read_some");
+                        size_t sNew = m_Stream.async_read_some(m_Input.buffer(), yield[ec]);
+                        if (ec)
+                            throw ec;
+                        m_Input.push(sNew);
+                    }
+                    assert(sBuffer.size() == m_Parser.hint());
+                    m_Parser.process(sBuffer);
+                }
                 // FIXME: check write error
             } catch (const beast::error_code e) {
                 fail(e);
@@ -326,7 +321,7 @@ namespace asio_http::v2 {
                     sAddr.port,
                     m_Strand.wrap([sWeakPtr, p = shared_from_this()](const std::string& aMsg) {
                         p->notify_i(sWeakPtr, aMsg);
-                          }));
+                    }));
                 sDataPtr->peer = sPeer;
                 sPeer->start();
                 auto sTmp = m_Data.insert(std::make_pair(sAddr, sDataPtr));

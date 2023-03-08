@@ -61,7 +61,7 @@ namespace asio_http::v2 {
 
         void flush()
         {
-            CATAPULT_COUNTER("output", "streams", m_Info.size());
+            CATAPULT_COUNTER("output", "streams (before flush)", m_Info.size());
 #ifdef CATAPULT_PROFILE
             if (m_LowBudget)
                 m_LowBudget.reset();
@@ -107,13 +107,24 @@ namespace asio_http::v2 {
                 }
                 if (m_Budget < MIN_FRAME_SIZE) {
 #ifdef CATAPULT_PROFILE
-                    CATAPULT_EVENT("output", "low connection budget");
-                    m_LowBudget.emplace(std::move(sCatapultHolder));
+                    // CATAPULT_EVENT("output", "low connection budget");
+                    // m_LowBudget.emplace(std::move(sCatapultHolder));
 #endif
                     TRACE("write out: low connection budget");
                     break;
                 }
             }
+            CATAPULT_COUNTER("output", "connection window (after flush)", m_Budget);
+#ifdef CATAPULT_PROFILE
+            const size_t sWaitBytes = [this]() {
+                size_t sBytes = 0;
+                for (auto x = m_Info.begin(); x != m_Info.end(); x++) {
+                    sBytes += x->second.body.size();
+                }
+                return sBytes;
+            }();
+            CATAPULT_COUNTER("output", "wait bytes (after flush)", sWaitBytes);
+#endif
         }
 
     public:
@@ -130,60 +141,24 @@ namespace asio_http::v2 {
             return m_Info.empty() and m_WriteQueue.empty();
         }
 
-        void recv_window_update(const Header& aHeader, const std::string& aData)
+        void process_window_update(uint32_t aID, uint32_t aInc)
         {
-            if (aData.size() != 4)
-                throw std::runtime_error("invalid window update");
-            Container::imemstream sData(aData);
-
-            uint32_t sInc = 0;
-            sData.read(sInc);
-            sInc = be32toh(sInc);
-            sInc &= 0x7FFFFFFFFFFFFFFF; // clear R bit
-
-            if (aHeader.stream == 0) {
-                m_Budget += sInc;
-                TRACE("connection window increment " << sInc << ", now " << m_Budget);
+            if (aID == 0) {
+                m_Budget += aInc;
+                TRACE("connection window increment " << aInc << ", now " << m_Budget);
+                CATAPULT_COUNTER("output", "connection window (update)", m_Budget);
             } else {
-                auto& sBudget = m_Info[aHeader.stream].budget;
-                sBudget += sInc;
-                TRACE("stream window increment " << sInc << ", now " << sBudget);
+                auto& sBudget = m_Info[aID].budget;
+                sBudget += aInc;
+                TRACE("stream window increment " << aInc << ", now " << sBudget);
             }
-
             flush();
             m_Timer.cancel();
         }
 
-        // input stream requests window
-        void emit_window_update(uint32_t aStreamId, uint32_t aInc)
+        void send(std::string&& aBuffer)
         {
-            aInc = htobe32(DEFAULT_WINDOW_SIZE); // to network order
-            Header sHeader;
-            sHeader.type   = Type::WINDOW_UPDATE;
-            sHeader.stream = aStreamId;
-            sHeader.size   = sizeof(aInc);
-            sHeader.to_net();
-
-            std::string sTmp;
-            sTmp.append((const char*)&sHeader, sizeof(sHeader));
-            sTmp.append((const char*)&aInc, sizeof(aInc));
-            m_PriorityQueue.push_back(std::move(sTmp));
-
-            TRACE("queued window update for stream " << aStreamId);
-            m_Timer.cancel();
-        }
-
-        void enqueueSettings(bool sAck)
-        {
-            Header sHeader;
-            sHeader.type = Type::SETTINGS;
-            if (sAck)
-                sHeader.flags = Flags::ACK_SETTINGS;
-            sHeader.to_net();
-
-            std::string sTmp;
-            sTmp.append((const char*)&sHeader, sizeof(sHeader));
-            m_WriteQueue.push_back(std::move(sTmp));
+            m_PriorityQueue.push_back(std::move(aBuffer));
             m_Timer.cancel();
         }
 
@@ -210,7 +185,7 @@ namespace asio_http::v2 {
             }
 
             TRACE("queued response for stream " << aStreamId);
-            CATAPULT_COUNTER("output", "streams", m_Info.size())
+            CATAPULT_COUNTER("output", "streams (enqueue)", m_Info.size())
             m_Timer.cancel();
         }
 
@@ -237,13 +212,32 @@ namespace asio_http::v2 {
             }
 
             TRACE("queued request for stream " << aStreamId);
-            CATAPULT_COUNTER("output", "streams", m_Info.size())
+            CATAPULT_COUNTER("output", "streams (enqueue)", m_Info.size())
             m_Timer.cancel();
         }
 
         void coro(asio::yield_context yield)
         {
             beast::error_code ec;
+
+            auto sWriteOut = [&](std::list<std::string>& aQueue) {
+                size_t sLength = 0;
+                size_t sCount  = 0;
+                for (auto sIt = aQueue.begin();
+                     sIt != aQueue.end() and sCount < MAX_MERGE and sLength < MAX_STREAM_EXCLUSIVE;
+                     sIt++, sCount++) {
+                    auto& sStr = *sIt;
+                    m_Buffer.push_back(asio::const_buffer(sStr.data(), sStr.size()));
+                    sLength += sStr.size();
+                }
+                CATAPULT_EVENT("output", "write")
+                asio::async_write(m_Stream, m_Buffer, yield[ec]);
+                if (ec)
+                    throw ec;
+                for (size_t i = 0; i < sCount; i++)
+                    aQueue.pop_front();
+                m_Buffer.clear();
+            };
 
             while (true) {
                 if (m_WriteQueue.empty() and m_PriorityQueue.empty()) {
@@ -252,31 +246,17 @@ namespace asio_http::v2 {
                     m_Timer.expires_from_now(1s);
                     m_Timer.async_wait(yield[ec]);
                 }
-                if (!m_PriorityQueue.empty())
-                    m_WriteQueue.splice(m_WriteQueue.begin(), m_PriorityQueue, m_PriorityQueue.begin(), m_PriorityQueue.end());
+                if (!m_PriorityQueue.empty()) {
+                    //CATAPULT_COUNTER("output", "priority queue", m_PriorityQueue.size())
+                    sWriteOut(m_PriorityQueue);
+                    continue;
+                }
                 if (!m_WriteQueue.empty()) {
-                    {
-                        CATAPULT_EVENT("output", "write")
-                        size_t sLength = 0;
-                        size_t sCount  = 0;
-                        for (auto sIt = m_WriteQueue.begin();
-                             sIt != m_WriteQueue.end() and sCount < MAX_MERGE and sLength < MAX_STREAM_EXCLUSIVE;
-                             sIt++, sCount++) {
-                            auto& sStr = *sIt;
-                            m_Buffer.push_back(asio::const_buffer(sStr.data(), sStr.size()));
-                            sLength += sStr.size();
-                        }
-                        asio::async_write(m_Stream, m_Buffer, yield[ec]);
-                        if (ec)
-                            throw ec;
-                        for (size_t i = 0; i < sCount; i++)
-                            m_WriteQueue.pop_front();
-                        m_Buffer.clear();
-                    }
-                    CATAPULT_COUNTER("output", "queue", m_WriteQueue.size())
+                    //CATAPULT_COUNTER("output", "write queue", m_WriteQueue.size())
+                    sWriteOut(m_WriteQueue);
                     if (m_Budget > MIN_FRAME_SIZE)
                         flush();
-                    TRACE("write out: write_queue size: " << m_WriteQueue.size() << ", body_queue size: " << m_Info.size());
+                    TRACE("write out: write_queue size: " << m_WriteQueue.size() << ", queue size: " << m_Info.size());
                 }
             }
         }
