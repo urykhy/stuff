@@ -6,6 +6,9 @@
 
 #include <curl/Curl.hpp>
 #include <exception/Error.hpp>
+#include <format/Base64.hpp>
+#include <format/XML.hpp>
+#include <parser/Hex.hpp>
 #include <parser/XML.hpp>
 #include <ssl/Digest.hpp>
 #include <ssl/HMAC.hpp>
@@ -47,9 +50,11 @@ namespace S3 {
 
             std::string_view sMethod;
             switch (aMethod) {
-            case Curl::Client::Method::GET: sMethod = "GET"; break;
-            case Curl::Client::Method::PUT: sMethod = "PUT"; break;
             case Curl::Client::Method::DELETE: sMethod = "DELETE"; break;
+            case Curl::Client::Method::GET: sMethod = "GET"; break;
+            case Curl::Client::Method::HEAD: sMethod = "HEAD"; break;
+            case Curl::Client::Method::POST: sMethod = "POST"; break;
+            case Curl::Client::Method::PUT: sMethod = "PUT"; break;
             default: throw std::invalid_argument("unknown method");
             }
 
@@ -113,12 +118,16 @@ namespace S3 {
             sRequest.method = aMethod;
             sRequest.url    = fmt::format("http://{}/{}/{}?{}", m_Params.host, m_Params.bucket, aName, aQuery);
             sRequest.body   = aContent;
-            //BOOST_TEST_MESSAGE("url: " << sRequest.url);
+            // BOOST_TEST_MESSAGE("url: " << sRequest.url);
 
             sRequest.headers["x-amz-content-sha256"] = sContentHash;
             sRequest.headers["x-amz-date"]           = sDateTime;
-            if (aMethod == Curl::Client::Method::PUT)
+            if (aMethod == Curl::Client::Method::PUT or aMethod == Curl::Client::Method::POST)
                 sRequest.headers["x-amz-meta-sha256"] = sContentHash;
+            if (aMethod == Curl::Client::Method::POST and aQuery == "uploads=") // create multipart upload
+                sRequest.headers["x-amz-checksum-algorithm"] = "SHA256";
+            if (aMethod == Curl::Client::Method::PUT and aQuery.starts_with("partNumber=")) // upload part
+                sRequest.headers["x-amz-checksum-sha256"] = Format::Base64(Parser::from_hex(sContentHash));
             sRequest.headers["Authorization"] = authorization(aMethod, sRequest.headers, aName, aQuery, sContentHash, sDateTime);
 
             return m_Params.curl.wrap(std::move(sRequest));
@@ -144,11 +153,87 @@ namespace S3 {
             throw Error(sMsg, aResult.status);
         }
 
+        auto parseXML(Curl::Client::Result& aResult)
+        {
+            auto sHeader = aResult.headers.find("Content-Type");
+            if (sHeader == aResult.headers.end() or sHeader->second != "application/xml")
+                throw std::runtime_error("XML response expected");
+            return Parser::XML::parse(aResult.body);
+        }
+
+        std::string startMultipartUpload(std::string_view aName, std::string_view aSha256)
+        {
+            auto sResult = m_Client(make(Curl::Client::Method::POST, aName, {"", aSha256}, "uploads="));
+            if (sResult.status != 200)
+                reportError(sResult);
+            auto        sXML = Parser::XML::parse(sResult.body);
+            std::string sUploadId;
+            Parser::XML::from_path(sXML.get(), "InitiateMultipartUploadResult.UploadId", sUploadId);
+            if (sUploadId.empty())
+                throw std::runtime_error("UploadId not found");
+            return sUploadId;
+        }
+
+        struct UploadTag
+        {
+            std::string etag;
+            std::string hash;
+        };
+        UploadTag uploadPart(std::string_view aName, const std::string& aUploadId,
+                             uint32_t aNumber, std::string_view aContent)
+        {
+            const std::string sHash = SSLxx::DigestStr(EVP_sha256(), aContent);
+
+            auto sResult = m_Client(make(Curl::Client::Method::PUT, aName,
+                                         {aContent, sHash},
+                                         fmt::format("partNumber={}&uploadId={}", aNumber, aUploadId)));
+            if (sResult.status != 200)
+                reportError(sResult);
+            return {sResult.headers["ETag"], sHash};
+        }
+
+        void completeMultipartUpload(std::string_view aName, const std::string& aUploadId,
+                                     const std::vector<UploadTag>& aETags)
+        {
+            std::string sBody;
+            {
+                auto sXML    = std::make_unique<rapidxml::xml_document<>>();
+                auto sUpload = format::XML::create_object(sXML.get(), "CompleteMultipartUpload");
+
+                for (uint32_t aId = 0; aId < aETags.size(); aId++) {
+                    auto sPart = format::XML::create_object(sUpload, "Part");
+                    format::XML::write(sPart, "PartNumber", std::to_string(aId + 1));
+                    format::XML::write(sPart, "ETag", aETags.at(aId).etag);
+                    format::XML::write(sPart, "ChecksumSHA256", Format::Base64(Parser::from_hex(aETags.at(aId).hash)));
+                }
+                sBody = format::XML::to_string(sXML.get());
+            }
+
+            auto sResult = m_Client(make(Curl::Client::Method::POST, aName, {sBody, ""}, "uploadId=" + aUploadId));
+            if (sResult.status != 200)
+                reportError(sResult);
+
+            // check if we really got successful response
+            {
+                auto        sXML = parseXML(sResult);
+                std::string sMsg;
+                Parser::XML::from_path(sXML.get(), "Error.Message", sMsg);
+                if (!sMsg.empty()) {
+                    throw Error(sMsg, sResult.status);
+                }
+                std::string sServerHash;
+                Parser::XML::from_path(sXML.get(), "CompleteMultipartUploadResult.ChecksumSHA256", sServerHash);
+                if (sServerHash.empty())
+                    throw std::runtime_error("ChecksumSHA256 not found");
+            }
+        }
+
     public:
         API(const Params& aParams)
         : m_Params(aParams)
         , m_Zone(Time::load("UTC"))
-        {}
+        {
+        }
 
         using Error = Exception::HttpError;
 
@@ -159,12 +244,15 @@ namespace S3 {
                 reportError(sResult);
         }
 
-        std::string GET(std::string_view aName)
+        std::string GET(std::string_view aName, int aPart = 0)
         {
-            auto sResult = m_Client(make(Curl::Client::Method::GET, aName));
-            if (sResult.status != 200)
+            std::string sPart;
+            if (aPart > 0)
+                sPart = "partNumber=" + std::to_string(aPart);
+            auto sResult = m_Client(make(Curl::Client::Method::GET, aName, {}, sPart));
+            if (sResult.status != 200 and sResult.status != 206)
                 reportError(sResult);
-            if (auto sIt = sResult.headers.find("x-amz-meta-sha256"); sIt != sResult.headers.end()) {
+            if (auto sIt = sResult.headers.find("x-amz-meta-sha256"); sIt != sResult.headers.end() and aPart == 0) {
                 if (SSLxx::DigestStr(EVP_sha256(), sResult.body) != sIt->second)
                     throw std::runtime_error("Checksum mismatch");
             }
@@ -174,17 +262,21 @@ namespace S3 {
         struct HeadResult
         {
             int         status = 0;
+            int         parts  = 0;
             size_t      size   = 0;
             time_t      mtime  = 0;
             std::string sha256;
         };
 
-        HeadResult HEAD(std::string_view aName)
+        HeadResult HEAD(std::string_view aName, int aPart = 0)
         {
-            HeadResult sHead;
-            auto       sResult = m_Client(make(Curl::Client::Method::GET, aName));
-            sHead.status       = sResult.status;
-            if (sHead.status != 200)
+            HeadResult  sHead;
+            std::string sPart;
+            if (aPart > 0)
+                sPart = "partNumber=" + std::to_string(aPart);
+            auto sResult = m_Client(make(Curl::Client::Method::HEAD, aName, {}, sPart));
+            sHead.status = sResult.status;
+            if (sHead.status != 200 and sHead.status != 206)
                 return sHead;
             if (auto sIt = sResult.headers.find("Content-Length"); sIt != sResult.headers.end())
                 sHead.size = Parser::Atoi<size_t>(sIt->second);
@@ -192,6 +284,12 @@ namespace S3 {
                 sHead.mtime = m_Zone.parse(sIt->second, Time::RFC1123);
             if (auto sIt = sResult.headers.find("x-amz-meta-sha256"); sIt != sResult.headers.end())
                 sHead.sha256 = sIt->second;
+            if (auto sIt = sResult.headers.find("ETag"); sIt != sResult.headers.end()) {
+                std::string_view sTmp = sIt->second;
+                sTmp.remove_suffix(1); // terminating "
+                if (auto sPos = sTmp.find_last_of('-'); sPos != std::string_view::npos)
+                    sHead.parts = Parser::Atoi<size_t>(sTmp.substr(sPos + 1));
+            }
             return sHead;
         }
 
@@ -253,15 +351,11 @@ namespace S3 {
             if (sResult.status != 200)
                 reportError(sResult);
 
-            auto sHeader = sResult.headers.find("Content-Type");
-            if (sHeader == sResult.headers.end() or sHeader->second != "application/xml")
-                throw std::runtime_error("XML response expected");
-
             try {
                 Util::Raii sCleanZonePtr([this]() { m_ZonePtr = nullptr; });
                 m_ZonePtr = &m_Zone;
 
-                auto sXML = Parser::XML::parse(sResult.body);
+                auto sXML = parseXML(sResult);
                 auto sLBR = sXML->first_node("ListBucketResult");
                 if (!sLBR)
                     throw std::runtime_error("ListBucketResult node not found");
@@ -276,6 +370,22 @@ namespace S3 {
             } catch (const std::exception& e) {
                 throw std::runtime_error(std::string("XML processing error: ") + e.what());
             }
+        }
+
+        void multipartPUT(std::string_view aName, std::function<std::string()> aSrc, std::string_view aSha256 = {})
+        {
+            std::string sUploadId = startMultipartUpload(aName, aSha256);
+            uint32_t    sSerial   = 1;
+
+            std::vector<UploadTag> sETags;
+            while (true) {
+                auto sTmp = aSrc();
+                if (sTmp.empty())
+                    break;
+                sETags.push_back(uploadPart(aName, sUploadId, sSerial, sTmp));
+                sSerial++;
+            }
+            completeMultipartUpload(aName, sUploadId, sETags);
         }
 
     private:

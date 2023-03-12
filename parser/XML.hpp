@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "Atoi.hpp"
+#include "Parser.hpp"
 
 #include <rapidxml/rapidxml.hpp>
 
@@ -25,7 +26,10 @@ namespace Parser::XML {
 
     template <class T>
     requires std::is_member_function_pointer_v<decltype(&T::from_xml)>
-    void from_node(const Node* aNode, T& t) { t.from_xml(aNode); }
+    void from_node(const Node* aNode, T& t)
+    {
+        t.from_xml(aNode);
+    }
 
     template <class T>
     typename std::enable_if<std::numeric_limits<T>::is_integer, void>::type
@@ -62,6 +66,20 @@ namespace Parser::XML {
             from_node(aNode, aValue.back());
             aNode = aNode->next_sibling(aNode->name(), aNode->name_size());
         } while (aNode);
+    }
+
+    template <class T>
+    void from_path(const Node* aNode, const std::string_view aPath, T& aValue)
+    {
+        const Node* sCurrent = aNode;
+        simple(
+            aPath,
+            [&sCurrent](std::string_view aName) mutable {
+                if (sCurrent != nullptr)
+                    sCurrent = sCurrent->first_node(aName.data(), aName.size());
+            },
+            '.');
+        from_node(sCurrent, aValue);
     }
 
 } // namespace Parser::XML
