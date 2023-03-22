@@ -9,10 +9,10 @@ namespace Prometheus {
     class Histogramm
     {
         size_t              m_Size;
+        size_t              m_Count = 0;
         std::vector<double> m_Storage;
         double              m_Min{};
         double              m_Max{};
-        bool                m_HasMin{false};
 
     public:
         Histogramm(const size_t aSize = 1000)
@@ -23,29 +23,34 @@ namespace Prometheus {
 
         void tick(double aValue)
         {
-            if (m_HasMin)
+            if (m_Storage.empty()) {
+                m_Min = aValue;
+                m_Max = aValue;
+            } else {
                 m_Min = std::min(m_Min, aValue);
-            else {
-                m_Min    = aValue;
-                m_HasMin = true;
+                m_Max = std::max(m_Max, aValue);
             }
-            m_Max = std::max(m_Max, aValue);
 
-            if (m_Storage.size() < m_Size)
+            if (m_Count < m_Size)
                 m_Storage.push_back(aValue);
-            else
-                m_Storage[Util::randomInt(m_Size)] = aValue;
+            else {
+                // https://en.wikipedia.org/wiki/Reservoir_sampling
+                const size_t sPos = Util::randomInt(m_Count);
+                if (sPos < m_Size)
+                    m_Storage[sPos] = aValue;
+            }
+            m_Count++;
         }
 
         template <class P>
         auto quantile(const P& aParam) -> P
         {
-            P    sResult{};
+            P sResult{};
             std::sort(m_Storage.begin(), m_Storage.end());
 
             if (m_Storage.size() == 0)
                 return sResult;
-            const auto sSize = m_Storage.size() - 1;
+            const auto sMaxIdx = m_Storage.size() - 1;
             for (unsigned i = 0; i < aParam.size(); i++) {
                 auto sPhi = aParam[i];
                 if (sPhi <= 0)
@@ -53,8 +58,12 @@ namespace Prometheus {
                 else if (sPhi >= 1)
                     sResult[i] = m_Max;
                 else {
-                    auto sIdx  = std::min(size_t(std::round(sPhi * sSize)), sSize);
-                    sResult[i] = m_Storage[sIdx];
+                    const auto sIdx = std::min(size_t(std::round(sPhi * sMaxIdx)), sMaxIdx);
+                    if (m_Storage.size() % 2 == 0 and sIdx >= 1) {
+                        sResult[i] = (m_Storage[sIdx] + m_Storage[sIdx - 1]) / 2;
+                    } else {
+                        sResult[i] = m_Storage[sIdx];
+                    }
                 }
             }
             return sResult;
@@ -62,11 +71,11 @@ namespace Prometheus {
 
         void clear()
         {
+            m_Count = 0;
             m_Storage.clear();
             m_Storage.reserve(m_Size);
-            m_Min     = 0;
-            m_Max     = 0;
-            m_HasMin  = false;
+            m_Min = 0;
+            m_Max = 0;
         }
     };
 } // namespace Prometheus

@@ -28,6 +28,25 @@ BOOST_AUTO_TEST_CASE(ago)
     sAge.set(sNow);
     BOOST_CHECK_EQUAL(sAge.format(), std::to_string(0));
 }
+BOOST_AUTO_TEST_CASE(histogramm)
+{
+    Prometheus::Histogramm sH;
+    {
+        sH.tick(1);
+        sH.tick(2);
+        sH.tick(3);
+        BOOST_CHECK_CLOSE(sH.quantile(std::array<double, 1>{0.5})[0], 2, 0.01);
+        sH.clear();
+    }
+    {
+        sH.tick(1);
+        sH.tick(1);
+        sH.tick(3);
+        sH.tick(3);
+        BOOST_CHECK_CLOSE(sH.quantile(std::array<double, 1>{0.5})[0], 2, 0.01);
+        sH.clear();
+    }
+}
 BOOST_AUTO_TEST_CASE(time)
 {
     Prometheus::Time sTime("time");
@@ -37,7 +56,7 @@ BOOST_AUTO_TEST_CASE(time)
 
     const auto                     sActual   = Prometheus::Manager::instance().toPrometheus();
     const Prometheus::Manager::Set sExpected = {
-        {"time{quantile=\"0.5\"} 5.100000"}, {"time{quantile=\"0.9\"} 9.000000"}, {"time{quantile=\"0.99\"} 9.900000"}, {"time{quantile=\"1.0\"} 10.000000"}};
+        {"time{quantile=\"0.5\"} 5.050000"}, {"time{quantile=\"0.9\"} 8.950000"}, {"time{quantile=\"0.99\"} 9.850000"}, {"time{quantile=\"1.0\"} 10.000000"}};
     BOOST_CHECK_EQUAL_COLLECTIONS(sActual.begin(), sActual.end(), sExpected.begin(), sExpected.end());
 }
 BOOST_AUTO_TEST_CASE(router)
