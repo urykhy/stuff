@@ -27,16 +27,19 @@ namespace Container {
         {
             EndOfBuffer()
             : std::invalid_argument("Premature end of buffer")
-            {}
+            {
+            }
         };
 
         imemstream(const std::string_view& aBuffer)
         : m_Data(aBuffer)
-        {}
+        {
+        }
 
         imemstream(const binary& aBuffer)
         : m_Data((const char*)&aBuffer[0], aBuffer.size())
-        {}
+        {
+        }
 
         template <class T>
         void read(T& aData)
@@ -79,6 +82,18 @@ namespace Container {
 
         bool eof() override { return m_Offset >= m_Data.size(); }
         void close() override {}
+
+        // with user prvided offset
+        size_t offset() const
+        {
+            return m_Offset;
+        }
+        std::string_view substr_at(size_t aOffset, size_t aSize) const
+        {
+            if (aSize + aOffset > m_Data.size())
+                throw EndOfBuffer();
+            return m_Data.substr(aOffset, aSize);
+        }
     };
 
     class omemstream : public File::IWriter

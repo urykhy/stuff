@@ -8,6 +8,7 @@
 #include <exception/Error.hpp>
 #include <format/Base64.hpp>
 #include <format/XML.hpp>
+#include <parser/AWS.hpp>
 #include <parser/Hex.hpp>
 #include <parser/XML.hpp>
 #include <ssl/Digest.hpp>
@@ -386,6 +387,38 @@ namespace S3 {
                 sSerial++;
             }
             completeMultipartUpload(aName, sUploadId, sETags);
+        }
+
+        std::string SELECT(std::string_view aName, const std::string& aQuery)
+        {
+            auto sXML     = std::make_unique<rapidxml::xml_document<>>();
+            auto sRequest = format::XML::create_object(sXML.get(), "SelectRequest");
+            format::XML::write(sRequest, "Expression", aQuery);
+            format::XML::write(sRequest, "ExpressionType", "SQL");
+            auto sInput = format::XML::create_object(sRequest, "InputSerialization");
+            // format::XML::write(sInput, "CompressionType", "GZIP");
+            auto sCSV = format::XML::create_object(sInput, "CSV");
+            format::XML::write(sCSV, "FileHeaderInfo", "Use");
+            format::XML::write(sCSV, "RecordDelimiter", "\n");
+            format::XML::write(sCSV, "FieldDelimiter", ",");
+            format::XML::write(sCSV, "QuoteCharacter", "\"");
+            format::XML::write(sCSV, "QuoteEscapeCharacter", "\"");
+            format::XML::write(sCSV, "Comments", "#");
+            auto sOutput = format::XML::create_object(sRequest, "OutputSerialization");
+            auto sOCSV   = format::XML::create_object(sOutput, "CSV");
+            format::XML::write(sOCSV, "QuoteFields", "ASNEEDED");
+            format::XML::write(sOCSV, "RecordDelimiter", "\n");
+            format::XML::write(sOCSV, "FieldDelimiter", ",");
+            format::XML::write(sOCSV, "QuoteCharacter", "\"");
+            format::XML::write(sOCSV, "QuoteEscapeCharacter", "\"");
+            std::string sBody = format::XML::to_string(sXML.get());
+
+            auto sResult = m_Client(make(Curl::Client::Method::POST, aName, {sBody, ""}, "select=&select-type=2"));
+            if (sResult.status != 200 and sResult.status != 206)
+                reportError(sResult);
+
+            // parsing response
+            return Parser::AWS::Stream(sResult.body);
         }
 
     private:

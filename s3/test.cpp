@@ -94,4 +94,27 @@ BOOST_AUTO_TEST_CASE(multipart)
     // cleanup
     sAPI.DELETE("some_multipart");
 }
+BOOST_AUTO_TEST_CASE(csv)
+{
+    S3::Params sParams;
+    S3::API    sAPI(sParams);
+
+    // put XML file
+    const std::string sContent = R"("name","message"
+c1,foo
+c2,bar
+c3,boo
+    )";
+    sAPI.PUT("test.csv", sContent);
+
+    // make SELECT
+    std::string sResult = sAPI.SELECT("test.csv", "SELECT s.message FROM S3Object s WHERE s.name='c2'");
+    BOOST_CHECK_EQUAL("bar\n", sResult);
+
+    // bad query
+    BOOST_CHECK_THROW(sAPI.SELECT("test.csv", "SELECT s.nx_column FROM S3Object s WHERE s.name='c2'"), std::invalid_argument);
+
+    // cleanup
+    sAPI.DELETE("test.csv");
+}
 BOOST_AUTO_TEST_SUITE_END()
