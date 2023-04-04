@@ -29,7 +29,7 @@
     type: array
     items:
       type: string
-  opt: False
+  opt: True
   expected: |
     std::vector<std::string> optional_string_array = {};
 

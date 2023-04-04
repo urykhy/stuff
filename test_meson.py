@@ -7,10 +7,12 @@ import os
 import pytest
 import subprocess
 
+PROJECTS = ["prometheus", "protobuf", "mysql"]
+
 
 def prepare_cases():
     cases = []
-    for d in ["prometheus", "protobuf", "mysql"]:
+    for d in PROJECTS:
         for x in glob.glob(f"{d}/build*/build.ninja"):
             x = os.path.dirname(x)
             p = subprocess.run(
@@ -28,8 +30,18 @@ def prepare_cases():
 @pytest.mark.parametrize("tc", prepare_cases())
 def test_cxx(tc):
     p = subprocess.run(
-        f"direnv exec . bash -c 'meson test -v \"{os.path.basename(tc)}\"'",
+        [
+            "/usr/bin/direnv",
+            "exec",
+            ".",
+            "meson",
+            "test",
+            "-v",
+            "--test-args",
+            "\--color_output=no",
+            f"{os.path.basename(tc)}",
+        ],
         cwd=os.path.dirname(tc),
-        shell=True,
+        shell=False,
         check=True,
     )
