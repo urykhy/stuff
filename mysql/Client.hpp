@@ -54,7 +54,7 @@ namespace MySQL {
                 return NETWORK;
             else if (m_Errno == ER_DUP_ENTRY)
                 return DUPLICATE;
-            else if (m_Errno == ER_LOCK_DEADLOCK)
+            else if (m_Errno == ER_LOCK_DEADLOCK or m_Errno == ER_LOCK_WAIT_TIMEOUT or m_Errno == ER_TABLE_DEF_CHANGED)
                 return DEADLOCK;
             else if (m_Errno >= ER_BAD_TABLE_ERROR and m_Errno <= ER_PARSE_ERROR and m_Errno != ER_SERVER_SHUTDOWN)
                 return BAD_QUERY;
