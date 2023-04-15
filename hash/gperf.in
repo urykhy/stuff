@@ -1,0 +1,8 @@
+%define class-name       test_hash_gperf
+struct Option { const char* name = nullptr; int code = 0; };
+%%
+name,   1
+id,     2
+email,  3
+phones, 4
+%%
