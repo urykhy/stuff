@@ -54,3 +54,13 @@ message xtest {
     optional fixed64 i64 = 10; // fixed
     optional sint64  s64 = 11; // zigzag
 }
+
+message rwalk {
+    message xpart2 {
+        optional int32 id = 10;
+    }
+    message xpart1 {
+        optional xpart2 m2 = 2;
+    }
+    optional xpart1 m1 = 1;
+}

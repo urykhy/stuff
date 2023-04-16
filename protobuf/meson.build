@@ -7,6 +7,7 @@ benchmark = dependency('benchmark', required : true)
 boost     = dependency('boost', modules : ['unit_test_framework', 'system'])
 threads   = dependency('threads')
 json      = dependency('jsoncpp')
+gperf     = find_program('gperf')
 import('python').find_installation('python3', modules : ['lark','jinja2'])
 
 protoc        = generator(protoc, output : ['@BASENAME@.pb.cc', '@BASENAME@.pb.h'], arguments : ['--proto_path=@CURRENT_SOURCE_DIR@', '--cpp_out=@BUILD_DIR@', '@INPUT@'])
@@ -25,9 +26,9 @@ foreach name : ['tutorial.proto']
                command      : [api_gen, '@INPUT@', '@OUTPUT@'])
 endforeach
 
-a  = executable('a.out',  'test.cpp',       api_src, dependencies : [tutorial_dep, protobuf, boost, json], cpp_args : '-DWITH_JSON', include_directories : includes)
+a  = executable('a.out',  'test.cpp',       api_src, dependencies : [tutorial_dep, protobuf, boost, json], cpp_args : ['-DWITH_JSON', '-DWITH_REFLECTION'], include_directories : includes)
 b  = executable('b.out',  'benchmark.cpp',  api_src, dependencies : [tutorial_dep, protobuf, boost, benchmark], include_directories : includes)
-b2 = executable('b2.out', 'benchmark2.cpp', api_src, dependencies : [tutorial_dep, protobuf, boost, benchmark], include_directories : includes)
+b2 = executable('b2.out', 'benchmark2.cpp', api_src, dependencies : [tutorial_dep, protobuf, boost, benchmark], cpp_args : ['-DWITH_REFLECTION'], include_directories : includes)
 test('basic test', a, args : ['-l', 'all'])
 benchmark('protobuf', b)
 benchmark('protobuf', b2)

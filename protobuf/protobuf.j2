@@ -82,7 +82,7 @@
     return Protobuf::ACT_USED;
 {% endmacro %}
 
-namespace {{ doc.namespace }}
+namespace {{ doc.namespace | replace(".", "::") }}
 {
     {% for m in doc.message recursive %}
     struct {{ m.name }}
@@ -160,6 +160,29 @@ namespace {{ doc.namespace }}
                 {%- endif %}
             {%- endfor %}
             return sValue;
+        }
+#endif
+#ifdef WITH_REFLECTION
+        struct ReflectionKey {const char* name = nullptr; uint32_t id = 0;};
+        private:
+        {{ proto_gperf(m.fields) }}
+        public:
+        static const ReflectionKey* GetReflectionKey(const std::string& aName) {
+            // aName must be zero terminated
+            return ReflectionGet(aName.data(), aName.size());
+        }
+        template<class H>
+        bool GetByID(const uint32_t aID, H&& aHandler)
+        {
+            switch (aID) {
+                {%- for f in m.fields %}
+                    case {{ f.id }}: {
+                        aHandler({{ f.name }});
+                        return true;
+                    }
+                {%- endfor %}
+                default: return false;
+            };
         }
 #endif
     };
