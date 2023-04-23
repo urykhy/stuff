@@ -97,7 +97,6 @@ def convert(x):
                 "sint64": "int64_t",
                 "uint64": "uint64_t",
                 "fixed64": "uint64_t",
-                "float": "float",
             }
             if string_view and name in ("string", "bytes"):
                 return "std::string_view"

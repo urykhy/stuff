@@ -16,7 +16,9 @@ namespace Protobuf {
         struct can_walk<U, std::void_t<decltype(&U::GetReflectionKey)>> : std::true_type
         {};
 
-        static void walk(T& aItem, std::string aName, std::vector<uint32_t>& aPath)
+        using Path = std::vector<uint32_t>;
+
+        static void walk(T& aItem, std::string aName, Path& aPath)
         {
             std::string sRest = aName;
             auto        sPos  = aName.find('.');
@@ -38,7 +40,7 @@ namespace Protobuf {
         }
 
         template <class H>
-        static void use(T& aItem, const std::vector<uint32_t>& aPath, H&& aHandler, uint32_t aPos = 0)
+        static void use(T& aItem, const Path& aPath, H&& aHandler, uint32_t aPos = 0)
         {
             aItem.GetByID(aPath[aPos], [&aPath, &aHandler, aPos](auto x) mutable {
                 using V = typename decltype(x)::value_type;

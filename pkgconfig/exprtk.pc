@@ -1,0 +1,4 @@
+Name: ExprTK
+Description: C++ Mathematical Expression Toolkit Library
+Version: 1.0
+Cflags: -I/u03/git/_c/exprtk

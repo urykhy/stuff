@@ -53,6 +53,7 @@ message xtest {
 
     optional fixed64 i64 = 10; // fixed
     optional sint64  s64 = 11; // zigzag
+    optional double  f64 = 12; // float64
 }
 
 message rwalk {

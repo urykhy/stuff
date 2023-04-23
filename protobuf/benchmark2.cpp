@@ -1,9 +1,11 @@
 #include <benchmark/benchmark.h>
 
 // clang-format off
-#include <Protobuf.hpp>
+#include "Protobuf.hpp"
+#include "Reflection.hpp"
 // clang-format on
 
+#include "ExprTK.hpp"
 #include "tutorial.hpp"
 #include "tutorial.pb.h"
 
@@ -116,5 +118,23 @@ static void BM_CustomReflection(benchmark::State& state)
         benchmark::DoNotOptimize(sGetID());
 }
 BENCHMARK(BM_CustomReflection);
+
+static void BM_Expr(benchmark::State& state)
+{
+    char                                sBuffer[1024] = {};
+    std::pmr::monotonic_buffer_resource sPool{std::data(sBuffer), std::size(sBuffer)};
+    pmr_tutorial::xtest                 sVal(&sPool);
+    sVal.i32 = 123;
+    Protobuf::ExprTK sExpr;
+    sExpr.m_Table.create_variable("i32");
+    sExpr.compile("i32 > 100 and i32 < 200");
+    sExpr.resolveFrom(sVal);
+
+    for (auto _ : state) {
+        sExpr.assignFrom(sVal);
+        benchmark::DoNotOptimize(sExpr.eval());
+    }
+}
+BENCHMARK(BM_Expr);
 
 BENCHMARK_MAIN();

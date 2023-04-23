@@ -1,15 +1,16 @@
 #define BOOST_TEST_MODULE Suites
 #include <boost/test/unit_test.hpp>
 
+// clang-format off
 #include "Protobuf.hpp"
 #include "Reflection.hpp"
+// clang-format on
 
-#include <format/Hex.hpp>
-
-// clang-format off
+#include "ExprTK.hpp"
 #include "tutorial.hpp"
 #include "tutorial.pb.h"
-// clang-format on
+
+#include <format/Hex.hpp>
 
 struct MyPerson
 {
@@ -148,6 +149,9 @@ BOOST_AUTO_TEST_CASE(xdecode)
           [](auto& x) { BOOST_CHECK_EQUAL(11, x.readTag().id); int64_t tmp = 0; x.read(tmp, Protobuf::ZIGZAG); BOOST_CHECK_EQUAL(tmp, INT64_MAX); });
     xTest([](auto& x) { x.set_s64(INT64_MIN); },
           [](auto& x) { BOOST_CHECK_EQUAL(11, x.readTag().id); int64_t tmp = 0; x.read(tmp, Protobuf::ZIGZAG); BOOST_CHECK_EQUAL(tmp, INT64_MIN); });
+
+    xTest([](auto& x) { x.set_f64(-4.6); },
+          [](auto& x) { BOOST_CHECK_EQUAL(12, x.readTag().id); double tmp = 0; x.read(tmp); BOOST_CHECK_CLOSE(tmp, -4.6, 0.001); });
 }
 BOOST_AUTO_TEST_CASE(generated)
 {
@@ -155,6 +159,7 @@ BOOST_AUTO_TEST_CASE(generated)
     sMessage.set_i32(123);  // fixed
     sMessage.set_s32(-45);  // zz
     sMessage.set_f32(-4.6); // fixed float
+    sMessage.set_f64(-6.2); // fixed float 64
     sMessage.add_packed_list(12);
     sMessage.add_packed_list(14);
     sMessage.set_binary("321");
@@ -169,6 +174,7 @@ BOOST_AUTO_TEST_CASE(generated)
     BOOST_CHECK_EQUAL(sMessage.i32(), *sCustom.i32);
     BOOST_CHECK_EQUAL(sMessage.s32(), *sCustom.s32);
     BOOST_CHECK_EQUAL(sMessage.f32(), *sCustom.f32);
+    BOOST_CHECK_EQUAL(sMessage.f64(), *sCustom.f64);
     BOOST_CHECK_EQUAL(2, sCustom.packed_list.size());
     for (unsigned i = 0; i < sCustom.packed_list.size(); i++) {
         auto sIt = sCustom.packed_list.begin();
@@ -255,4 +261,24 @@ BOOST_AUTO_TEST_CASE(walk)
     BOOST_CHECK_EQUAL(sVal, 10);
 }
 BOOST_AUTO_TEST_SUITE_END() // reflection
+
+BOOST_AUTO_TEST_CASE(exprtk)
+{
+    char                                sBuffer[1024] = {};
+    std::pmr::monotonic_buffer_resource sPool{std::data(sBuffer), std::size(sBuffer)};
+
+    Protobuf::ExprTK sExpr;
+    sExpr.m_Table.create_variable("m1.m2.id");
+    sExpr.compile("m1.m2.id");
+
+    pmr_tutorial::rwalk sVal(&sPool);
+    sVal.m1         = pmr_tutorial::rwalk::xpart1(&sPool);
+    sVal.m1->m2     = pmr_tutorial::rwalk::xpart2(&sPool);
+    sVal.m1->m2->id = 10;
+
+    sExpr.resolveFrom(sVal);
+    sExpr.assignFrom(sVal);
+
+    BOOST_CHECK_EQUAL(sExpr.eval(), 10);
+}
 BOOST_AUTO_TEST_SUITE_END() // Protobuf
