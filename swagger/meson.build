@@ -12,7 +12,7 @@ thrift    = dependency('thrift')
 ssl       = dependency('openssl')
 nghttp2   = dependency('libnghttp2') # for hpack
 subdir('jaeger_proto')
-import('python').find_installation('python3', modules : ['jinja2'])
+import('python').find_installation('python3', modules : ['jinja2','pytest','syrupy'])
 fs        = import('fs')
 
 api_gen   = find_program('j2/swagger.sh', required : true)

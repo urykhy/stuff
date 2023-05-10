@@ -34,8 +34,6 @@ def clang_format(text):
 
 
 @pytest.mark.parametrize("tc", prepare_cases(), ids=prepare_ids())
-def test_complex_schema(tc, template):
+def test_complex_schema(tc, template, snapshot):
     r = clang_format(template.render(doc=tc).strip())
-    # print(r)
-    x = clang_format(tc["expected"].strip())
-    assert r == x
+    assert r == snapshot

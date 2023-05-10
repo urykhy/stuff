@@ -1,0 +1,165 @@
+# serializer version: 1
+# name: test_complex_schema[complex_array_1]
+  '''
+  struct complex_array_1_t
+  {
+      std::string task_id = {};
+  
+      struct cookies_t
+      {
+          std::string key = {};
+  
+          std::vector<std::string> value = {};
+          ::Json::Value            to_json() const
+          {
+              ::Json::Value sValue(::Json::objectValue);
+              sValue["key"]   = Format::Json::to_value(key);
+              sValue["value"] = Format::Json::to_value(value);
+              return sValue;
+          }
+          void from_json(const ::Json::Value& aJson)
+          {
+              Parser::Json::from_object(aJson, "key", key);
+              Parser::Json::from_object(aJson, "value", value);
+          }
+          void cbor_write(cbor::ostream& aOut) const
+          {
+              cbor::write(aOut, key, value);
+          }
+          void cbor_read(cbor::istream& aIn)
+          {
+              cbor::read(aIn, key, value);
+          }
+      };
+      std::vector<cookies_t> cookies   = {};
+      std::string            operation = {};
+      ::Json::Value          to_json() const
+      {
+          ::Json::Value sValue(::Json::objectValue);
+          sValue["cookies"]   = Format::Json::to_value(cookies);
+          sValue["operation"] = Format::Json::to_value(operation);
+          sValue["task_id"]   = Format::Json::to_value(task_id);
+          return sValue;
+      }
+      void from_json(const ::Json::Value& aJson)
+      {
+          Parser::Json::from_object(aJson, "cookies", cookies);
+          Parser::Json::from_object(aJson, "operation", operation);
+          Parser::Json::from_object(aJson, "task_id", task_id);
+      }
+      void cbor_write(cbor::ostream& aOut) const
+      {
+          cbor::write(aOut, cookies, operation, task_id);
+      }
+      void cbor_read(cbor::istream& aIn)
+      {
+          cbor::read(aIn, cookies, operation, task_id);
+      }
+  };
+  complex_array_1_t complex_array_1 = {};
+  '''
+# ---
+# name: test_complex_schema[complex_array_2]
+  '''
+  struct complex_array_2_a_a_t
+  {
+      std::string   idx = {};
+      ::Json::Value to_json() const
+      {
+          ::Json::Value sValue(::Json::objectValue);
+          sValue["idx"] = Format::Json::to_value(idx);
+          return sValue;
+      }
+      void from_json(const ::Json::Value& aJson)
+      {
+          Parser::Json::from_object(aJson, "idx", idx);
+      }
+      void cbor_write(cbor::ostream& aOut) const
+      {
+          cbor::write(aOut, idx);
+      }
+      void cbor_read(cbor::istream& aIn)
+      {
+          cbor::read(aIn, idx);
+      }
+  };
+  using complex_array_2_a_a                      = std::vector<complex_array_2_a_a_t>;
+  using complex_array_2_a                        = std::vector<complex_array_2_a_a>;
+  std::vector<complex_array_2_a> complex_array_2 = {};
+  '''
+# ---
+# name: test_complex_schema[object_array]
+  '''
+  struct object_array_t
+  {
+      std::string   key       = {};
+      std::string   value     = {};
+      int64_t       timestamp = {};
+      ::Json::Value to_json() const
+      {
+          ::Json::Value sValue(::Json::objectValue);
+          sValue["key"]       = Format::Json::to_value(key);
+          sValue["timestamp"] = Format::Json::to_value(timestamp);
+          sValue["value"]     = Format::Json::to_value(value);
+          return sValue;
+      }
+      void from_json(const ::Json::Value& aJson)
+      {
+          Parser::Json::from_object(aJson, "key", key);
+          Parser::Json::from_object(aJson, "timestamp", timestamp);
+          Parser::Json::from_object(aJson, "value", value);
+      }
+      void cbor_write(cbor::ostream& aOut) const
+      {
+          cbor::write(aOut, key, timestamp, value);
+      }
+      void cbor_read(cbor::istream& aIn)
+      {
+          cbor::read(aIn, key, timestamp, value);
+      }
+  };
+  std::vector<object_array_t> object_array = {};
+  '''
+# ---
+# name: test_complex_schema[optional_string_array]
+  'std::vector<std::string> optional_string_array = {};'
+# ---
+# name: test_complex_schema[optional_string_binary]
+  'std::optional<std::string> optional_string_binary = {};'
+# ---
+# name: test_complex_schema[simple_object]
+  '''
+  struct simple_object_t
+  {
+      std::string   status = {};
+      double        load   = {};
+      ::Json::Value to_json() const
+      {
+          ::Json::Value sValue(::Json::objectValue);
+          sValue["load"]   = Format::Json::to_value(load);
+          sValue["status"] = Format::Json::to_value(status);
+          return sValue;
+      }
+      void from_json(const ::Json::Value& aJson)
+      {
+          Parser::Json::from_object(aJson, "load", load);
+          Parser::Json::from_object(aJson, "status", status);
+      }
+      void cbor_write(cbor::ostream& aOut) const
+      {
+          cbor::write(aOut, load, status);
+      }
+      void cbor_read(cbor::istream& aIn)
+      {
+          cbor::read(aIn, load, status);
+      }
+  };
+  simple_object_t simple_object = {};
+  '''
+# ---
+# name: test_complex_schema[string_array]
+  'std::vector<std::string> string_array = {};'
+# ---
+# name: test_complex_schema[string_binary]
+  'std::string string_binary = {};'
+# ---
