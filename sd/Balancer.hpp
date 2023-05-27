@@ -66,6 +66,9 @@ namespace SD {
         mutable std::mutex m_Mutex;
         State              m_State;
 
+#ifdef BOOST_TEST_MODULE
+    public:
+#endif
         double m_RPS         = 0;
         double m_AvailRPS    = 0;
         double m_TotalWeight = 0;
@@ -236,7 +239,7 @@ namespace SD {
             return m_State;
         }
 
-        std::string random()
+        std::string random(time_t aNow = time(nullptr))
         {
             Lock lk(m_Mutex);
             if (m_State.empty())
@@ -244,13 +247,13 @@ namespace SD {
             auto [sEntry, sWeight] = random_i();
             if (m_Breaker) {
                 if (allow_second_chance(sEntry)) {
-                    if (m_Breaker->test(sEntry->key)) {
+                    if (m_Breaker->test(sEntry->key, aNow)) {
                         return sEntry->key;
                     } else {
                         sEntry = second_chance(sEntry->weight / m_TotalWeight, sWeight).first;
                     }
                 }
-                if (!m_Breaker->test(sEntry->key))
+                if (!m_Breaker->test(sEntry->key, aNow))
                     throw Breaker::Error("SD: request to " + sEntry->key + " blocked by circuit breaker");
             }
             return sEntry->key;

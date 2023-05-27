@@ -122,8 +122,9 @@ namespace SD {
             if (aSuccess) {
                 m_Success++;
                 m_Latency.add(aLatency, aNow);
-            } else
+            } else {
                 m_Fail++;
+            }
         }
 
         bool test(time_t aNow)
@@ -252,6 +253,11 @@ namespace SD {
         Statistics statistics(const std::string& aPeer) override
         {
             return getOrCreate(aPeer)->statistics();
+        }
+
+        void add(const std::string& aPeer, double aLatency, time_t aNow, bool aSuccess)
+        {
+            getOrCreate(aPeer)->add(aLatency, aNow, aSuccess);
         }
     };
 

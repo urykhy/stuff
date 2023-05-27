@@ -5,7 +5,15 @@
 #include <etcd/Etcd.hpp>
 
 namespace SD {
-    struct Notify : public std::enable_shared_from_this<Notify>
+
+    struct NotifyFace
+    {
+        virtual void start()                           = 0;
+        virtual void update(const std::string& aValue) = 0;
+        virtual ~NotifyFace(){};
+    };
+
+    struct Notify : public NotifyFace, std::enable_shared_from_this<Notify>
     {
         struct Params
         {
@@ -99,7 +107,7 @@ namespace SD {
         {
         }
 
-        void update(const std::string& aValue)
+        void update(const std::string& aValue) override
         {
             Lock lk(m_Mutex);
             m_Value   = aValue;
@@ -114,7 +122,7 @@ namespace SD {
             return m_LastError;
         }
 
-        void start()
+        void start() override
         {
             boost::asio::spawn(m_Timer.get_executor(), [this, p = shared_from_this()](boost::asio::yield_context yield) {
                 boost::beast::error_code ec;

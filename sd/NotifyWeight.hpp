@@ -20,8 +20,8 @@ namespace SD {
         };
 
     private:
-        const Params            m_Params;
-        std::shared_ptr<Notify> m_Notify;
+        const Params                m_Params;
+        std::shared_ptr<NotifyFace> m_Notify;
         using Info = Util::EwmaRps::Info;
 
         using Lock = std::unique_lock<std::mutex>;
@@ -57,13 +57,17 @@ namespace SD {
         }
 
     public:
-        NotifyWeight(boost::asio::io_service& aAsio, const Params& aParams)
+        NotifyWeight(boost::asio::io_service& aAsio, const Params& aParams, std::shared_ptr<NotifyFace> aNotifier = nullptr)
         : m_Params(aParams)
         , m_Ewma(0.95, m_Params.latency)
         {
             m_LastWeight   = m_Params.threads / info_i().latency;
             m_LastUpdateTs = time(nullptr);
-            m_Notify       = std::make_shared<SD::Notify>(aAsio, aParams.notify, format_i());
+            if (aNotifier) {
+                m_Notify = aNotifier;
+                m_Notify->update(format_i());
+            } else
+                m_Notify = std::make_shared<SD::Notify>(aAsio, aParams.notify, format_i());
             m_Notify->start();
         }
 
