@@ -2,7 +2,7 @@
 #
 
 # allow all services for known ips
-SAFE_WLAN="-i wlan1 -s 192.168.1.67,192.168.1.69"
+SAFE_WLAN="-i wlan1 -s 192.168.1.67,192.168.1.69,192.168.1.65"
 
 # allow everything from local docker/bridge
 SAFE_LOCAL="-i br+"
@@ -17,7 +17,7 @@ NSPACE_UDP="-i space+ -p udp -m multiport --dports 53"
 NSPACE_FWD="-i space+ -o wlan1"
 
 # via tor
-VIA_TOR=("rutracker.org" "booktracker.org" "flibusta.is" "ru.linkedin.com" "linkedin.com" "proton.me" "mail.proton.me")
+VIA_TOR=("rutracker.org" "booktracker.org" "flibusta.is" "ru.linkedin.com" "linkedin.com" "proton.me" "mail.proton.me", "medium.com")
 
 VIA_PROXY=("bt.rutracker.org" "bt2.rutracker.org" "bt3.rutracker.org" "bt4.rutracker.org" "bt.booktracker.work")
 
