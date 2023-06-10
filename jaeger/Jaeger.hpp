@@ -2,6 +2,7 @@
 
 #include <variant>
 
+#include <boost/noncopyable.hpp>
 #include <thrift/protocol/TCompactProtocol.h>
 #include <thrift/transport/TBufferTransports.h>
 
