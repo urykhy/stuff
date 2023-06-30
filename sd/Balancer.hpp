@@ -11,101 +11,65 @@
 #include <parser/Json.hpp>
 #include <unsorted/Random.hpp>
 
-namespace SD {
+namespace SD::Balancer {
 
-    struct Balancer : public std::enable_shared_from_this<Balancer>
+    using Error = std::runtime_error;
+
+    struct Params
     {
-        struct Params
+        Etcd::Client::Params addr               = {};
+        std::string          prefix             = {};
+        int                  period             = 10;
+        std::string          location           = {};
+        bool                 use_client_latency = true;
+        bool                 use_server_rps     = false;
+        bool                 second_chance      = false;
+    };
+
+    struct Entry
+    {
+        std::string key;
+        double      weight   = 0;
+        double      rps      = 0;
+        uint32_t    threads  = 1;
+        std::string location = {};
+
+        void from_json(const ::Json::Value& aJson)
         {
-            Etcd::Client::Params addr               = {};
-            std::string          prefix             = {};
-            int                  period             = 10;
-            std::string          location           = {};
-            bool                 use_client_latency = true;
-            bool                 use_server_rps     = false;
-            bool                 second_chance      = false;
-        };
-
-        struct Entry
+            Parser::Json::from_object(aJson, "weight", weight);
+            Parser::Json::from_object(aJson, "rps", rps);
+            Parser::Json::from_object(aJson, "threads", threads);
+            Parser::Json::from_object(aJson, "location", location);
+            // TODO: success_rate ?
+        }
+        double latency() const
         {
-            std::string key;
-            double      weight    = 0;
-            double      avail_rps = 0;
-            double      rps       = 0;
-            uint32_t    threads   = 1;
-            std::string location  = {};
+            return threads / weight;
+        }
+        double utilization() const
+        {
+            return rps / weight;
+        }
+    };
 
-            void from_json(const ::Json::Value& aJson)
-            {
-                Parser::Json::from_object(aJson, "weight", weight);
-                avail_rps = weight;
-                Parser::Json::from_object(aJson, "rps", rps);
-                Parser::Json::from_object(aJson, "threads", threads);
-                Parser::Json::from_object(aJson, "location", location);
-            }
-            double latency() const
-            {
-                return threads / weight;
-            }
-            double utilization() const
-            {
-                return rps / weight;
-            }
-        };
-
-        using State = std::map<double, Entry>;
-        using Error = std::runtime_error;
-
-    private:
-        const Params              m_Params;
-        boost::asio::io_service&  m_Service;
-        std::atomic<bool>         m_Stop{false};
-        boost::asio::steady_timer m_Timer;
-
-        using Lock = std::unique_lock<std::mutex>;
-        mutable std::mutex m_Mutex;
-        State              m_State;
-
+    class ByWeight
+    {
 #ifdef BOOST_TEST_MODULE
     public:
 #endif
+        const Params m_Params;
+        BreakerPtr   m_Breaker;
+
         double m_RPS         = 0;
-        double m_AvailRPS    = 0;
         double m_TotalWeight = 0;
 
-        std::string m_LastError;
-        BreakerPtr  m_Breaker;
+        std::map<double, Entry> m_State;
 
         struct History
         {
             double weight = 0;
         };
         std::map<std::string, History> m_History;
-
-        void read_i(boost::asio::yield_context yield)
-        {
-            Etcd::Client       sClient(m_Service, m_Params.addr, yield);
-            auto               sList = sClient.list(m_Params.prefix, 0);
-            std::vector<Entry> sState;
-
-            for (auto&& x : sList) {
-                x.key.erase(0, m_Params.prefix.size());
-                Json::Value sRoot;
-                try {
-                    sRoot = Parser::Json::parse(x.value);
-                } catch (const std::invalid_argument& e) {
-                    throw Error(std::string("SD: bad etcd server response: ") + e.what());
-                }
-                Entry sTmp;
-                sTmp.key = x.key;
-                Parser::Json::from_value(sRoot, sTmp);
-                if (!m_Params.location.empty() and String::starts_with(sTmp.location, m_Params.location))
-                    continue;
-                sState.push_back(std::move(sTmp));
-            }
-
-            update(sState);
-        }
 
         void adjust_weights(std::vector<Entry>& aState)
         {
@@ -140,31 +104,58 @@ namespace SD {
             }
         }
 
-#ifdef BOOST_TEST_MODULE
-    public:
-#endif
-        // change aState
-        void
-        update(std::vector<Entry>& aState)
+        using EntryW = std::pair<const Entry*, double>;
+        EntryW random_i(double aRandom = Util::drand48()) const
         {
-            Lock lk(m_Mutex);
+            if (auto sIt = m_State.lower_bound(aRandom); sIt != m_State.end()) {
+                return EntryW{&sIt->second, aRandom};
+            } else {
+                return EntryW{&m_State.rbegin()->second, aRandom};
+            }
+        }
+
+        bool allow_second_chance()
+        {
+            const double MAX_UTIL = 0.9;
+            return m_Params.second_chance and size() > 1 and m_RPS / m_TotalWeight < MAX_UTIL;
+        }
+
+        EntryW second_chance(double aRelative, double aPos) const
+        {
+            double sRandom = Util::drand48() * (1 - aRelative);
+            if (sRandom >= aPos)
+                sRandom += aRelative;
+            return random_i(sRandom);
+        }
+
+    public:
+        ByWeight(const Params& aParams)
+        : m_Params(aParams)
+        {
+        }
+
+        void with_breaker(BreakerPtr aBreaker)
+        {
+            m_Breaker = aBreaker;
+        }
+
+        void update(std::vector<Entry>&& aState)
+        {
             if (m_Breaker)
                 adjust_weights(aState);
 
             struct S
             {
-                double rps       = 0;
-                double avail_rps = 0;
-                double weight    = 0;
+                double rps    = 0;
+                double weight = 0;
             };
-            auto [sRPS, sAvailRPS, sTotalWeight] = std::accumulate(
+            auto [sRPS, sTotalWeight] = std::accumulate(
                 aState.begin(),
                 aState.end(),
                 S{},
                 [](const S& a, Entry& e) {
                     S sStat = a;
                     sStat.rps += e.rps;
-                    sStat.avail_rps += e.avail_rps;
                     sStat.weight += e.weight;
                     return sStat;
                 });
@@ -177,8 +168,80 @@ namespace SD {
                 m_State[sWeight] = x;
             }
             m_RPS         = sRPS;
-            m_AvailRPS    = sAvailRPS;
             m_TotalWeight = sTotalWeight;
+        }
+
+        std::string random(time_t aNow)
+        {
+            if (m_State.empty())
+                throw Error("SD: no peers available");
+            auto [sEntry, sWeight] = random_i();
+            if (m_Breaker) {
+                if (allow_second_chance()) {
+                    if (m_Breaker->test(sEntry->key, aNow)) {
+                        return sEntry->key;
+                    } else {
+                        sEntry = second_chance(sEntry->weight / m_TotalWeight, sWeight).first;
+                    }
+                }
+                if (!m_Breaker->test(sEntry->key, aNow))
+                    throw Breaker::Error("SD: request to " + sEntry->key + " blocked by circuit breaker");
+            }
+            return sEntry->key;
+        }
+
+        std::map<double, Entry> state() const { return m_State; }
+
+        void   clear() { m_State.clear(); }
+        bool   empty() const { return m_State.empty(); }
+        size_t size() const { return m_State.size(); }
+    };
+
+    class Engine : public std::enable_shared_from_this<Engine>
+    {
+        const Params              m_Params;
+        boost::asio::io_service&  m_Service;
+        std::atomic<bool>         m_Stop{false};
+        boost::asio::steady_timer m_Timer;
+
+#ifdef BOOST_TEST_MODULE
+    public:
+#endif
+        using Lock = std::unique_lock<std::mutex>;
+        mutable std::mutex m_Mutex;
+        ByWeight           m_State;
+
+        std::string m_LastError;
+
+        void read_i(boost::asio::yield_context yield)
+        {
+            Etcd::Client       sClient(m_Service, m_Params.addr, yield);
+            auto               sList = sClient.list(m_Params.prefix, 0);
+            std::vector<Entry> sState;
+
+            for (auto&& x : sList) {
+                x.key.erase(0, m_Params.prefix.size());
+                Json::Value sRoot;
+                try {
+                    sRoot = Parser::Json::parse(x.value);
+                } catch (const std::invalid_argument& e) {
+                    throw Error(std::string("SD: bad etcd server response: ") + e.what());
+                }
+                Entry sTmp;
+                sTmp.key = x.key;
+                Parser::Json::from_value(sRoot, sTmp);
+                if (!m_Params.location.empty() and String::starts_with(sTmp.location, m_Params.location))
+                    continue;
+                sState.push_back(std::move(sTmp));
+            }
+
+            update(std::move(sState));
+        }
+
+        void update(std::vector<Entry>&& aState)
+        {
+            Lock lk(m_Mutex);
+            m_State.update(std::move(aState));
             m_LastError.clear();
         }
 
@@ -193,70 +256,31 @@ namespace SD {
             }
         }
 
-        using EntryW = std::pair<const Entry*, double>;
-        EntryW random_i(double aRandom = Util::drand48()) const
-        {
-            if (auto sIt = m_State.lower_bound(aRandom); sIt != m_State.end()) {
-                return EntryW{&sIt->second, aRandom};
-            } else {
-                return EntryW{&m_State.rbegin()->second, aRandom};
-            }
-        }
-
-        bool allow_second_chance(const Entry* aEntry)
-        {
-            constexpr double EDGE = 0.75;
-            return m_Params.second_chance and
-                   m_State.size() > 1 and
-                   (m_AvailRPS - aEntry->avail_rps) * EDGE > m_RPS;
-        }
-
-        EntryW second_chance(double aRelative, double aPos) const
-        {
-            double sRandom = Util::drand48() * (1 - aRelative);
-            if (sRandom >= aPos)
-                sRandom += aRelative;
-            return random_i(sRandom);
-        }
-
     public:
-        Balancer(boost::asio::io_service& aService, const Params& aParams)
+        Engine(boost::asio::io_service& aService, const Params& aParams)
         : m_Params(aParams)
         , m_Service(aService)
         , m_Timer(aService)
+        , m_State(aParams)
         {
         }
 
         void with_breaker(BreakerPtr aBreaker)
         {
             Lock lk(m_Mutex);
-            m_Breaker = aBreaker;
+            m_State.with_breaker(aBreaker);
         }
 
-        State state() const
+        std::map<double, Entry> state() const
         {
             Lock lk(m_Mutex);
-            return m_State;
+            return m_State.state();
         }
 
         std::string random(time_t aNow = time(nullptr))
         {
             Lock lk(m_Mutex);
-            if (m_State.empty())
-                throw Error("SD: no peers available");
-            auto [sEntry, sWeight] = random_i();
-            if (m_Breaker) {
-                if (allow_second_chance(sEntry)) {
-                    if (m_Breaker->test(sEntry->key, aNow)) {
-                        return sEntry->key;
-                    } else {
-                        sEntry = second_chance(sEntry->weight / m_TotalWeight, sWeight).first;
-                    }
-                }
-                if (!m_Breaker->test(sEntry->key, aNow))
-                    throw Breaker::Error("SD: request to " + sEntry->key + " blocked by circuit breaker");
-            }
-            return sEntry->key;
+            return m_State.random(aNow);
         }
 
         std::string lastError() const
@@ -300,4 +324,4 @@ namespace SD {
             m_Timer.cancel();
         }
     };
-} // namespace SD
+} // namespace SD::Balancer

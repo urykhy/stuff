@@ -53,7 +53,7 @@ BOOST_AUTO_TEST_CASE(simple)
     // start balancer and get state
     SD::Balancer::Params sBalancerParams;
     sBalancerParams.prefix = "notify/instance/";
-    auto sBalancer         = std::make_shared<SD::Balancer>(m_Asio.service(), sBalancerParams);
+    auto sBalancer         = std::make_shared<SD::Balancer::Engine>(m_Asio.service(), sBalancerParams);
     sBalancer->start().get();
 
     const auto sState = sBalancer->state();
@@ -102,11 +102,11 @@ BOOST_AUTO_TEST_CASE(balance_by_weight)
 {
     SD::Balancer::Params sBalancerParams;
     sBalancerParams.prefix = "notify/instance/";
-    auto sBalancer         = std::make_shared<SD::Balancer>(m_Asio.service(), sBalancerParams);
+    auto sBalancer         = std::make_shared<SD::Balancer::Engine>(m_Asio.service(), sBalancerParams);
 
     const double                     TOTALW = 1 + 3 + 6;
     std::vector<SD::Balancer::Entry> sData{{"a", 1}, {"b", 3}, {"c", 6}};
-    sBalancer->update(sData);
+    sBalancer->update(std::move(sData));
 
     std::map<std::string, size_t> sStat;
     const size_t                  COUNT = 20000;
@@ -126,8 +126,8 @@ BOOST_AUTO_TEST_SUITE_END()
 
 struct WithBreaker : WithClient
 {
-    std::shared_ptr<SD::Breaker>  m_Breaker;
-    std::shared_ptr<SD::Balancer> m_Balancer;
+    std::shared_ptr<SD::Breaker>          m_Breaker;
+    std::shared_ptr<SD::Balancer::Engine> m_Balancer;
     struct Stat
     {
         unsigned success = 0;
@@ -138,7 +138,7 @@ struct WithBreaker : WithClient
 
     WithBreaker(SD::Balancer::Params sParams = {})
     : m_Breaker(std::make_shared<SD::Breaker>("not-used"))
-    , m_Balancer(std::make_shared<SD::Balancer>(m_Asio.service(), sParams))
+    , m_Balancer(std::make_shared<SD::Balancer::Engine>(m_Asio.service(), sParams))
     {
         m_Balancer->with_breaker(m_Breaker); // use breaker success rate
     }
@@ -149,9 +149,9 @@ struct WithBreaker : WithClient
         m_Breaker->reset("b", 0.8, 0); // reduced weight
         m_Breaker->reset("c", 0.6, 0); // reduced weight + drops (rate < YELLOW_RATE (0.75))
         std::vector<SD::Balancer::Entry> sData{
-            {.key = "a", .weight = 1, .avail_rps = 1, .rps = 0.3},
-            {.key = "b", .weight = 1, .avail_rps = 1, .rps = 0.3},
-            {.key = "c", .weight = 1, .avail_rps = 1, .rps = 0.3},
+            {.key = "a", .weight = 1, .rps = 0.3},
+            {.key = "b", .weight = 1, .rps = 0.3},
+            {.key = "c", .weight = 1, .rps = 0.3},
         };
         apply_weights(sData);
     }
@@ -161,7 +161,7 @@ struct WithBreaker : WithClient
         // ajust and print weights
         auto sStep = [&]() {
             std::vector<SD::Balancer::Entry> sTmpData{aData}; // force tmp copy
-            m_Balancer->update(sTmpData);
+            m_Balancer->update(std::move(sTmpData));
             {
                 auto sState = m_Balancer->state();
                 for (auto& [_, sPeer] : sState)

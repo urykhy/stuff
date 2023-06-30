@@ -117,8 +117,7 @@ int main(int argc, char** argv)
 
     SD::Balancer::Params sBalancerParams;
     sBalancerParams.use_server_rps = true;
-    sBalancerParams.second_chance  = true;
-    auto sBalancer                 = std::make_shared<SD::Balancer>(sAsio.service(), sBalancerParams);
+    auto sBalancer                 = std::make_shared<SD::Balancer::Engine>(sAsio.service(), sBalancerParams);
     auto sBreaker                  = std::make_shared<SD::Breaker>("service=\"test\"");
     sBalancer->with_breaker(sBreaker);
 
@@ -132,11 +131,11 @@ int main(int argc, char** argv)
             sState.push_back(std::move(sTmp));
         }
         if (!sState.empty())
-            sBalancer->update(sState);
+            sBalancer->update(std::move(sState));
     };
     sRefresh();
 
-    const uint32_t TOTAL_WEIGHT  = sBalancer->m_TotalWeight;
+    const uint32_t TOTAL_WEIGHT  = sBalancer->m_State.m_TotalWeight;
     const int      REQUEST_COUNT = TOTAL_WEIGHT * vm["load"].as<float>();
 
     // csv header

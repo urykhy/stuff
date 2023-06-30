@@ -4,7 +4,7 @@ class client
     asio_http::ClientPtr m_HttpClient;
 {%- if x_discovery %}
     const std::string m_Service;
-    std::shared_ptr<SD::Balancer> m_Balancer;
+    std::shared_ptr<SD::Balancer::Engine> m_Balancer;
     std::shared_ptr<SD::Breaker> m_Breaker;
     std::future<bool> m_BalancerStart;
 {%- else %}
@@ -76,7 +76,7 @@ public:
             SD::Balancer::Params sParams;
             sParams.prefix = "discovery/swagger/" + aService + "/{{ doc['info']['title'] }}/{{ doc['info']['version'] }}/";
             sParams.location = aLocation;
-            m_Balancer = std::make_shared<SD::Balancer>(aAsio, sParams);
+            m_Balancer = std::make_shared<SD::Balancer::Engine>(aAsio, sParams);
             m_BalancerStart = m_Balancer->start();
         }
         std::shared_ptr<SD::Breaker> client::with_breaker()
