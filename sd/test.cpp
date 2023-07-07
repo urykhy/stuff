@@ -58,7 +58,7 @@ BOOST_AUTO_TEST_CASE(simple)
 
     const auto sState = sBalancer->state();
     BOOST_REQUIRE_EQUAL(1, sState.size());
-    const auto& sEntry = sState.begin()->second;
+    const auto& sEntry = *sState.begin();
     BOOST_CHECK_EQUAL("a01", sEntry.key);
     BOOST_CHECK_EQUAL(10, sEntry.weight);
 
@@ -164,7 +164,7 @@ struct WithBreaker : WithClient
             m_Balancer->update(std::move(sTmpData));
             {
                 auto sState = m_Balancer->state();
-                for (auto& [_, sPeer] : sState)
+                for (auto& sPeer : sState)
                     BOOST_TEST_MESSAGE(fmt::format("{} | weight {:>4.2f}", sPeer.key, sPeer.weight));
             }
         };
@@ -217,7 +217,7 @@ BOOST_AUTO_TEST_CASE(with_breaker_second_chance)
 
     BOOST_CHECK_EQUAL(3, sFixture.m_Stat.size());
     BOOST_CHECK_EQUAL(sFixture.m_Stat["c"].fail, 0.);
-    BOOST_CHECK_CLOSE(sFixture.m_Stat["c"].success * 100 / double(WithBreaker::COUNT), 15., 5 /* % */);
+    BOOST_CHECK_CLOSE(sFixture.m_Stat["c"].success * 100 / double(WithBreaker::COUNT), 17., 5 /* % */);
 }
 BOOST_AUTO_TEST_CASE(with_client_latency)
 {
@@ -235,7 +235,7 @@ BOOST_AUTO_TEST_CASE(with_client_latency)
         std::map<std::string, double> sFinal;
 
         auto sState = sFixture.m_Balancer->state();
-        for (auto& [_, sPeer] : sState)
+        for (auto& sPeer : sState)
             sFinal[sPeer.key] = sPeer.weight;
         return sFinal;
     }();

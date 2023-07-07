@@ -16,7 +16,7 @@ struct ServerSettings
     double success_rate = 1.0;
 };
 
-static const double MAX_LATENCY     = 0.5;
+static const double MAX_LATENCY = 0.5;
 
 struct AvoidEtcd : public SD::NotifyFace
 {
@@ -49,22 +49,20 @@ struct Server
     }
     bool add(const std::string& aPeer, double aMoment, std::shared_ptr<SD::Breaker>& aBreaker)
     {
-        const time_t sNow     = std::floor(aMoment);
-        double sELA = m_Settings.latency;
+        const time_t sNow = std::floor(aMoment);
+        double       sELA = m_Settings.latency;
 
-        if (m_Offset[m_Thread] > aMoment)
-        {
+        if (m_Offset[m_Thread] > aMoment) {
             sELA += m_Offset[m_Thread] - aMoment;
         }
-        if (sELA >= MAX_LATENCY)
-        {
+        if (sELA >= MAX_LATENCY) {
             aBreaker->add(aPeer, m_Settings.net_latency, sNow, false);
             return false;
         }
 
-        m_Offset[m_Thread] = aMoment + sELA;
-        m_Thread           = (m_Thread + 1) % m_Offset.size();
-        const bool   sSuccess = Util::drand48() < m_Settings.success_rate;
+        m_Offset[m_Thread]  = aMoment + sELA;
+        m_Thread            = (m_Thread + 1) % m_Offset.size();
+        const bool sSuccess = Util::drand48() < m_Settings.success_rate;
         m_Notify->add(m_Settings.latency, sNow); // account server time
         aBreaker->add(aPeer, sELA + m_Settings.net_latency, sNow, sSuccess);
         return sSuccess;
@@ -97,7 +95,7 @@ int main(int argc, char** argv)
     std::map<std::string, ServerPtr> sServers;
 
     SD::NotifyWeight::Params sParams;
-    ServerSettings sSettings;
+    ServerSettings           sSettings;
     sServers["normal"]     = std::make_shared<Server>(sAsio, sParams, sSettings);
     sSettings.latency      = 0.2;
     sServers["slow"]       = std::make_shared<Server>(sAsio, sParams, sSettings);
@@ -177,7 +175,7 @@ int main(int argc, char** argv)
         std::cerr << sName << " " << sServer->m_Etcd->m_Data << std::endl;
 
     // dump metrics
-    for (auto& x: Prometheus::Manager::instance().toPrometheus())
+    for (auto& x : Prometheus::Manager::instance().toPrometheus())
         std::cerr << x << std::endl;
 
     return 0;

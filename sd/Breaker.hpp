@@ -27,8 +27,8 @@ namespace SD {
             std::function<asio_http::Response()> aHandler,
             time_t                               aNow = time(nullptr)) = 0;
 
-        virtual Statistics statistics(const std::string& aPeer)                          = 0;
-        virtual bool       test(const std::string& aPeer, time_t aNow = time(nullptr))   = 0;
+        virtual Statistics statistics(const std::string& aPeer)                        = 0;
+        virtual bool       test(const std::string& aPeer, time_t aNow = time(nullptr)) = 0;
         virtual ~IBreaker(){};
     };
     using BreakerPtr = std::shared_ptr<IBreaker>;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cassert>
 #include <mutex>
 #include <numeric>
 
@@ -60,16 +61,31 @@ namespace SD::Balancer {
         const Params m_Params;
         BreakerPtr   m_Breaker;
 
-        double m_RPS         = 0;
-        double m_TotalWeight = 0;
+        double   m_RPS         = 0;
+        double   m_TotalWeight = 0;
+        double   m_Step        = 0;
+        uint32_t m_Pos         = 0;
 
-        std::map<double, Entry> m_State;
-
-        struct History
+        struct Info
         {
-            double weight = 0;
+            std::string key;
+            double      budget         = 0;
+            double      history_weight = 0;
         };
-        std::map<std::string, History> m_History;
+        std::vector<Info>  m_Info;
+        std::vector<Entry> m_Peers;
+
+        void adjust_info(std::vector<Entry>& aState)
+        {
+            if (m_Info.size() != aState.size())
+                m_Info.resize(aState.size());
+            for (uint32_t i = 0; i < aState.size(); i++) {
+                if (m_Info[i].key != aState[i].key) {
+                    m_Info[i]     = {};
+                    m_Info[i].key = aState[i].key;
+                }
+            }
+        }
 
         void adjust_weights(std::vector<Entry>& aState)
         {
@@ -78,10 +94,11 @@ namespace SD::Balancer {
             const double BOOST_FACTOR = 1.05;
             const double UTIL_MAX     = 0.75;
 
-            for (auto& x : aState) {
+            for (uint32_t i = 0; i < aState.size(); i++) {
+                auto&        x               = aState[i];
                 const auto   sStat           = m_Breaker->statistics(x.key);
-                auto&        sHistory        = m_History[x.key];
-                const double sPreviousWeight = sHistory.weight > 0 ? sHistory.weight : x.weight;
+                auto&        sHistoryWeight  = m_Info[i].history_weight;
+                const double sPreviousWeight = sHistoryWeight > 0 ? sHistoryWeight : x.weight;
                 double       sTargetWeight   = x.weight;
                 if (m_Params.use_client_latency and sStat.latency > x.latency()) {
                     double sClientWeight = x.threads / sStat.latency;
@@ -99,18 +116,30 @@ namespace SD::Balancer {
                 } else {
                     sTargetWeight = std::max(sTargetWeight, sPreviousWeight * LOSS_FACTOR);
                 }
-                x.weight        = sTargetWeight;
-                sHistory.weight = sTargetWeight;
+                x.weight       = sTargetWeight;
+                sHistoryWeight = sTargetWeight;
             }
         }
 
-        using EntryW = std::pair<const Entry*, double>;
-        EntryW random_i(double aRandom = Util::drand48()) const
+        void rewind()
         {
-            if (auto sIt = m_State.lower_bound(aRandom); sIt != m_State.end()) {
-                return EntryW{&sIt->second, aRandom};
-            } else {
-                return EntryW{&m_State.rbegin()->second, aRandom};
+            for (uint32_t i = 0; i < m_Peers.size(); i++)
+                m_Info[i].budget += m_Peers[i].weight;
+        }
+
+        uint32_t random_i()
+        {
+            while (true) {
+                for (uint32_t i = 0; i < m_Peers.size(); i++) {
+                    auto sPos = (m_Pos + i) % m_Peers.size();
+                    if (m_Info[sPos].budget >= m_Step) {
+                        assert(m_Peers[sPos].key == m_Info[sPos].key);
+                        m_Info[sPos].budget -= m_Step;
+                        m_Pos = sPos + 1;
+                        return sPos;
+                    }
+                }
+                rewind();
             }
         }
 
@@ -118,14 +147,6 @@ namespace SD::Balancer {
         {
             const double MAX_UTIL = 0.9;
             return m_Params.second_chance and size() > 1 and m_RPS / m_TotalWeight < MAX_UTIL;
-        }
-
-        EntryW second_chance(double aRelative, double aPos) const
-        {
-            double sRandom = Util::drand48() * (1 - aRelative);
-            if (sRandom >= aPos)
-                sRandom += aRelative;
-            return random_i(sRandom);
         }
 
     public:
@@ -141,60 +162,72 @@ namespace SD::Balancer {
 
         void update(std::vector<Entry>&& aState)
         {
+            m_Peers.clear();
+            std::sort(aState.begin(),
+                      aState.end(),
+                      [](const auto& a, const auto& b) {
+                          return a.key < b.key;
+                      });
+
+            adjust_info(aState);
+
             if (m_Breaker)
                 adjust_weights(aState);
 
+            m_Peers = std::move(aState);
+            aState.clear();
+
+            for (uint32_t i = 0; i < m_Peers.size(); i++) {
+                if (m_Info[i].budget > m_Peers[i].weight) {
+                    m_Info[i].budget = m_Peers[i].weight;
+                }
+            }
+
             struct S
             {
-                double rps    = 0;
-                double weight = 0;
-            };
-            auto [sRPS, sTotalWeight] = std::accumulate(
-                aState.begin(),
-                aState.end(),
-                S{},
-                [](const S& a, Entry& e) {
-                    S sStat = a;
-                    sStat.rps += e.rps;
-                    sStat.weight += e.weight;
-                    return sStat;
-                });
-            // BOOST_TEST_MESSAGE("XXX: rps: " << sRPS << ", avail rps: " << sAvailRPS << ", total weight: " << sTotalWeight);
-
-            m_State.clear();
-            double sWeight = 0;
-            for (auto& x : aState) {
-                sWeight += (x.weight / sTotalWeight);
-                m_State[sWeight] = x;
+                double rps          = 0;
+                double total_weight = 0;
+                double min_weight   = 0;
+            } sStat;
+            for (const auto& x : m_Peers) {
+                sStat.rps += x.rps;
+                sStat.total_weight += x.weight;
+                if (sStat.min_weight > 0) {
+                    sStat.min_weight = std::min(sStat.min_weight, x.weight);
+                } else {
+                    sStat.min_weight = x.weight;
+                }
             }
-            m_RPS         = sRPS;
-            m_TotalWeight = sTotalWeight;
+
+            m_RPS         = sStat.rps;
+            m_TotalWeight = sStat.total_weight;
+            m_Step        = sStat.min_weight;
         }
 
         std::string random(time_t aNow)
         {
-            if (m_State.empty())
+            if (empty())
                 throw Error("SD: no peers available");
-            auto [sEntry, sWeight] = random_i();
+            uint32_t sEntry = random_i();
             if (m_Breaker) {
                 if (allow_second_chance()) {
-                    if (m_Breaker->test(sEntry->key, aNow)) {
-                        return sEntry->key;
+                    if (m_Breaker->test(m_Peers[sEntry].key, aNow)) {
+                        return m_Peers[sEntry].key;
                     } else {
-                        sEntry = second_chance(sEntry->weight / m_TotalWeight, sWeight).first;
+                        sEntry = random_i();
                     }
                 }
-                if (!m_Breaker->test(sEntry->key, aNow))
-                    throw Breaker::Error("SD: request to " + sEntry->key + " blocked by circuit breaker");
+                if (!m_Breaker->test(m_Peers[sEntry].key, aNow))
+                    throw Breaker::Error("SD: request to " + m_Peers[sEntry].key + " blocked by circuit breaker");
             }
-            return sEntry->key;
+            return m_Peers[sEntry].key;
         }
 
-        std::map<double, Entry> state() const { return m_State; }
+        std::vector<Entry> state() const { return m_Peers; }
 
-        void   clear() { m_State.clear(); }
-        bool   empty() const { return m_State.empty(); }
-        size_t size() const { return m_State.size(); }
+        void   clear() { m_Peers.clear(); }
+        bool   empty() const { return m_Peers.empty(); }
+        size_t size() const { return m_Peers.size(); }
     };
 
     class Engine : public std::enable_shared_from_this<Engine>
@@ -271,7 +304,7 @@ namespace SD::Balancer {
             m_State.with_breaker(aBreaker);
         }
 
-        std::map<double, Entry> state() const
+        std::vector<Entry> state() const
         {
             Lock lk(m_Mutex);
             return m_State.state();
