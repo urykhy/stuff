@@ -11,6 +11,5 @@
 #include <resource/Get.hpp>
 #include <resource/Server.hpp>
 #include <sd/Balancer.hpp>
-#include <sd/Breaker.hpp>
 #include <sd/NotifyWeight.hpp>
 #include <sentry/Client.hpp>

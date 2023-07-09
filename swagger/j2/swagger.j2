@@ -50,7 +50,6 @@
 {% set x_discovery = doc['info'].get('x-discovery', false) %}
 {% if x_discovery %}
     #include <sd/Balancer.hpp>
-    #include <sd/Breaker.hpp>
     #include <sd/NotifyWeight.hpp>
 {% endif %}
 

@@ -46,9 +46,7 @@ namespace Prometheus {
 
     inline std::string appendTag(const std::string& aName, const std::string& aTag)
     {
-        if (aName.empty())
-            throw std::invalid_argument("Prometheus::appendTag");
-        if (aName.back() != '}')
+        if (aName.empty() or aName.back() != '}')
             return aName + "{" + aTag + "}";
 
         // alreay have tags

@@ -6,25 +6,26 @@
 
 #include <boost/asio/steady_timer.hpp>
 
-#include "Breaker.hpp"
-
 #include <etcd/Etcd.hpp>
 #include <parser/Json.hpp>
+#include <prometheus/Metrics.hpp>
+#include <time/Meter.hpp>
+#include <unsorted/Ewma.hpp>
 #include <unsorted/Random.hpp>
 
 namespace SD::Balancer {
 
-    using Error = std::runtime_error;
-
     struct Params
     {
-        Etcd::Client::Params addr               = {};
-        std::string          prefix             = {};
-        int                  period             = 10;
-        std::string          location           = {};
-        bool                 use_client_latency = true;
-        bool                 use_server_rps     = false;
-        bool                 second_chance      = false;
+        Etcd::Client::Params addr                = {};
+        std::string          prefix              = {};
+        int                  period              = 10;
+        std::string          location            = {};
+        bool                 use_client_latency  = true;
+        bool                 use_server_rps      = false;
+        bool                 use_circuit_breaker = true;
+        bool                 second_chance       = true;
+        std::string          metrics_tags        = {};
     };
 
     struct Entry
@@ -53,78 +54,264 @@ namespace SD::Balancer {
         }
     };
 
+    class ByWeight;
+    using Error = Exception::Error<ByWeight>;
+
+    struct Metrics
+    {
+        Prometheus::Counter<>       calls;
+        Prometheus::Counter<>       errors;
+        Prometheus::Counter<>       blocked;
+        Prometheus::Counter<>       closed;
+        Prometheus::Counter<double> weight;
+
+        Metrics(const Params& aParams, const std::string& aKey)
+        : calls("sd_allowed_calls" + Prometheus::appendTag(aParams.metrics_tags, "peer=\"" + aKey + '\"'))
+        , errors("sd_failed_calls" + Prometheus::appendTag(aParams.metrics_tags, "peer=\"" + aKey + '\"'))
+        , blocked("sd_blocked_calls" + Prometheus::appendTag(aParams.metrics_tags, "peer=\"" + aKey + '\"'))
+        , closed("sd_circuit_closed" + Prometheus::appendTag(aParams.metrics_tags, "peer=\"" + aKey + '\"'))
+        , weight("sd_weight" + Prometheus::appendTag(aParams.metrics_tags, "peer=\"" + aKey + '\"'))
+        {
+        }
+    };
+
+    class Breaker
+    {
+        time_t m_Spent = 0;
+        bool   m_Close = false;
+
+    public:
+        static constexpr double CLOSE_RATE = 0.50;
+        static constexpr double PERIOD     = 10;
+
+        // call ~ once a second
+        void update(double aSuccessRate)
+        {
+            m_Spent++;
+            if (m_Close and m_Spent > PERIOD) {
+                reset();
+                return;
+            }
+            if (!m_Close and m_Spent >= PERIOD and aSuccessRate < CLOSE_RATE) {
+                m_Spent = 0;
+                m_Close = 1;
+            }
+        }
+
+        bool is_close() const
+        {
+            return m_Close;
+        }
+
+        void reset()
+        {
+            m_Spent = 0;
+            m_Close = 0;
+        }
+    };
+
+    class PeerInfo
+    {
+        using Lock = std::unique_lock<std::mutex>;
+        mutable std::mutex m_Mutex;
+
+        friend class ByWeight;
+        const Params      m_Params;
+        const std::string m_Key;
+
+        double m_Budget      = 0; // used in ByWeight
+        double m_LastWeight  = 0;
+        time_t m_CurrentTime = 0;
+
+        unsigned      m_Success = 0;
+        unsigned      m_Fail    = 0;
+        Util::Ewma    m_SuccessRate;
+        Util::EwmaRps m_Latency;
+        Breaker       m_Breaker;
+        Metrics       m_Metrics;
+
+        void prepare(time_t aNow)
+        {
+            if (aNow <= m_CurrentTime)
+                return;
+            m_CurrentTime = aNow;
+
+            if (m_Success + m_Fail > 0) {
+                m_SuccessRate.add(m_Success / double(m_Success + m_Fail));
+                m_Success = 0;
+                m_Fail    = 0;
+            }
+            if (m_Params.use_circuit_breaker)
+            {
+                const bool sOldClose = m_Breaker.is_close();
+                m_Breaker.update(success_rate());
+                if (!sOldClose and m_Breaker.is_close())
+                    m_Metrics.closed.tick();
+            }
+        }
+
+        // unlocked. to use from adjust_weight
+        double success_rate() const { return m_SuccessRate.estimate(); }
+        double latency() const { return m_Latency.estimate().latency; }
+
+        void adjust_weight(Entry& aEntry)
+        {
+            Lock         sLock(m_Mutex);
+            const double LOSS_MAX     = 0.5;
+            const double LOSS_FACTOR  = 0.90;
+            const double BOOST_FACTOR = 1.05;
+            const double UTIL_MAX     = 0.75;
+
+            if (m_Breaker.is_close()) {
+                aEntry.weight = 0;
+                return;
+            }
+
+            const double sPreviousWeight = m_LastWeight > 0 ? m_LastWeight : aEntry.weight;
+            double       sWeight         = aEntry.weight;
+            // BOOST_TEST_MESSAGE("adjust " << aEntry.key << " success_rate " << success_rate() << ", latency " << latency());
+            if (m_Params.use_client_latency and latency() > aEntry.latency()) {
+                double sClientWeight = aEntry.threads / latency();
+                sWeight              = std::max(sClientWeight, sWeight * LOSS_MAX);
+            }
+            if (m_Params.use_server_rps and aEntry.utilization() > UTIL_MAX) {
+                double sUtil = std::min(aEntry.utilization(), 1.);
+                sWeight *= (1. + UTIL_MAX - sUtil);
+            }
+            if (success_rate() < 0.95) {
+                sWeight *= std::max(success_rate(), LOSS_MAX);
+            }
+            if (sWeight >= sPreviousWeight) {
+                sWeight = std::min(sWeight, sPreviousWeight * BOOST_FACTOR);
+            } else {
+                sWeight = std::max(sWeight, sPreviousWeight * LOSS_FACTOR);
+            }
+            // BOOST_TEST_MESSAGE("adjust " << aEntry.key << " from " << aEntry.weight << " to " << sWeight);
+            aEntry.weight = sWeight;
+            m_LastWeight  = sWeight;
+            m_Metrics.weight.set(sWeight);
+        }
+
+    public:
+        static constexpr double EWMA_FACTOR     = 0.95;
+        static constexpr double INITIAL_RATE    = 1.0;
+        static constexpr double INITIAL_LATENCY = 0;
+
+        PeerInfo(const Params& aParams, const std::string& aKey)
+        : m_Params(aParams)
+        , m_Key(aKey)
+        , m_SuccessRate(EWMA_FACTOR, INITIAL_RATE)
+        , m_Latency(EWMA_FACTOR, INITIAL_LATENCY)
+        , m_Metrics(aParams, aKey)
+        {
+        }
+
+        static bool is_good_response(const asio_http::Response& aResponse)
+        {
+            auto sCode = aResponse.result_int();
+            bool sBad  = sCode == 429 or sCode >= 500;
+            return !sBad;
+        }
+
+        bool test(time_t aNow, bool aKeepAlive = false)
+        {
+            Lock sLock(m_Mutex);
+            prepare(aNow);
+            if (m_Breaker.is_close() and !aKeepAlive)
+                m_Metrics.blocked.tick();
+            return !m_Breaker.is_close();
+        }
+
+        void add(double aLatency, time_t aNow, bool aSuccess)
+        {
+            Lock sLock(m_Mutex);
+            prepare(aNow);
+            m_Metrics.calls.tick();
+            if (aSuccess) {
+                m_Success++;
+                m_Latency.add(aLatency, aNow);
+            } else {
+                m_Fail++;
+                m_Metrics.errors.tick();
+            }
+        }
+
+        asio_http::Response wrap(std::function<asio_http::Response()> aHandler, time_t aNow)
+        {
+            try {
+                Time::Meter         sMeter;
+                asio_http::Response sResponse = aHandler();
+                const double        sELA      = sMeter.get().to_double();
+                if (is_good_response(sResponse)) {
+                    add(sELA, aNow, true);
+                } else {
+                    add(0, aNow, false);
+                }
+                return sResponse;
+            } catch (...) {
+                add(0, aNow, false);
+                throw;
+            }
+        };
+
+        const std::string& key() const { return m_Key; }
+
+        void reset(double aRate, double aLatency)
+        {
+            Lock sLock(m_Mutex);
+            m_CurrentTime = 0;
+            m_Success     = 0;
+            m_Fail        = 0;
+            m_SuccessRate.reset(aRate);
+            m_Latency.reset({aLatency, 0});
+            m_Breaker.reset();
+        }
+    };
+    using PeerInfoPtr = std::shared_ptr<PeerInfo>;
+
     class ByWeight
     {
 #ifdef BOOST_TEST_MODULE
     public:
 #endif
         const Params m_Params;
-        BreakerPtr   m_Breaker;
 
         double   m_RPS         = 0;
         double   m_TotalWeight = 0;
         double   m_Step        = 0;
         uint32_t m_Pos         = 0;
+        time_t   m_LastTime    = 0;
 
-        struct Info
-        {
-            std::string key;
-            double      budget         = 0;
-            double      history_weight = 0;
-        };
-        std::vector<Info>  m_Info;
-        std::vector<Entry> m_Peers;
+        std::map<std::string, PeerInfoPtr> m_Store;
+        std::vector<PeerInfoPtr>           m_Info;
+        std::vector<Entry>                 m_Peers;
 
         void adjust_info(std::vector<Entry>& aState)
         {
             if (m_Info.size() != aState.size())
                 m_Info.resize(aState.size());
             for (uint32_t i = 0; i < aState.size(); i++) {
-                if (m_Info[i].key != aState[i].key) {
-                    m_Info[i]     = {};
-                    m_Info[i].key = aState[i].key;
+                const std::string& sKey = aState[i].key;
+                if (!m_Info[i] or m_Info[i]->m_Key != sKey) {
+                    auto sIt = m_Store.find(sKey);
+                    if (sIt == m_Store.end())
+                        sIt = m_Store.insert(std::make_pair(sKey, std::make_shared<PeerInfo>(m_Params, sKey))).first;
+                    m_Info[i] = sIt->second;
                 }
             }
         }
 
         void adjust_weights(std::vector<Entry>& aState)
         {
-            const double LOSS_MAX     = 0.5;
-            const double LOSS_FACTOR  = 0.90;
-            const double BOOST_FACTOR = 1.05;
-            const double UTIL_MAX     = 0.75;
-
             for (uint32_t i = 0; i < aState.size(); i++) {
-                auto&        x               = aState[i];
-                const auto   sStat           = m_Breaker->statistics(x.key);
-                auto&        sHistoryWeight  = m_Info[i].history_weight;
-                const double sPreviousWeight = sHistoryWeight > 0 ? sHistoryWeight : x.weight;
-                double       sTargetWeight   = x.weight;
-                if (m_Params.use_client_latency and sStat.latency > x.latency()) {
-                    double sClientWeight = x.threads / sStat.latency;
-                    sTargetWeight        = std::max(sClientWeight, sTargetWeight * LOSS_MAX);
-                }
-                if (m_Params.use_server_rps and x.utilization() > UTIL_MAX) {
-                    double sUtil = std::min(x.utilization(), 1.);
-                    sTargetWeight *= (1. + UTIL_MAX - sUtil);
-                }
-                if (sStat.success_rate < 0.95) {
-                    sTargetWeight *= std::max(sStat.success_rate, LOSS_MAX);
-                }
-                if (sTargetWeight >= sPreviousWeight) {
-                    sTargetWeight = std::min(sTargetWeight, sPreviousWeight * BOOST_FACTOR);
-                } else {
-                    sTargetWeight = std::max(sTargetWeight, sPreviousWeight * LOSS_FACTOR);
-                }
-                x.weight       = sTargetWeight;
-                sHistoryWeight = sTargetWeight;
+                m_Info[i]->adjust_weight(aState[i]);
             }
         }
 
         void rewind()
         {
             for (uint32_t i = 0; i < m_Peers.size(); i++)
-                m_Info[i].budget += m_Peers[i].weight;
+                m_Info[i]->m_Budget += m_Peers[i].weight;
         }
 
         uint32_t random_i()
@@ -132,9 +319,9 @@ namespace SD::Balancer {
             while (true) {
                 for (uint32_t i = 0; i < m_Peers.size(); i++) {
                     auto sPos = (m_Pos + i) % m_Peers.size();
-                    if (m_Info[sPos].budget >= m_Step) {
-                        assert(m_Peers[sPos].key == m_Info[sPos].key);
-                        m_Info[sPos].budget -= m_Step;
+                    if (m_Info[sPos]->m_Budget >= m_Step) {
+                        assert(m_Info[sPos]->m_Key == m_Peers[sPos].key);
+                        m_Info[sPos]->m_Budget -= m_Step;
                         m_Pos = sPos + 1;
                         return sPos;
                     }
@@ -155,11 +342,6 @@ namespace SD::Balancer {
         {
         }
 
-        void with_breaker(BreakerPtr aBreaker)
-        {
-            m_Breaker = aBreaker;
-        }
-
         void update(std::vector<Entry>&& aState)
         {
             m_Peers.clear();
@@ -170,16 +352,14 @@ namespace SD::Balancer {
                       });
 
             adjust_info(aState);
-
-            if (m_Breaker)
-                adjust_weights(aState);
+            adjust_weights(aState);
 
             m_Peers = std::move(aState);
             aState.clear();
 
             for (uint32_t i = 0; i < m_Peers.size(); i++) {
-                if (m_Info[i].budget > m_Peers[i].weight) {
-                    m_Info[i].budget = m_Peers[i].weight;
+                if (m_Info[i]->m_Budget > m_Peers[i].weight) {
+                    m_Info[i]->m_Budget = m_Peers[i].weight;
                 }
             }
 
@@ -204,23 +384,33 @@ namespace SD::Balancer {
             m_Step        = sStat.min_weight;
         }
 
-        std::string random(time_t aNow)
+        PeerInfoPtr random(time_t aNow)
         {
+            if (aNow > m_LastTime) {
+                // allow peer to recover from `CB closed` state
+                for (uint32_t i = 0; i < m_Info.size(); i++)
+                    m_Info[i]->test(aNow, true /* keep alive */);
+                m_LastTime = aNow;
+            }
+
+            static const double MIN_WEIGHT = 0.0000001;
             if (empty())
                 throw Error("SD: no peers available");
+            if (m_TotalWeight < MIN_WEIGHT)
+                throw Error("SD: no peers available");
+
             uint32_t sEntry = random_i();
-            if (m_Breaker) {
-                if (allow_second_chance()) {
-                    if (m_Breaker->test(m_Peers[sEntry].key, aNow)) {
-                        return m_Peers[sEntry].key;
-                    } else {
-                        sEntry = random_i();
-                    }
+            if (allow_second_chance()) {
+                if (m_Info[sEntry]->test(aNow)) {
+                    return m_Info[sEntry];
+                } else {
+                    sEntry = random_i();
                 }
-                if (!m_Breaker->test(m_Peers[sEntry].key, aNow))
-                    throw Breaker::Error("SD: request to " + m_Peers[sEntry].key + " blocked by circuit breaker");
             }
-            return m_Peers[sEntry].key;
+            if (!m_Info[sEntry]->test(aNow))
+                throw Error("SD: request to " + m_Peers[sEntry].key + " blocked by circuit breaker");
+
+            return m_Info[sEntry];
         }
 
         std::vector<Entry> state() const { return m_Peers; }
@@ -258,12 +448,12 @@ namespace SD::Balancer {
                 try {
                     sRoot = Parser::Json::parse(x.value);
                 } catch (const std::invalid_argument& e) {
-                    throw Error(std::string("SD: bad etcd server response: ") + e.what());
+                    throw std::runtime_error(std::string("SD: bad etcd server response: ") + e.what());
                 }
                 Entry sTmp;
                 sTmp.key = x.key;
                 Parser::Json::from_value(sRoot, sTmp);
-                if (!m_Params.location.empty() and String::starts_with(sTmp.location, m_Params.location))
+                if (!m_Params.location.empty() and !String::starts_with(sTmp.location, m_Params.location))
                     continue;
                 sState.push_back(std::move(sTmp));
             }
@@ -298,19 +488,13 @@ namespace SD::Balancer {
         {
         }
 
-        void with_breaker(BreakerPtr aBreaker)
-        {
-            Lock lk(m_Mutex);
-            m_State.with_breaker(aBreaker);
-        }
-
         std::vector<Entry> state() const
         {
             Lock lk(m_Mutex);
             return m_State.state();
         }
 
-        std::string random(time_t aNow = time(nullptr))
+        PeerInfoPtr random(time_t aNow = time(nullptr))
         {
             Lock lk(m_Mutex);
             return m_State.random(aNow);

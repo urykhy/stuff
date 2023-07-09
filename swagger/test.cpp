@@ -21,7 +21,6 @@
 #include <resource/Get.hpp>
 #include <resource/Server.hpp>
 #include <sd/Balancer.hpp>
-#include <sd/Breaker.hpp>
 #include <sd/NotifyWeight.hpp>
 #include <sentry/Client.hpp>
 
@@ -553,7 +552,6 @@ BOOST_FIXTURE_TEST_CASE(discovery, WithServer)
     sDiscovery.configure(m_Router);
 
     api::discovery_1_0::client sClient(m_HttpClient, m_Asio.service(), "test-service");
-    sClient.with_breaker();
     sClient.__wait();
 
     {
@@ -596,17 +594,15 @@ BOOST_FIXTURE_TEST_CASE(breaker, WithServer)
     sDiscovery.configure(m_Router);
 
     api::discovery_1_0::client sClient(m_HttpClient, m_Asio.service(), "test-service");
-    auto sBreaker = sClient.with_breaker();
     sClient.__wait();
 
     bool sBreaked = false;
     for (int i = 0; i < 15 and !sBreaked; i++) {
         try {
-            BOOST_TEST_MESSAGE("success rate: " << sBreaker->statistics("127.0.0.1:3000").success_rate);
             auto sResponse = sClient.get_discovery({});
             BOOST_CHECK_EQUAL(sResponse.body, "success");
-        } catch (const SD::Breaker::Error& e) {
-            BOOST_TEST_MESSAGE("breaker error: " << e.what());
+        } catch (const SD::Balancer::Error& e) {
+            BOOST_TEST_MESSAGE("balancer error: " << e.what());
             sBreaked = true;
         } catch (const std::exception& e) {
             BOOST_TEST_MESSAGE("client error: " << e.what());

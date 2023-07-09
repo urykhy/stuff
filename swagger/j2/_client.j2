@@ -5,7 +5,6 @@ class client
 {%- if x_discovery %}
     const std::string m_Service;
     std::shared_ptr<SD::Balancer::Engine> m_Balancer;
-    std::shared_ptr<SD::Breaker> m_Breaker;
     std::future<bool> m_BalancerStart;
 {%- else %}
     const std::string m_Base;
@@ -18,9 +17,7 @@ class client
     using Lock = std::unique_lock<std::mutex>;
     std::mutex m_Mutex;
     {%- call(doc, path, method, name) _for_every_method(doc) %}
-        {%- if x_discovery %}
-            std::map<std::string, std::string> m_{{ name }}_redirect = {};
-        {%- else -%}
+        {%- if not x_discovery %}
             std::string m_{{ name }}_redirect = {};
         {%- endif %}
     {%- endcall %}
@@ -28,7 +25,6 @@ class client
 public:
     {% if x_discovery %}
         client(asio_http::ClientPtr aHttpClient, boost::asio::io_service& aAsio, const std::string& aService, const std::string& aLocation = {});
-        std::shared_ptr<SD::Breaker> with_breaker();
         template<class T = std::chrono::seconds>
         void __wait(const T& aTime = std::chrono::seconds(1))
         {
@@ -76,15 +72,9 @@ public:
             SD::Balancer::Params sParams;
             sParams.prefix = "discovery/swagger/" + aService + "/{{ doc['info']['title'] }}/{{ doc['info']['version'] }}/";
             sParams.location = aLocation;
+            sParams.metrics_tags = "{api=\"{{ doc['info']['title'] }}\", version=\"{{ doc['info']['version'] }}\", service=\"" + m_Service + "\"}";
             m_Balancer = std::make_shared<SD::Balancer::Engine>(aAsio, sParams);
             m_BalancerStart = m_Balancer->start();
-        }
-        std::shared_ptr<SD::Breaker> client::with_breaker()
-        {
-            const std::string sAVS = "api=\"{{ doc['info']['title'] }}\",version=\"{{ doc['info']['version'] }}\",service=\"" + m_Service + '\"';
-            m_Breaker = std::make_shared<SD::Breaker>(sAVS);
-            m_Balancer->with_breaker(m_Breaker);
-            return m_Breaker;
         }
     {% else %}
         client::client(asio_http::ClientPtr aHttpClient, const std::string& aBase)
@@ -117,40 +107,24 @@ public:
             {% endif %}
 
             {%- if x_discovery %}
-            auto sCheckBreaker = [&, this](const std::string& aPeer) {
-                if (m_Breaker and !m_Breaker->test(aPeer)) {
-                    {% if x_jaeger %}
-                    if (sTraceCall)
-                        sTraceCall->set_tag(Jaeger::Tag{"circuit_breaker", 1});
-                    {% endif -%}
-                    throw SD::Breaker::Error("SD: request to " + aPeer + " blocked by circuit breaker");
-                }
-            };
-            {% endif %}
-
-            auto sPick = [&, this]()
-            {
-                Lock sLock(m_Mutex);
-                {%- if x_discovery %}
-                    std::string sPeer = m_Balancer->random();
-                    if (auto sIt = m_{{ name }}_redirect.find(sPeer); sIt == m_{{ name }}_redirect.end()) {
-                        return sPeer;
-                    } else {
-                        DEBUG("permanent redirected to " << sIt->second);
-                        sCheckBreaker(sIt->second);
-                        return sIt->second;
-                    }
-                {%- else %}
+                auto [sPeer, sPeerInfo] = [this]()
+                {
+                    auto sPeerInfo = m_Balancer->random();
+                    return std::make_pair(sPeerInfo->key(), sPeerInfo);
+                }();
+            {%- else %}
+                std::string sPeer = [this]()
+                {
+                    Lock sLock(m_Mutex);
                     if (m_{{ name }}_redirect.empty()) {
                         return m_Base;
                     } else {
                         DEBUG("permanent redirected to " << m_{{ name }}_redirect);
                         return m_{{ name }}_redirect;
                     }
-                {%- endif %}
-            };
+                }();
+            {%- endif %}
 
-            std::string sPeer = sPick();
             sRequest.url = "http://" + sPeer + sRequest.url;
 
             {% if x_bearer %}
@@ -165,47 +139,48 @@ public:
                 INFO("{{ method }} " << sRequest.url {% if x_jaeger %} << ( sTraceCall ? " [J:" + sTraceCall->trace_id() + "]" : "") {% endif %});
                 {# copy request to make a call, since we need one if redirect #}
                 {%- if x_discovery %}
-                    if (sRedirectCount > 0)
-                        sCheckBreaker(sPeer);
-                    if (m_Breaker)
-                        sResponse = m_Breaker->wrap(sPeer, [&, this]() {
-                            return m_HttpClient->async(asio_http::ClientRequest(sRequest)).get();
-                        });
-                    else
-                {%- endif %}
+                    sResponse = sPeerInfo->wrap([&, this]() {
+                        return m_HttpClient->async(asio_http::ClientRequest(sRequest)).get();
+                    }, time(nullptr));
+                {%- else %}
                     sResponse = m_HttpClient->async(asio_http::ClientRequest(sRequest)).get();
+                {%- endif %}
 
                 if (sResponse.result() == asio_http::http::status::temporary_redirect or
                     sResponse.result() == asio_http::http::status::found)
                 {
                     DEBUG("temporary redirect");
-                    const auto sLocation = sResponse[asio_http::http::field::location];
-                    if (sLocation.empty())
-                        throw Exception::HttpError(
-                            "redirect without location",
-                            static_cast<unsigned>(sResponse.result())
-                        );
-                    sRequest.url = sLocation.to_string();
-                    const auto sParsed = Parser::url(sLocation.to_string());
-                    sPeer = sParsed.host + ":" + sParsed.port;
+                    {%- if x_discovery %}
+                        throw std::invalid_argument("Swagger: redirect not implemented for discovery mode");
+                    {%- else %}
+                        const auto sLocation = sResponse[asio_http::http::field::location];
+                        if (sLocation.empty())
+                            throw Exception::HttpError(
+                                "redirect without location",
+                                static_cast<unsigned>(sResponse.result())
+                            );
+                        sRequest.url = sLocation.to_string();
+                        const auto sParsed = Parser::url(sLocation.to_string());
+                        sPeer = sParsed.host + ":" + sParsed.port;
+                    {%- endif %}
                 }
                 else if (sResponse.result() == asio_http::http::status::permanent_redirect or
                          sResponse.result() == asio_http::http::status::moved_permanently)
                 {
                     DEBUG("permanent redirect");
-                    const auto sLocation = sResponse[asio_http::http::field::location];
-                    if (sLocation.empty())
-                        throw Exception::HttpError(
-                            "redirect without location",
-                            static_cast<unsigned>(sResponse.result())
-                        );
-                    sRequest.url = sLocation.to_string();
-                    const auto sParsed = Parser::url(sLocation.to_string());
-                    sPeer = sParsed.host + ":" + sParsed.port;
-                    Lock sLock(m_Mutex);
                     {%- if x_discovery %}
-                        m_{{ name }}_redirect[sPeer] = sPeer;
+                        throw std::invalid_argument("Swagger: redirect not implemented for discovery mode");
                     {%- else %}
+                        const auto sLocation = sResponse[asio_http::http::field::location];
+                        if (sLocation.empty())
+                            throw Exception::HttpError(
+                                "redirect without location",
+                                static_cast<unsigned>(sResponse.result())
+                            );
+                        sRequest.url = sLocation.to_string();
+                        const auto sParsed = Parser::url(sLocation.to_string());
+                        sPeer = sParsed.host + ":" + sParsed.port;
+                        Lock sLock(m_Mutex);
                         m_{{ name }}_redirect = sPeer;
                     {%- endif %}
                 }

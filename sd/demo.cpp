@@ -6,8 +6,9 @@ namespace po = boost::program_options;
 
 #define BOOST_TEST_MODULE
 #include "Balancer.hpp"
-#include "Breaker.hpp"
 #include "NotifyWeight.hpp"
+
+#include <prometheus/Manager.hpp>
 
 struct ServerSettings
 {
@@ -47,7 +48,7 @@ struct Server
         m_Notify = std::make_shared<SD::NotifyWeight>(aAsio.service(), aParams, m_Etcd);
         m_Offset.resize(aParams.threads);
     }
-    bool add(const std::string& aPeer, double aMoment, std::shared_ptr<SD::Breaker>& aBreaker)
+    bool add(SD::Balancer::PeerInfoPtr aPeerInfo, double aMoment)
     {
         const time_t sNow = std::floor(aMoment);
         double       sELA = m_Settings.latency;
@@ -56,7 +57,7 @@ struct Server
             sELA += m_Offset[m_Thread] - aMoment;
         }
         if (sELA >= MAX_LATENCY) {
-            aBreaker->add(aPeer, m_Settings.net_latency, sNow, false);
+            aPeerInfo->add(m_Settings.net_latency, sNow, false);
             return false;
         }
 
@@ -64,7 +65,7 @@ struct Server
         m_Thread            = (m_Thread + 1) % m_Offset.size();
         const bool sSuccess = Util::drand48() < m_Settings.success_rate;
         m_Notify->add(m_Settings.latency, sNow); // account server time
-        aBreaker->add(aPeer, sELA + m_Settings.net_latency, sNow, sSuccess);
+        aPeerInfo->add(sELA + m_Settings.net_latency, sNow, sSuccess);
         return sSuccess;
     }
 };
@@ -103,7 +104,7 @@ int main(int argc, char** argv)
     sSettings.net_latency  = 0.1;
     sServers["bad_net"]    = std::make_shared<Server>(sAsio, sParams, sSettings);
     sSettings              = {};
-    sSettings.success_rate = 0.8;
+    sSettings.success_rate = 0.4;
     sServers["faulty"]     = std::make_shared<Server>(sAsio, sParams, sSettings);
     sSettings              = {};
     sParams.threads        = 2;
@@ -116,8 +117,6 @@ int main(int argc, char** argv)
     SD::Balancer::Params sBalancerParams;
     sBalancerParams.use_server_rps = true;
     auto sBalancer                 = std::make_shared<SD::Balancer::Engine>(sAsio.service(), sBalancerParams);
-    auto sBreaker                  = std::make_shared<SD::Breaker>("service=\"test\"");
-    sBalancer->with_breaker(sBreaker);
 
     auto sRefresh = [&]() {
         std::vector<SD::Balancer::Entry> sState;
@@ -152,14 +151,14 @@ int main(int argc, char** argv)
         for (int i = 0; i < REQUEST_COUNT; i++) {
             const double sMoment = sTime + (double)i / REQUEST_COUNT;
             try {
-                std::string sPeer = sBalancer->random(sTime);
-                auto        sIt   = sServers.find(sPeer);
+                auto sPeerInfo = sBalancer->random(sTime);
+                auto sIt       = sServers.find(sPeerInfo->key());
                 assert(sIt != sServers.end());
-                if (sIt->second->add(sPeer, sMoment, sBreaker))
-                    sSuccess[sPeer]++;
+                if (sIt->second->add(sPeerInfo, sMoment))
+                    sSuccess[sPeerInfo->key()]++;
                 else
                     sFailed++;
-            } catch (const SD::Breaker::Error& e) {
+            } catch (const SD::Balancer::Error& e) {
                 sFailed++;
             }
         }
