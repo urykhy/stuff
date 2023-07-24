@@ -1,5 +1,7 @@
 #include <benchmark/benchmark.h>
 
+#include <google/protobuf/util/json_util.h>
+
 // clang-format off
 #include "Protobuf.hpp"
 #include "Reflection.hpp"
@@ -13,7 +15,28 @@
 
 constexpr unsigned P_COUNT = 1024 * 1024;
 
-const std::string gBuf("\x0a\x05\x4b\x65\x76\x69\x6e\x10\x84\x86\x88\x08\x1a\x0b\x66\x6f\x6f\x40\x62\x61\x72\x2e\x63\x6f\x6d\x22\x0f\x0a\x0b\x2b\x31\x32\x33\x34\x35\x36\x37\x38\x39\x30\x10\x00\x22\x0f\x0a\x0b\x2b\x30\x39\x38\x37\x36\x35\x34\x33\x32\x31\x10\x01", 59); // NEW, with 2 phones
+const std::string gBuf = []() {
+    tutorial::Person  sMsg;
+    const std::string sJson = R"(
+{
+  "name": "Kevin",
+  "id": 16909060,
+  "email": "foo@bar.com",
+  "phones": [
+    {
+      "number": "+1234567890",
+      "type": "MOBILE"
+    },
+    {
+      "number": "+0987654321",
+      "type": "HOME"
+    }
+  ]
+}
+    )";
+    google::protobuf::util::JsonStringToMessage(sJson, &sMsg);
+    return sMsg.SerializeAsString();
+}();
 
 void BM_Google(benchmark::State& state)
 {
