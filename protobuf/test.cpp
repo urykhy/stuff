@@ -6,7 +6,10 @@
 #include "Reflection.hpp"
 // clang-format on
 
+#ifdef WITH_REFLECTION
 #include "ExprTK.hpp"
+#endif
+
 #include "tutorial.hpp"
 #include "tutorial.pb.h"
 
@@ -218,6 +221,7 @@ BOOST_AUTO_TEST_CASE(person)
     BOOST_TEST_MESSAGE("view: " << Format::Json::to_string(sView.to_json()));
 }
 
+#ifdef WITH_REFLECTION
 BOOST_AUTO_TEST_SUITE(reflection)
 BOOST_AUTO_TEST_CASE(simple)
 {
@@ -281,4 +285,5 @@ BOOST_AUTO_TEST_CASE(exprtk)
 
     BOOST_CHECK_EQUAL(sExpr.eval(), 10);
 }
+#endif // WITH_REFLECTION
 BOOST_AUTO_TEST_SUITE_END() // Protobuf

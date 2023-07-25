@@ -7,7 +7,10 @@
 #include "Reflection.hpp"
 // clang-format on
 
+#ifdef WITH_REFLECTION
 #include "ExprTK.hpp"
+#endif
+
 #include "tutorial.hpp"
 #include "tutorial.pb.h"
 
@@ -108,6 +111,7 @@ BENCHMARK(BM_PMR_View)->Arg(P_COUNT)->Threads(1)->Threads(4)->UseRealTime()->Uni
 
 // reflection
 
+#ifdef WITH_REFLECTION
 static void BM_GoogleReflection(benchmark::State& state)
 {
     tutorial::Person sPerson;
@@ -159,5 +163,6 @@ static void BM_Expr(benchmark::State& state)
     }
 }
 BENCHMARK(BM_Expr);
+#endif // WITH_REFLECTION
 
 BENCHMARK_MAIN();

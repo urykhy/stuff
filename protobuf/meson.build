@@ -27,9 +27,14 @@ foreach name : ['tutorial.proto']
                command      : [api_gen, '@INPUT@', '@OUTPUT@'])
 endforeach
 
-a  = executable('a.out',  'test.cpp',       api_src, dependencies : [tutorial_dep, protobuf, boost, json, exprtk], cpp_args : ['-DWITH_JSON', '-DWITH_REFLECTION'], include_directories : includes)
-b  = executable('b.out',  'benchmark.cpp',  api_src, dependencies : [tutorial_dep, protobuf, boost, benchmark], include_directories : includes)
-b2 = executable('b2.out', 'benchmark2.cpp', api_src, dependencies : [tutorial_dep, protobuf, boost, benchmark, exprtk], cpp_args : ['-DWITH_REFLECTION'], include_directories : includes)
+cpp_args = ['-DWITH_JSON']
+if get_option('reflection')
+    cpp_args += '-DWITH_REFLECTION'
+endif
+
+a  = executable('a.out',  'test.cpp',       api_src, dependencies : [tutorial_dep, protobuf, boost, json, exprtk], cpp_args : cpp_args, include_directories : includes)
+b  = executable('b.out',  'benchmark.cpp',  api_src, dependencies : [tutorial_dep, protobuf, boost, json, benchmark], include_directories : includes)
+b2 = executable('b2.out', 'benchmark2.cpp', api_src, dependencies : [tutorial_dep, protobuf, boost, json, benchmark, exprtk], cpp_args : cpp_args, include_directories : includes)
 test('basic test', a, args : ['-l', 'all'])
 benchmark('protobuf', b)
 benchmark('protobuf', b2)
