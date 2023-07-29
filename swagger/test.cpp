@@ -597,7 +597,7 @@ BOOST_FIXTURE_TEST_CASE(breaker, WithServer)
     sClient.__wait();
 
     bool sBreaked = false;
-    for (int i = 0; i < 15 and !sBreaked; i++) {
+    for (int i = 0; i < 20 and !sBreaked; i++) {
         try {
             auto sResponse = sClient.get_discovery({});
             BOOST_CHECK_EQUAL(sResponse.body, "success");

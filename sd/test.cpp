@@ -125,9 +125,9 @@ struct WithBreaker : WithClient
             {.key = "c", .weight = 1, .rps = 0.3},
         };
         apply_weights(sData, [this]() {
-            m_Balancer->m_State.m_Info[0]->reset(1.0, 0); // success_rate, latency
-            m_Balancer->m_State.m_Info[1]->reset(0.8, 0); // reduced weight
-            m_Balancer->m_State.m_Info[2]->reset(0.4, 0); // reduced weight + drops
+            m_Balancer->m_State.m_Info[0]->reset(0, 1.0); // latency, success_rate
+            m_Balancer->m_State.m_Info[1]->reset(0, 0.8); // reduced weight
+            m_Balancer->m_State.m_Info[2]->reset(0, 0.4); // reduced weight + drops
         });
     }
 
@@ -229,9 +229,9 @@ BOOST_AUTO_TEST_CASE(with_client_latency)
 
     std::vector<SD::Balancer::Entry> sData{{"a", 1}, {"b", 1}, {"c", 1}};
     sFixture.apply_weights(sData, [&sFixture]() {
-        sFixture.m_Balancer->m_State.m_Info[0]->reset(1.0, 1.0); // success_rate, latency
-        sFixture.m_Balancer->m_State.m_Info[1]->reset(1.0, 1.5);
-        sFixture.m_Balancer->m_State.m_Info[2]->reset(1.0, 2.0);
+        sFixture.m_Balancer->m_State.m_Info[0]->reset(1.0, 1.0); // latency, success_rate
+        sFixture.m_Balancer->m_State.m_Info[1]->reset(1.5, 1.0);
+        sFixture.m_Balancer->m_State.m_Info[2]->reset(2.0, 1.0);
     });
 
     // check

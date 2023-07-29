@@ -42,7 +42,7 @@ namespace SD {
         std::string format_i()
         {
             Format::Json::Value sJson(::Json::objectValue);
-            auto [sLatency, sRPS] = info_i();
+            auto [sLatency, sRPS, sSuccessRate] = info_i();
             Format::Json::write(sJson, "weight", m_Params.threads / sLatency);
             Format::Json::write(sJson, "rps", sRPS);
             Format::Json::write(sJson, "threads", m_Params.threads);
@@ -74,10 +74,10 @@ namespace SD {
         void add(double aLatency, time_t aNow)
         {
             Lock lk(m_Mutex);
-            bool sNewSecond = m_Ewma.add(aLatency, aNow);
+            bool sNewSecond = m_Ewma.add(aLatency, aNow, true);
             if (sNewSecond) {
                 constexpr int MAX_CHANGE = 10;
-                auto [sLatency, sRPS]    = info_i();
+                auto [sLatency, sRPS, sSuccessRate]    = info_i();
                 const double sWeight     = m_Params.threads / sLatency;
                 const int    sRelative   = std::max(
                     relative(m_LastWeight, sWeight),

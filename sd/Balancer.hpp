@@ -59,16 +59,16 @@ namespace SD::Balancer {
 
     struct Metrics
     {
-        Prometheus::Counter<>       calls;
-        Prometheus::Counter<>       errors;
+        Prometheus::Counter<>       allowed;
+        Prometheus::Counter<>       failed;
         Prometheus::Counter<>       blocked;
         Prometheus::Counter<>       closed;
         Prometheus::Counter<double> weight;
 
         Metrics(const Params& aParams, const std::string& aKey)
-        : calls("sd_allowed_calls" + Prometheus::appendTag(aParams.metrics_tags, "peer=\"" + aKey + '\"'))
-        , errors("sd_failed_calls" + Prometheus::appendTag(aParams.metrics_tags, "peer=\"" + aKey + '\"'))
-        , blocked("sd_blocked_calls" + Prometheus::appendTag(aParams.metrics_tags, "peer=\"" + aKey + '\"'))
+        : allowed("sd_call_count" + Prometheus::appendTag(aParams.metrics_tags, "peer=\"" + aKey + "\", kind=\"allowed\""))
+        , failed("sd_call_count" + Prometheus::appendTag(aParams.metrics_tags, "peer=\"" + aKey + "\", kind=\"failed\""))
+        , blocked("sd_call_count" + Prometheus::appendTag(aParams.metrics_tags, "peer=\"" + aKey + "\", kind=\"blocked\""))
         , closed("sd_circuit_closed" + Prometheus::appendTag(aParams.metrics_tags, "peer=\"" + aKey + '\"'))
         , weight("sd_weight" + Prometheus::appendTag(aParams.metrics_tags, "peer=\"" + aKey + '\"'))
         {
@@ -123,10 +123,7 @@ namespace SD::Balancer {
         double m_LastWeight  = 0;
         time_t m_CurrentTime = 0;
 
-        unsigned      m_Success = 0;
-        unsigned      m_Fail    = 0;
-        Util::Ewma    m_SuccessRate;
-        Util::EwmaRps m_Latency;
+        Util::EwmaRps m_Ewma;
         Breaker       m_Breaker;
         Metrics       m_Metrics;
 
@@ -136,23 +133,13 @@ namespace SD::Balancer {
                 return;
             m_CurrentTime = aNow;
 
-            if (m_Success + m_Fail > 0) {
-                m_SuccessRate.add(m_Success / double(m_Success + m_Fail));
-                m_Success = 0;
-                m_Fail    = 0;
-            }
-            if (m_Params.use_circuit_breaker)
-            {
+            if (m_Params.use_circuit_breaker) {
                 const bool sOldClose = m_Breaker.is_close();
-                m_Breaker.update(success_rate());
+                m_Breaker.update(m_Ewma.estimate().success_rate);
                 if (!sOldClose and m_Breaker.is_close())
                     m_Metrics.closed.tick();
             }
         }
-
-        // unlocked. to use from adjust_weight
-        double success_rate() const { return m_SuccessRate.estimate(); }
-        double latency() const { return m_Latency.estimate().latency; }
 
         void adjust_weight(Entry& aEntry)
         {
@@ -167,19 +154,21 @@ namespace SD::Balancer {
                 return;
             }
 
+            const auto sEWMA = m_Ewma.estimate();
+
             const double sPreviousWeight = m_LastWeight > 0 ? m_LastWeight : aEntry.weight;
             double       sWeight         = aEntry.weight;
-            // BOOST_TEST_MESSAGE("adjust " << aEntry.key << " success_rate " << success_rate() << ", latency " << latency());
-            if (m_Params.use_client_latency and latency() > aEntry.latency()) {
-                double sClientWeight = aEntry.threads / latency();
+            // BOOST_TEST_MESSAGE("adjust " << aEntry.key << " success_rate " << sEWMA.success_rate << ", latency " << sEWMA.latency);
+            if (m_Params.use_client_latency and sEWMA.latency > aEntry.latency()) {
+                double sClientWeight = aEntry.threads / sEWMA.latency;
                 sWeight              = std::max(sClientWeight, sWeight * LOSS_MAX);
             }
             if (m_Params.use_server_rps and aEntry.utilization() > UTIL_MAX) {
                 double sUtil = std::min(aEntry.utilization(), 1.);
                 sWeight *= (1. + UTIL_MAX - sUtil);
             }
-            if (success_rate() < 0.95) {
-                sWeight *= std::max(success_rate(), LOSS_MAX);
+            if (sEWMA.success_rate < 0.95) {
+                sWeight *= std::max(sEWMA.success_rate, LOSS_MAX);
             }
             if (sWeight >= sPreviousWeight) {
                 sWeight = std::min(sWeight, sPreviousWeight * BOOST_FACTOR);
@@ -193,15 +182,9 @@ namespace SD::Balancer {
         }
 
     public:
-        static constexpr double EWMA_FACTOR     = 0.95;
-        static constexpr double INITIAL_RATE    = 1.0;
-        static constexpr double INITIAL_LATENCY = 0;
-
         PeerInfo(const Params& aParams, const std::string& aKey)
         : m_Params(aParams)
         , m_Key(aKey)
-        , m_SuccessRate(EWMA_FACTOR, INITIAL_RATE)
-        , m_Latency(EWMA_FACTOR, INITIAL_LATENCY)
         , m_Metrics(aParams, aKey)
         {
         }
@@ -226,14 +209,10 @@ namespace SD::Balancer {
         {
             Lock sLock(m_Mutex);
             prepare(aNow);
-            m_Metrics.calls.tick();
-            if (aSuccess) {
-                m_Success++;
-                m_Latency.add(aLatency, aNow);
-            } else {
-                m_Fail++;
-                m_Metrics.errors.tick();
-            }
+            m_Metrics.allowed.tick();
+            m_Ewma.add(aLatency, aNow, aSuccess);
+            if (!aSuccess)
+                m_Metrics.failed.tick();
         }
 
         asio_http::Response wrap(std::function<asio_http::Response()> aHandler, time_t aNow)
@@ -256,14 +235,11 @@ namespace SD::Balancer {
 
         const std::string& key() const { return m_Key; }
 
-        void reset(double aRate, double aLatency)
+        void reset(double aLatency, double aSuccessRate)
         {
             Lock sLock(m_Mutex);
             m_CurrentTime = 0;
-            m_Success     = 0;
-            m_Fail        = 0;
-            m_SuccessRate.reset(aRate);
-            m_Latency.reset({aLatency, 0});
+            m_Ewma.reset({aLatency, 0, aSuccessRate});
             m_Breaker.reset();
         }
     };
