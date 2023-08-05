@@ -1,5 +1,7 @@
 #pragma once
 
+#include <mutex>
+
 namespace Util {
     class Ewma
     {
@@ -20,6 +22,9 @@ namespace Util {
 
     class EwmaRps
     {
+        mutable std::mutex                   m_Mutex;
+        typedef std::unique_lock<std::mutex> Lock;
+
         Ewma m_Latency;
         Ewma m_RPS;
         Ewma m_SuccessRate;
@@ -44,8 +49,9 @@ namespace Util {
         {
         }
 
-        bool add(double aValue, time_t aNow, bool aSuccess)
+        bool add(double aElapsed, time_t aNow, bool aSuccess)
         {
+            Lock lk(m_Mutex);
             bool sNewSecond = false;
             if (aNow > m_LastUpdateTs) {
                 if (m_Count > 0) {
@@ -60,7 +66,7 @@ namespace Util {
                 m_LastUpdateTs = aNow;
                 sNewSecond     = true;
             };
-            m_Elapsed += aValue;
+            m_Elapsed += aElapsed;
             m_Count++;
             if (aSuccess)
                 m_Success++;
@@ -68,10 +74,12 @@ namespace Util {
         }
         Info estimate() const
         {
+            Lock lk(m_Mutex);
             return {m_Latency.estimate(), m_RPS.estimate(), m_SuccessRate.estimate()};
         }
         void reset(const Info& aInfo)
         {
+            Lock lk(m_Mutex);
             m_Latency.reset(aInfo.latency);
             m_RPS.reset(aInfo.rps);
             m_SuccessRate.reset(aInfo.success_rate);

@@ -122,6 +122,12 @@ namespace Threads {
                 wakeup_one(); // cond var can miss wakeups, so we try to wakeup next thread from here
             return true;
         }
+#ifdef BOOST_TEST_MODULE
+        auto& debug()
+        {
+            return m_List;
+        }
+#endif
     };
 
     // just a queue and thread to process tasks
@@ -185,6 +191,21 @@ namespace Threads {
         void   insert(T&& aItem) { m_Queue.insert(std::move(aItem)); }
         bool   idle() const { return m_Done == m_Queue.count(); }
         size_t size() const { return m_Queue.count() - m_Done; }
+        void   wait(time_t aMax)
+        {
+            const double aStep = aMax / (double)100;
+            for (int i = 0; i < 100; i++) {
+                if (idle())
+                    break;
+                sleep(aStep);
+            }
+        }
+#ifdef BOOST_TEST_MODULE
+        auto& debug()
+        {
+            return m_Queue.debug();
+        }
+#endif
     };
 
     struct QueueExecutor : public SafeQueueThread<std::function<void()>>

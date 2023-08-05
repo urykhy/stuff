@@ -163,197 +163,63 @@ BOOST_AUTO_TEST_CASE(for_each)
         sResult += a; });
     BOOST_CHECK_EQUAL(500500, sResult);
 }
-BOOST_AUTO_TEST_CASE(fair_queue_1)
+BOOST_AUTO_TEST_CASE(fair_test1)
 {
-    Threads::FairQueueExecutor sFair;
-    Util::Ewma                 sEwma;
+    using Task = Threads::Fair::Task<std::string>;
+    using E    = Threads::Fair::QueueThread<Task>;
 
-    // prepare state
-    // user-1 used 0.1 second
-    sFair.m_UserInfo["user-1"] = Threads::FairQueueExecutor::UserInfo{
-        .avg_time = sEwma,
-        .sum_time = 0.1,
-    };
-    // user-2 used 10 seconds
-    sFair.m_UserInfo["user-2"] = Threads::FairQueueExecutor::UserInfo{
-        .avg_time = sEwma,
-        .sum_time = 10,
-    };
-    sFair.refresh(time(nullptr) + 10); // disable auto refreshes for a while
+    E              sExecutor([](Task& aTask) {
+        BOOST_TEST_MESSAGE("handle task " << aTask.task << " as user " << aTask.user);
+        Threads::sleep(0.1);
+    });
+    Threads::Group sGroup;
+    sExecutor.start(sGroup);
 
-    BOOST_CHECK_EQUAL(sFair.m_UserQueue["user-1"], 0);
-    BOOST_CHECK_EQUAL(sFair.m_UserQueue["user-2"], 3);
+    sExecutor.insert(Task{.task = "1", .user = "user-1", .now = 1});
+    sExecutor.insert(Task{.task = "2", .user = "user-1", .now = 2});
+    sExecutor.insert(Task{.task = "3", .user = "user-1", .now = 3});
 
-    sFair.refresh(time(nullptr) + 11); // refresh and log budgets
+    sExecutor.wait(5);
+    sGroup.wait();
+    BOOST_CHECK_CLOSE(sExecutor.debug().m_State["user-1"]->estimate().latency, 0.01, 5);
+}
+BOOST_AUTO_TEST_CASE(fair_test2)
+{
+    using Task = Threads::Fair::Task<std::string>;
+    using E    = Threads::Fair::QueueThread<Task>;
 
-    // push tasks
-    std::list<std::string> sOrder;
-    sFair.insert("user-2", [&sOrder]() { sOrder.push_back("user-2"); });
-    for (int i = 0; i < 10; i++)
-        sFair.insert("user-1", [&sOrder]() { sOrder.push_back("user-1"); });
+    E              sExecutor([](Task& aTask) {
+        BOOST_TEST_MESSAGE("handle task " << aTask.task << " as user " << aTask.user);
+    });
+    Threads::Group sGroup;
 
-    // process tasks
-    while (true) {
-        Threads::FairQueueExecutor::Lock sLock(sFair.m_Mutex);
-        if (sFair.one_step(sLock))
-            break;
+    // init state
+    auto& sState     = sExecutor.debug().m_State;
+    sState["user-1"] = std::make_shared<Util::EwmaRps>();
+    sState["user-1"]->reset({.latency = 0.1, .rps = 1});
+
+    sState["user-2"] = std::make_shared<Util::EwmaRps>();
+    sState["user-2"]->reset({.latency = 0.2, .rps = 1});
+
+    sState["user-3"] = std::make_shared<Util::EwmaRps>();
+    sState["user-3"]->reset({.latency = 0.5, .rps = 1});
+
+    for (int j = 1; j < 20; j++)
+        for (int i = 1; i < 4; i++)
+            sExecutor.insert(Task{.task = std::to_string(j), .user = "user-" + std::to_string(i), .now=j*i, .duration = 0.2});
+
+    sExecutor.start(sGroup);
+    sExecutor.wait(5);
+    sGroup.wait();
+
+    for (auto& [sUser, sState] : sState) {
+        const auto sEst = sState->estimate();
+        BOOST_TEST_MESSAGE(fmt::format(
+            "user {}: latency {:.2f}, rps {:.2f}",
+            sUser,
+            sEst.latency,
+            sEst.rps));
     }
-
-    // check order
-    std::list<std::string> sExpected{
-        "user-1", "user-1", "user-1", "user-1", "user-1", "user-1", "user-1", "user-1", "user-2", "user-1", "user-1"};
-    BOOST_CHECK_EQUAL_COLLECTIONS(sOrder.begin(), sOrder.end(), sExpected.begin(), sExpected.end());
-}
-
-struct FairTest
-{
-    static constexpr int       COUNT = 2000;
-    Threads::FairQueueExecutor m_Fair;
-    Threads::Group             m_Group;
-
-    FairTest()
-    : m_Fair(COUNT)
-    {
-    }
-
-    template <class P, class G>
-    void operator()(P aPrepare, G aGen)
-    {
-        aPrepare(m_Fair);
-        m_Fair.start(m_Group, 6);
-
-        std::atomic<size_t> sCount = 0;
-        for (int i = 0; i < COUNT; i++) {
-            std::string sUser = std::string("user-") + aGen();
-            while (true) {
-                const bool sOk = m_Fair.insert(sUser, [&sCount]() {
-                    sCount++;
-                    std::this_thread::sleep_for(std::chrono::milliseconds(5));
-                });
-                std::this_thread::sleep_for(std::chrono::milliseconds(1));
-                if (sOk)
-                    break;
-            }
-
-            if (i % 50 == 0)
-                m_Fair.refresh(time(nullptr) + i);
-        }
-
-        // force refresh assotiations
-        for (int i = 0; i < 20 and !m_Fair.idle(); i++) {
-            m_Fair.refresh(time(nullptr) + COUNT + i);
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
-        }
-
-        m_Group.wait();
-        m_Fair.debug();
-        BOOST_CHECK_EQUAL(sCount, COUNT);
-    }
-};
-
-BOOST_AUTO_TEST_CASE(fair_queue_2_disbalance)
-{
-    // no initial state (in balance)
-    auto sPrepare = [](auto& aFair) {};
-
-    // ~ time share by users: (disbalance)
-    //  4 % - user-0
-    // 10 % - user-1
-    // 86 % - user-2
-    auto sGen = []() {
-        double sRnd = Util::drand48();
-        if (sRnd < 0.04)
-            return "0";
-        else if (sRnd < 0.14)
-            return "1";
-        else
-            return "2";
-    };
-
-    FairTest sTest;
-    sTest(sPrepare, sGen);
-
-    BOOST_CHECK_EQUAL(sTest.m_Fair.m_UserQueue["user-0"], 0);
-    BOOST_CHECK_EQUAL(sTest.m_Fair.m_UserQueue["user-1"], 1);
-    BOOST_CHECK_EQUAL(sTest.m_Fair.m_UserQueue["user-2"], 3);
-}
-BOOST_AUTO_TEST_CASE(fair_queue_3_rebalance)
-{
-    // prepare user/queue mapping (disbalance)
-    auto sPrepare = [](auto& aFair) {
-        aFair.m_UserQueue["user-0"] = 0;
-        aFair.m_UserQueue["user-1"] = 1;
-        aFair.m_UserQueue["user-2"] = 3;
-
-        Util::Ewma sEwma;
-        aFair.m_UserInfo["user-0"] = Threads::FairQueueExecutor::UserInfo{
-            .avg_time = sEwma,
-            .sum_time = 0.1,
-        };
-        aFair.m_UserInfo["user-1"] = Threads::FairQueueExecutor::UserInfo{
-            .avg_time = sEwma,
-            .sum_time = 0.2,
-        };
-        aFair.m_UserInfo["user-2"] = Threads::FairQueueExecutor::UserInfo{
-            .avg_time = sEwma,
-            .sum_time = 1,
-        };
-    };
-
-    // ~ time share by users:
-    // 1/3 (in balance)
-    auto sGen = []() {
-        double sRnd = Util::drand48();
-        if (sRnd < 0.33)
-            return "0";
-        else if (sRnd < 0.66)
-            return "1";
-        else
-            return "2";
-    };
-
-    FairTest sTest;
-    sTest(sPrepare, sGen);
-
-    BOOST_CHECK_EQUAL(sTest.m_Fair.m_UserQueue["user-0"], 2);
-    BOOST_CHECK_EQUAL(sTest.m_Fair.m_UserQueue["user-1"], 2);
-    BOOST_CHECK_EQUAL(sTest.m_Fair.m_UserQueue["user-2"], 2);
-}
-BOOST_AUTO_TEST_CASE(fair_queue_4_backoff)
-{
-    Threads::FairQueueExecutor sFair;
-
-    sFair.m_Queue[2].avg_response_time.reset(0.5);
-    sFair.m_Queue[3].avg_response_time.reset(1);
-    sFair.m_UserQueue["user-1"] = 2; // push user 1 to q-2
-    sFair.m_UserQueue["user-2"] = 3; // push user 2 to q-3
-
-    BOOST_CHECK_EQUAL(true, sFair.insert("user-1", []() {}));
-    BOOST_CHECK_EQUAL(true, sFair.insert("user-2", []() {}));
-
-    sFair.m_Queue[3].avg_response_time.reset(3); // FairQueueExecutor::MAX_WAIT = 2
-    BOOST_CHECK_EQUAL(false, sFair.insert("user-2", []() {}));
-    BOOST_CHECK_EQUAL(true, sFair.insert("user-0", []() {}));
-}
-BOOST_AUTO_TEST_CASE(fair_queue_5_qw)
-{
-    Threads::FairQueueExecutor sFair;
-
-    sFair.m_Queue[0].avg_call_time.reset(0.1);
-    sFair.m_Queue[1].avg_call_time.reset(0.5);
-    sFair.m_Queue[2].avg_call_time.reset(1);
-    sFair.m_Queue[3].avg_call_time.reset(2);
-    sFair.refresh_i_queue_budget();
-
-    BOOST_CHECK_EQUAL(160, sFair.m_Queue[0].estimate);
-    BOOST_CHECK_EQUAL(16, sFair.m_Queue[1].estimate);
-    BOOST_CHECK_EQUAL(4, sFair.m_Queue[2].estimate);
-    BOOST_CHECK_EQUAL(1, sFair.m_Queue[3].estimate);
-
-    // total time:
-    // 0.1 * 160 + 0.5 * 16 + 1 * 4 + 2 = 30
-    // time share for queue-0:
-    // 0.1 * 160 / 30 = ~ 8/15
 }
 BOOST_AUTO_TEST_SUITE_END() // Threads
 
