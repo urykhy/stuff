@@ -3,24 +3,13 @@
 #include <variant>
 
 #include <boost/noncopyable.hpp>
-#include <thrift/protocol/TCompactProtocol.h>
-#include <thrift/transport/TBufferTransports.h>
-
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wfloat-equal"
-#include "jaeger_proto/Agent.h"
-#include "jaeger_proto/jaeger_types.h"
-#pragma GCC diagnostic pop
 
 #include <format/Hex.hpp>
 #include <mpl/Mpl.hpp>
-#include <networking/Resolve.hpp>
-#include <networking/UdpSocket.hpp>
 #include <parser/Hex.hpp>
 #include <parser/Parser.hpp>
-#include <parser/Url.hpp>
 #include <time/Meter.hpp>
-#include <unsorted/Env.hpp>
+#include <trace.pb.h>
 #include <unsorted/Random.hpp>
 #include <unsorted/Uuid.hpp>
 
@@ -33,7 +22,7 @@ namespace Jaeger {
         int64_t     parentId    = 0;
         std::string service{};
 
-        std::string traceparent() const
+        std::string traceparent() const // for HTTP headers
         {
             return "00-" + // version
                    Format::to_hex(htobe64(traceIdHigh)) +
@@ -41,6 +30,17 @@ namespace Jaeger {
                    Format::to_hex(htobe64(parentId)) + '-' +
                    "00"; // flags
         };
+
+        std::string binary_trace_id() const
+        {
+            std::string sTmp;
+            sTmp.reserve(16);
+            const int64_t sHigh = htobe64(traceIdHigh);
+            const int64_t sLow  = htobe64(traceIdLow);
+            sTmp.append(reinterpret_cast<const char*>(&sHigh), sizeof(sHigh));
+            sTmp.append(reinterpret_cast<const char*>(&sLow), sizeof(sLow));
+            return sTmp;
+        }
 
         static Params parse(std::string_view aParent)
         {
@@ -91,35 +91,18 @@ namespace Jaeger {
 
         std::variant<std::string, const char*, double, bool, int64_t> value;
 
-        jaegertracing::thrift::Tag convert() const
+        void convert(opentelemetry::proto::common::v1::KeyValue* aTag) const
         {
-            using Type = jaegertracing::thrift::TagType;
-            jaegertracing::thrift::Tag sTag;
-            sTag.key = name;
+            aTag->set_key(name);
+            auto sValue = aTag->mutable_value();
             std::visit(Mpl::overloaded{
-                           [&sTag](const std::string& arg) {
-                               sTag.vType = Type::STRING;
-                               sTag.__set_vStr(arg);
-                           },
-                           [&sTag](const char* arg) {
-                               sTag.vType = Type::STRING;
-                               sTag.__set_vStr(arg);
-                           },
-                           [&sTag](double arg) {
-                               sTag.vType = Type::DOUBLE;
-                               sTag.__set_vDouble(arg);
-                           },
-                           [&sTag](bool arg) {
-                               sTag.vType = Type::BOOL;
-                               sTag.__set_vBool(arg);
-                           },
-                           [&sTag](int64_t arg) {
-                               sTag.vType = Type::LONG;
-                               sTag.__set_vLong(arg);
-                           },
+                           [&](const std::string& arg) { sValue->set_string_value(arg); },
+                           [&](const char* arg) { sValue->set_string_value(arg); },
+                           [&](double arg) { sValue->set_double_value(arg); },
+                           [&](bool arg) { sValue->set_bool_value(arg); },
+                           [&](int64_t arg) { sValue->set_int_value(arg); },
                        },
                        value);
-            return sTag;
         }
     };
 
@@ -129,62 +112,70 @@ namespace Jaeger {
         friend class Span;
 
     private:
-        jaegertracing::thrift::Batch m_Batch;
-        const Params                 m_Params;
+        const Params m_Params;
+
+        opentelemetry::proto::trace::v1::TracesData     m_Traces;
+        opentelemetry::proto::trace::v1::ResourceSpans* m_Spans = nullptr;
+        opentelemetry::proto::trace::v1::ScopeSpans*    m_Scope = nullptr;
 
     public:
         Trace(const Params& aParams)
         : m_Params(aParams)
         {
-            m_Batch.process.serviceName = aParams.service;
+            m_Spans = m_Traces.add_resource_spans();
+            m_Scope = m_Spans->add_scope_spans();
+
+            Tag sTag{"service.name", m_Params.service};
+            sTag.convert(m_Spans->mutable_resource()->add_attributes());
         }
 
         void set_process_tag(const Tag& aTag)
         {
-            m_Batch.process.tags.push_back(aTag.convert());
-            m_Batch.process.__isset.tags = true;
+            aTag.convert(m_Spans->mutable_resource()->add_attributes());
         }
 
-        std::string serialize() const
+        std::string to_string() const
         {
-            auto sBuffer   = std::make_shared<apache::thrift::transport::TMemoryBuffer>();
-            auto sProtocol = std::make_shared<apache::thrift::protocol::TCompactProtocol>(sBuffer);
-
-            jaegertracing::agent::thrift::AgentClient sAgent(sProtocol);
-            sAgent.emitBatch(m_Batch);
-            return sBuffer->getBufferAsString();
+            return m_Traces.SerializeAsString();
         }
     };
 
     class Span : boost::noncopyable
     {
-        const int                   m_XCount;
-        Trace&                      m_Trace;
-        jaegertracing::thrift::Span m_Span;
-        bool                        m_Alive = true;
+        const int m_XCount;
+        Trace&    m_Trace;
+
+        opentelemetry::proto::trace::v1::Span* m_Span = nullptr;
+
+        int64_t m_SpanId = Util::random8();
+        bool    m_Alive  = true;
+
+        static std::string to_binary(int64_t aVal)
+        {
+            int64_t sVal = htobe64(aVal);
+            return std::string(reinterpret_cast<const char*>(&sVal), sizeof(sVal));
+        }
 
     public:
         Span(Trace& aTrace, const std::string& aName, int64_t aParentSpanId = 0)
         : m_XCount(std::uncaught_exceptions())
         , m_Trace(aTrace)
         {
-            m_Span.traceIdHigh = m_Trace.m_Params.traceIdHigh;
-            m_Span.traceIdLow  = m_Trace.m_Params.traceIdLow;
-            m_Span.spanId      = Util::random8();
-            if (aParentSpanId == 0)
-                m_Span.parentSpanId = m_Trace.m_Params.parentId;
-            else
-                m_Span.parentSpanId = aParentSpanId;
-            m_Span.operationName = aName;
-            m_Span.flags         = 0;
-            m_Span.startTime     = Time::get_time().to_us();
-            m_Span.duration      = 0;
+            m_Span = m_Trace.m_Scope->add_spans();
+            m_Span->set_name(aName);
+            m_Span->set_trace_id(m_Trace.m_Params.binary_trace_id());
+            m_Span->set_span_id(to_binary(m_SpanId));
+            m_Span->set_parent_span_id(to_binary(
+                aParentSpanId == 0 ? m_Trace.m_Params.parentId
+                                   : aParentSpanId));
+            m_Span->set_start_time_unix_nano(Time::get_time().to_ns());
         }
 
         Span(Span&& aOld)
         : m_XCount(aOld.m_XCount)
         , m_Trace(aOld.m_Trace)
         , m_Span(std::move(aOld.m_Span))
+        , m_SpanId(aOld.m_SpanId)
         , m_Alive(aOld.m_Alive)
         {
             aOld.m_Alive = false;
@@ -203,59 +194,48 @@ namespace Jaeger {
             if (m_Alive) {
                 if (m_XCount != std::uncaught_exceptions())
                     set_error();
-                m_Span.duration = Time::get_time().to_us() - m_Span.startTime;
-                m_Trace.m_Batch.spans.push_back(std::move(m_Span));
+                m_Span->set_end_time_unix_nano(Time::get_time().to_ns());
                 m_Alive = false;
             }
         }
 
         Span child(const std::string& aName)
         {
-            return Span(m_Trace, aName, m_Span.spanId);
+            return Span(m_Trace, aName, m_SpanId);
         }
 
         void set_tag(const Tag& aTag)
         {
-            m_Span.tags.push_back(aTag.convert());
-            m_Span.__isset.tags = true;
+            aTag.convert(m_Span->add_attributes());
         }
 
-        void set_error() { set_tag(Tag{"error", true}); }
+        void set_error(const char* aMessage = nullptr)
+        {
+            auto sStatus = m_Span->mutable_status();
+            sStatus->set_message(aMessage != nullptr ? aMessage : "error");
+            sStatus->set_code(opentelemetry::proto::trace::v1::Status::STATUS_CODE_ERROR);
+        }
 
         template <class... T>
-        void set_log(const T&... aTag)
+        void set_log(const char* aName, const T&... aTag)
         {
-            jaegertracing::thrift::Log sLog;
-            sLog.timestamp = Time::get_time().to_us();
-
-            // convert every aTag
-            (static_cast<void>(sLog.fields.push_back(aTag.convert())), ...);
-
-            m_Span.logs.push_back(sLog);
-            m_Span.__isset.logs = true;
+            auto sLog = m_Span->add_events();
+            sLog->set_time_unix_nano(Time::get_time().to_ns());
+            sLog->set_name(aName);
+            (static_cast<void>(aTag.convert(sLog->add_attributes())), ...);
         }
 
-        std::string trace_id() const
+        std::string trace_id() const // for UI, logging.
         {
-            return Format::to_hex(htobe64(m_Span.traceIdHigh)) +
-                   Format::to_hex(htobe64(m_Span.traceIdLow));
+            return Format::to_hex(m_Span->trace_id());
         }
 
         Params extract() const
         {
             return {
-                m_Span.traceIdHigh,
-                m_Span.traceIdLow,
-                m_Span.spanId,
-            };
+                m_Trace.m_Params.traceIdHigh,
+                m_Trace.m_Params.traceIdLow,
+                m_SpanId};
         }
     };
-
-    inline void send(const Trace& aTrace)
-    {
-        static Udp::Socket sUdp(Util::resolveName(Util::getEnv("JAEGER_HOST")),
-                                Util::getEnv<uint16_t>("JAEGER_PORT", 6831));
-        const std::string  sMessage = aTrace.serialize();
-        sUdp.write(sMessage.data(), sMessage.size());
-    }
 } // namespace Jaeger

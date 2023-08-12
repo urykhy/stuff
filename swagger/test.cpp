@@ -16,6 +16,7 @@
 #include <asio_http/v2/Client.hpp>
 #include <asio_http/v2/Server.hpp>
 #include <format/Hex.hpp>
+#include <jaeger/Client.hpp>
 #include <jwt/JWT.hpp>
 #include <prometheus/API.hpp>
 #include <resource/Get.hpp>
@@ -486,11 +487,15 @@ BOOST_FIXTURE_TEST_CASE(queue, WithServer)
 }
 BOOST_FIXTURE_TEST_CASE(jaeger, WithServer)
 {
+    Jaeger::Queue sQueue;
+    sQueue.start();
+
     Threads::QueueExecutor sTaskQueue;
     sTaskQueue.start(m_Group, 4); // spawn 4 threads
 
     TutorialServer sTutorialServer;
     sTutorialServer.with_queue(sTaskQueue);
+    sTutorialServer.with_jaeger([&sQueue](Jaeger::Trace& aTrace) { sQueue.send(aTrace); });
     sTutorialServer.configure(m_Router);
     Util::Raii sCleanup([this]() { m_Group.wait(); });
 
@@ -503,7 +508,7 @@ BOOST_FIXTURE_TEST_CASE(jaeger, WithServer)
         auto sR = sClient.get_parameters({.id = "test-id", .string_required = "abcdefg"}, &sTraceSpan);
         BOOST_TEST_MESSAGE("request: " << sR.body);
     }
-    Jaeger::send(sTrace);
+    sQueue.send(sTrace);
 }
 BOOST_FIXTURE_TEST_CASE(redirect, WithServer)
 {

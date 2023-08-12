@@ -4,9 +4,10 @@ includes = include_directories('..')
 
 boost     = dependency('boost', modules : ['unit_test_framework', 'system'])
 threads   = dependency('threads')
-thrift    = dependency('thrift')
 uuid      = dependency('uuid')
-subdir('jaeger_proto')
+curl      = dependency('libcurl')
+log4cxx   = dependency('liblog4cxx')
+subdir('otlp_proto')
 
-a = executable('a.out', 'test.cpp', dependencies : [boost, threads, thrift, uuid, jaeger_proto], include_directories : includes)
+a = executable('a.out', 'test.cpp', dependencies : [boost, threads, curl, uuid, otlp_dep, log4cxx], include_directories : includes)
 test('basic test', a, args : ['-l', 'all'])

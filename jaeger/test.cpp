@@ -6,6 +6,7 @@ using namespace std::chrono_literals;
 
 #include <thread>
 
+#include "Client.hpp"
 #include "Jaeger.hpp"
 
 BOOST_AUTO_TEST_SUITE(Jaeger)
@@ -24,9 +25,10 @@ BOOST_AUTO_TEST_CASE(params)
 BOOST_AUTO_TEST_CASE(simple)
 {
     using Tag = Jaeger::Tag;
+    Jaeger::Client sJaeger;
 
     Jaeger::Trace sTrace(Jaeger::Params::uuid("test.cpp"));
-    sTrace.set_process_tag(Tag{"version", "0.1/test"});
+    sTrace.set_process_tag(Tag{"service.version", "0.1/test"});
 
     {
         Jaeger::Span sM(sTrace, "initialize");
@@ -46,7 +48,7 @@ BOOST_AUTO_TEST_CASE(simple)
         {
             Jaeger::Span sM(sProcess.child("merge"));
             std::this_thread::sleep_for(300us);
-            sM.set_log(Tag{"factor", 42.2}, Tag{"duplicates", 50l}, Tag{"unique", 10l}, Tag{"truncated", 4l});
+            sM.set_log("merge", Tag{"factor", 42.2}, Tag{"duplicates", 50l}, Tag{"unique", 10l}, Tag{"truncated", 4l});
         }
         try {
             Jaeger::Span sM(sProcess.child("write"));
@@ -64,14 +66,15 @@ BOOST_AUTO_TEST_CASE(simple)
         std::this_thread::sleep_for(10us);
     }
 
-    Jaeger::send(sTrace);
+    sJaeger.send(sTrace);
 }
 BOOST_AUTO_TEST_CASE(parts)
 {
     using Tag = Jaeger::Tag;
+    Jaeger::Client sJaeger;
 
     Jaeger::Trace sTrace(Jaeger::Params::uuid("test.cpp"));
-    sTrace.set_process_tag(Tag{"version", "0.1/test"});
+    sTrace.set_process_tag(Tag{"service.version", "0.1/test"});
 
     Jaeger::Span sRoot(sTrace, "root");
     {
@@ -95,10 +98,10 @@ BOOST_AUTO_TEST_CASE(parts)
             }
             std::this_thread::sleep_for(2ms);
         }
-        Jaeger::send(sTrace2);
+        sJaeger.send(sTrace2);
         std::this_thread::sleep_for(10ms);
     }
     sRoot.close();
-    Jaeger::send(sTrace);
+    sJaeger.send(sTrace);
 }
 BOOST_AUTO_TEST_SUITE_END()

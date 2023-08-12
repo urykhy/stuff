@@ -38,8 +38,7 @@ namespace Jaeger::Helper {
     inline void set_error(std::optional<Span>& aSpan, const char* aMsg)
     {
         if (aSpan) {
-            aSpan->set_error();
-            aSpan->set_log(Tag{"exception", aMsg});
+            aSpan->set_error(aMsg);
         }
     }
 } // namespace Jaeger::Helper

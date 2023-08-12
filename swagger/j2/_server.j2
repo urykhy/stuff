@@ -26,6 +26,10 @@ class server
     using SentryHandler = std::function<void(Sentry::Message& aMessage)>;
     SentryHandler m_SentryHandler;
 {% endif %}
+{% if x_jaeger %}
+    using JaegerHandler = std::function<void(Jaeger::Trace& aTrace)>;
+    JaegerHandler m_JaegerHandler;
+{% endif %}
 {% if x_queue %}
     Threads::QueueExecutor* m_Queue = nullptr;
 {% endif %}
@@ -41,6 +45,9 @@ public:
 
 {% if x_sentry %}
     void with_sentry(SentryHandler aHandler, time_t aRate = 60);
+{% endif %}
+{% if x_jaeger %}
+    void with_jaeger(JaegerHandler aHandler);
 {% endif %}
 {% if x_queue %}
     void with_queue(Threads::QueueExecutor& aQueue);
@@ -94,6 +101,12 @@ private:
     {
         m_SentryRateLimit = aRate;
         m_SentryHandler = aHandler;
+    }
+{% endif %}
+{% if x_jaeger %}
+    void server::with_jaeger(JaegerHandler aHandler)
+    {
+        m_JaegerHandler = aHandler;
     }
 {% endif %}
 {% if x_queue %}
@@ -195,10 +208,10 @@ private:
 
         {% if x_jaeger %}
             auto sTrace = Jaeger::Helper::create(aRequest["traceparent"].to_string(), "{{ name }}");
-            Util::Raii sSendTrace([&sTrace]()
+            Util::Raii sSendTrace([&sTrace, this]()
             {
-                if (sTrace)
-                    Jaeger::send(*sTrace);
+                if (sTrace and m_JaegerHandler)
+                    m_JaegerHandler(*sTrace);
             });
 
             auto sTraceParsing = Jaeger::Helper::start(sTrace, "parsing");

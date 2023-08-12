@@ -44,6 +44,7 @@
 
 {% set x_jaeger = doc['info'].get('x-jaeger', false) %}
 {% if x_jaeger %}
+    #include <jaeger/Client.hpp>
     #include <jaeger/Helper.hpp>
 {% endif %}
 
