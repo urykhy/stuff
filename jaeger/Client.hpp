@@ -58,13 +58,12 @@ namespace Jaeger {
 
     public:
         Queue(unsigned aLimit = 20)
-        : m_Queue([this](const std::string& aMsg) { process(aMsg); }, {.retry = true})
+        : m_Queue([this](const std::string& aMsg) { process(aMsg); }, {.retry = true, .linger = 2})
         , m_Limit(aLimit)
         {
         }
         void start()
         {
-            m_Group.at_stop([this]() { m_Queue.wait(2 /* 2 seconds grace period */); });
             m_Queue.start(m_Group);
         }
         bool send(const Trace& aMsg)

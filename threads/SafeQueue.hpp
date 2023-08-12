@@ -131,13 +131,15 @@ namespace Threads {
     };
 
     // just a queue and thread to process tasks
+    // default - fast exit (no wait until tasks processed)
     template <class T, class Q = ListWrapper<T>>
     struct SafeQueueThread
     {
         struct Params
         {
-            bool  retry = false; // retry on exception
-            float delay = 1;     // sleep before next retry in seconds
+            bool   retry  = false; // retry on exception
+            float  delay  = 1;     // sleep before next retry in seconds
+            time_t linger = 0;     // delay exit if have pending tasks
 
             std::function<bool(const T&)> check = [](const T&) -> bool { return true; }; // condition to pick task from queue
         };
@@ -149,9 +151,20 @@ namespace Threads {
         SafeQueue<T, Q>       m_Queue;
         std::atomic<uint64_t> m_Done{0};
 
+        mutable std::mutex              m_Mutex;
+        std::unique_ptr<Time::Deadline> m_Deadline;
+
+        bool exiting() const
+        {
+            if (!m_Queue.exiting())
+                return false;
+            std::unique_lock lk(m_Mutex);
+            return !m_Deadline or (idle() or m_Deadline->expired());
+        }
+
         void handle(T& aItem)
         {
-            while (!m_Queue.exiting()) {
+            while (!exiting()) {
                 try {
                     m_Handler(aItem);
                     return;
@@ -175,7 +188,7 @@ namespace Threads {
         {
             aGroup.start(
                 [this]() {
-                    while (!m_Queue.exiting()) {
+                    while (!exiting()) {
                         T sItem;
                         if (m_Queue.wait(sItem, m_Params.check)) {
                             handle(sItem);
@@ -184,7 +197,13 @@ namespace Threads {
                     }
                 },
                 aCount);
-            aGroup.at_stop([this]() { m_Queue.stop(); });
+            aGroup.at_stop([this]() {
+                if (m_Params.linger > 0) {
+                    std::unique_lock lk(m_Mutex);
+                    m_Deadline = std::make_unique<Time::Deadline>(m_Params.linger);
+                }
+                m_Queue.stop();
+            });
         }
 
         void   insert(const T& aItem) { m_Queue.insert(aItem); }
