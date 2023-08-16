@@ -9,6 +9,22 @@ using namespace std::chrono_literals;
 #include "Client.hpp"
 #include "Jaeger.hpp"
 
+static void waitTrace(const std::string& aTraceID)
+{
+    bool sTraceFound = false;
+    auto sCheckTrace = [&]() {
+        std::string  sURL = Util::getEnv("JAEGER_QUERY") + "/" + aTraceID;
+        Curl::Client sClient;
+        BOOST_TEST_MESSAGE("wait for trace at " << sURL);
+        return sClient.GET(sURL).status == 200;
+    };
+    for (int i = 0; i < 10 and !sTraceFound; i++) {
+        Threads::sleep(1);
+        sTraceFound = sCheckTrace();
+    }
+    BOOST_CHECK_EQUAL(sTraceFound, true);
+}
+
 BOOST_AUTO_TEST_SUITE(Jaeger)
 BOOST_AUTO_TEST_CASE(params)
 {
@@ -67,6 +83,7 @@ BOOST_AUTO_TEST_CASE(simple)
     }
 
     sJaeger.send(sTrace);
+    waitTrace(sTrace.trace_id());
 }
 BOOST_AUTO_TEST_CASE(parts)
 {

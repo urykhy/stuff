@@ -134,6 +134,11 @@ namespace Jaeger {
             aTag.convert(m_Spans->mutable_resource()->add_attributes());
         }
 
+        std::string trace_id() const
+        {
+            return Format::to_hex(m_Params.binary_trace_id());
+        }
+
         std::string to_string() const
         {
             return m_Traces.SerializeAsString();
