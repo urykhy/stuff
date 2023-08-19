@@ -68,13 +68,18 @@
       "problemMatcher": []
     },
     {
-      "label": "build all configured projects",
+      "label": "build all meson projects",
       "type": "shell",
-      "command": "for x in */build; do echo $x; done | parallel -I% 'pushd % && ninja -j1'",
-      "problemMatcher": [],
       "options": {
-        "cwd": "${workspaceFolder}"
-      }
+        "cwd": "${workspaceFolder}",
+        "shell": {
+          "args": [
+            "-i"
+          ]
+        }
+      },
+      "command": "source .envrc && for x in */meson.build; do echo $x; done | awk -F/ '{print $1}' | grep -v http_parser | parallel -I% 'pushd % && meson setup --wipe build && pushd build && ninja -j1'",
+      "problemMatcher": []
     }
   ]
 }
