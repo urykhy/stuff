@@ -9,6 +9,7 @@
 #include <boost/asio/coroutine.hpp> // for pipeline::task
 
 #include "Asio.hpp"
+#include "Coro.hpp"
 #include "FairQueueExecutor.hpp"
 #include "ForEach.hpp"
 #include "MapReduce.hpp"
@@ -258,3 +259,39 @@ BOOST_AUTO_TEST_CASE(callback)
     sleep(3);
 }
 BOOST_AUTO_TEST_SUITE_END() // Asio
+
+BOOST_AUTO_TEST_SUITE(Coro)
+Threads::Coro::Return step2()
+{
+    for (unsigned i = 0; i < 3; ++i) {
+        co_await std::suspend_always{};
+        BOOST_TEST_MESSAGE("step2: " << i);
+    }
+}
+Threads::Coro::Return step1()
+{
+    for (unsigned i = 0; i < 3; ++i) {
+        co_await std::suspend_always{};
+        BOOST_TEST_MESSAGE("step1: " << i);
+    }
+
+    Threads::Coro::Handle h = step2();
+    while (!h.done()) {
+        co_await std::suspend_always{};
+        h();
+    }
+    h.destroy();
+}
+BOOST_AUTO_TEST_CASE(basic)
+{
+    Threads::Coro::Handle h       = step1();
+    auto&                 promise = h.promise();
+    while (!h.done()) {
+        BOOST_TEST_MESSAGE("in main function");
+        h();
+    }
+    if (promise.exception_ != nullptr)
+        BOOST_TEST_MESSAGE("exit with exception");
+    h.destroy();
+}
+BOOST_AUTO_TEST_SUITE_END() // Coro
