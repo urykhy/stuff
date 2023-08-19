@@ -5,6 +5,7 @@
 #include <dlfcn.h>
 #include <malloc.h>
 
+#include <atomic>
 #include <mutex>
 #include <string>
 

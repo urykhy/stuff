@@ -9,10 +9,10 @@ namespace asio_http::v2 {
 
     class Output
     {
-        beast::tcp_stream&        m_Stream;
-        asio::io_service::strand& m_Strand;
-        asio::steady_timer        m_Timer;
-        Deflate                   m_Deflate;
+        beast::tcp_stream& m_Stream;
+        Strand&            m_Strand;
+        asio::steady_timer m_Timer;
+        Deflate            m_Deflate;
 
         // send queue for not accountable frames (or we have budget)
         std::list<std::string> m_PriorityQueue;
@@ -128,10 +128,10 @@ namespace asio_http::v2 {
         }
 
     public:
-        Output(beast::tcp_stream& aStream, asio::io_service::strand& aStrand)
+        Output(beast::tcp_stream& aStream, asio::strand<asio::io_context::executor_type>& aStrand)
         : m_Stream(aStream)
         , m_Strand(aStrand)
-        , m_Timer(aStream.get_executor())
+        , m_Timer(m_Strand)
         {
             m_Buffer.reserve(MAX_MERGE);
         }
@@ -247,12 +247,12 @@ namespace asio_http::v2 {
                     m_Timer.async_wait(yield[ec]);
                 }
                 if (!m_PriorityQueue.empty()) {
-                    //CATAPULT_COUNTER("output", "priority queue", m_PriorityQueue.size())
+                    // CATAPULT_COUNTER("output", "priority queue", m_PriorityQueue.size())
                     sWriteOut(m_PriorityQueue);
                     continue;
                 }
                 if (!m_WriteQueue.empty()) {
-                    //CATAPULT_COUNTER("output", "write queue", m_WriteQueue.size())
+                    // CATAPULT_COUNTER("output", "write queue", m_WriteQueue.size())
                     sWriteOut(m_WriteQueue);
                     if (m_Budget > MIN_FRAME_SIZE)
                         flush();

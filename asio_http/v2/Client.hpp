@@ -16,12 +16,12 @@ namespace asio_http::v2 {
         using Notify = std::function<void(const std::string&)>;
 
     private:
-        asio::io_service&        m_Service;
-        const std::string        m_Host;
-        const std::string        m_Port;
-        asio::io_service::strand m_Strand;
-        beast::tcp_stream        m_Stream;
-        uint32_t                 m_Serial = 1;
+        asio::io_service& m_Service;
+        const std::string m_Host;
+        const std::string m_Port;
+        Strand            m_Strand;
+        beast::tcp_stream m_Stream;
+        uint32_t          m_Serial = 1;
 
         // pending requests
         struct PendingStream
@@ -163,7 +163,7 @@ namespace asio_http::v2 {
         : m_Service(aService)
         , m_Host(aHost)
         , m_Port(aPort)
-        , m_Strand(m_Service)
+        , m_Strand(m_Service.get_executor())
         , m_Stream(m_Service)
         , m_Parser(parser::CLIENT, this)
         , m_Output(m_Stream, m_Strand)
@@ -184,7 +184,7 @@ namespace asio_http::v2 {
 
         void start()
         {
-            boost::asio::spawn(m_Strand, [p = shared_from_this()](asio::yield_context yield) mutable {
+            asio::spawn(m_Strand, [p = shared_from_this()](asio::yield_context yield) mutable {
                 p->read_coro(yield);
             });
         }
@@ -192,7 +192,7 @@ namespace asio_http::v2 {
         std::future<Response> async(ClientRequest&& aRequest)
         {
             auto sPromise = std::make_shared<std::promise<Response>>();
-            m_Strand.post([aRequest = std::move(aRequest), sPromise, p = shared_from_this()]() mutable {
+            asio::post(m_Strand, [aRequest = std::move(aRequest), sPromise, p = shared_from_this()]() mutable {
                 p->async_i(aRequest, sPromise);
             });
             return sPromise->get_future();
@@ -200,7 +200,7 @@ namespace asio_http::v2 {
 
         void async(ClientRequest&& aRequest, Promise aPromise)
         {
-            m_Strand.post([aRequest = std::move(aRequest), aPromise, p = shared_from_this()]() mutable {
+            asio::post(m_Strand, [aRequest = std::move(aRequest), aPromise, p = shared_from_this()]() mutable {
                 p->async_i(aRequest, aPromise);
             });
         }
@@ -223,7 +223,7 @@ namespace asio_http::v2 {
                         if (m_Input.append(sBuffer, m_Parser.hint() - sBuffer.size()))
                             break;
                         m_Stream.expires_after(std::chrono::seconds(30));
-                        //CATAPULT_EVENT("input", "async_read_some");
+                        // CATAPULT_EVENT("input", "async_read_some");
                         size_t sNew = m_Stream.async_read_some(m_Input.buffer(), yield[ec]);
                         if (ec)
                             throw ec;
@@ -249,10 +249,10 @@ namespace asio_http::v2 {
 
     class Manager : public std::enable_shared_from_this<Manager>, public Client
     {
-        asio::io_service&        m_Service;
-        asio::deadline_timer     m_Timer;
-        asio::io_service::strand m_Strand;
-        const Params             m_Params;
+        asio::io_service&    m_Service;
+        Strand               m_Strand;
+        asio::deadline_timer m_Timer;
+        const Params         m_Params;
 
         struct RQ
         {
@@ -273,8 +273,8 @@ namespace asio_http::v2 {
     public:
         Manager(asio::io_service& aService, const Params& aParams)
         : m_Service(aService)
-        , m_Timer(aService)
-        , m_Strand(aService)
+        , m_Strand(aService.get_executor())
+        , m_Timer(m_Strand)
         , m_Params(aParams)
         {
         }
@@ -282,19 +282,19 @@ namespace asio_http::v2 {
         void start_cleaner()
         {
             m_Timer.expires_from_now(boost::posix_time::milliseconds(1000));
-            m_Timer.async_wait(m_Strand.wrap([this, p = this->shared_from_this()](boost::system::error_code ec) {
+            m_Timer.async_wait([this, p = this->shared_from_this()](boost::system::error_code ec) {
                 if (!ec) {
                     // TODO: close failed connections too (once params.delay passed)
                     TRACE("close idle connections ...");
                     start_cleaner();
                 }
-            }));
+            });
         }
 
         std::future<Response> async(ClientRequest&& aRequest) override
         {
             auto sPromise = std::make_shared<std::promise<Response>>();
-            m_Strand.post([aRequest = std::move(aRequest), sPromise, p = shared_from_this()]() mutable {
+            asio::post(m_Strand, [aRequest = std::move(aRequest), sPromise, p = shared_from_this()]() mutable {
                 p->async_i({std::move(aRequest), sPromise});
             });
             return sPromise->get_future();
@@ -319,9 +319,9 @@ namespace asio_http::v2 {
                     m_Service,
                     sAddr.host,
                     sAddr.port,
-                    m_Strand.wrap([sWeakPtr, p = shared_from_this()](const std::string& aMsg) {
-                        p->notify_i(sWeakPtr, aMsg);
-                    }));
+                    [sWeakPtr, p = shared_from_this()](const std::string& aMsg) {
+                        asio::post(p->m_Strand, [sWeakPtr, aMsg, p]() { p->notify_i(sWeakPtr, aMsg); });
+                    });
                 sDataPtr->peer = sPeer;
                 sPeer->start();
                 auto sTmp = m_Data.insert(std::make_pair(sAddr, sDataPtr));

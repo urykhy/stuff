@@ -57,8 +57,8 @@ namespace asio_http::v1 {
     {
         Container::KeyPool<Addr, ConnectionPtr> m_Alive;
         asio::io_service&                       m_Service;
+        Strand                                  m_Strand;
         asio::deadline_timer                    m_Timer;
-        asio::io_service::strand                m_Strand;
 
         struct RQ
         {
@@ -74,8 +74,8 @@ namespace asio_http::v1 {
     public:
         Manager(asio::io_service& aService, const Params& aParams)
         : m_Service(aService)
-        , m_Timer(aService)
-        , m_Strand(aService)
+        , m_Strand(aService.get_executor())
+        , m_Timer(m_Strand)
         , m_Params(aParams)
         , m_Waiting([this](RQ& x) mutable { expired(x); })
         {
@@ -84,20 +84,20 @@ namespace asio_http::v1 {
         void start_cleaner()
         {
             m_Timer.expires_from_now(boost::posix_time::milliseconds(m_Waiting.eta(1000)));
-            m_Timer.async_wait(m_Strand.wrap([this, p = this->shared_from_this()](boost::system::error_code ec) {
+            m_Timer.async_wait([this, p = this->shared_from_this()](boost::system::error_code ec) {
                 if (!ec) {
                     DEBUG("close idle connections ...");
                     m_Alive.cleanup();
                     m_Waiting.on_timer();
                     start_cleaner();
                 }
-            }));
+            });
         }
 
         std::future<Response> async(ClientRequest&& aRequest) override
         {
             auto sPromise = std::make_shared<std::promise<Response>>();
-            m_Strand.post([aRequest = std::move(aRequest), sPromise, p = shared_from_this()]() mutable {
+            asio::post(m_Strand, [aRequest = std::move(aRequest), sPromise, p = shared_from_this()]() mutable {
                 p->async_i({std::move(aRequest), sPromise, {}});
             });
             return sPromise->get_future();
@@ -113,7 +113,7 @@ namespace asio_http::v1 {
                 asio_handler_invoke(std::bind(sHandler, sPromise), &sHandler);
             };
 
-            m_Strand.post([aRequest = std::move(aRequest), sPromise, sCB, p = shared_from_this()]() mutable {
+            asio::post(m_Strand, [aRequest = std::move(aRequest), sPromise, sCB, p = shared_from_this()]() mutable {
                 p->async_i({std::move(aRequest), sPromise, std::move(sCB)});
             });
 
@@ -145,7 +145,7 @@ namespace asio_http::v1 {
                                    [sInternal = std::move(sInternal),
                                     sRQ       = std::move(aRQ),
                                     sPtr,
-                                    p = shared_from_this()](boost::asio::yield_context yield) mutable {
+                                    p = shared_from_this()](asio::yield_context yield) mutable {
                                        p->perform(std::move(sRQ), sInternal, sPtr, yield);
                                        p->done();
                                        if (sRQ.callback)
@@ -158,7 +158,7 @@ namespace asio_http::v1 {
                                    [sInternal = std::move(sInternal),
                                     sRQ       = std::move(aRQ),
                                     sPtr,
-                                    p = shared_from_this()](boost::asio::yield_context yield) mutable {
+                                    p = shared_from_this()](asio::yield_context yield) mutable {
                                        p->create(std::move(sRQ), sInternal, sPtr, yield);
                                        p->done();
                                        if (sRQ.callback)
@@ -188,7 +188,7 @@ namespace asio_http::v1 {
             aPtr->close();
         }
 
-        void create(RQ&& aRQ, Request& aInternal, ConnectionPtr aPtr, net::yield_context yield)
+        void create(RQ&& aRQ, Request& aInternal, ConnectionPtr aPtr, asio::yield_context yield)
         {
             beast::error_code ec;
             tcp::resolver     sResolver{m_Service};
@@ -210,7 +210,7 @@ namespace asio_http::v1 {
             perform(std::move(aRQ), aInternal, aPtr, yield);
         }
 
-        void perform(RQ&& aRQ, Request& aInternal, ConnectionPtr aPtr, net::yield_context yield)
+        void perform(RQ&& aRQ, Request& aInternal, ConnectionPtr aPtr, asio::yield_context yield)
         {
             beast::error_code  ec;
             beast::flat_buffer sBuffer;
@@ -237,7 +237,7 @@ namespace asio_http::v1 {
 
         void done()
         {
-            m_Strand.post([p = shared_from_this()]() mutable {
+            asio::post(m_Strand, [p = shared_from_this()]() mutable {
                 p->done_i();
             });
         }

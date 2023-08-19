@@ -12,11 +12,11 @@ namespace asio_http::v2 {
 #else
     class Session : public std::enable_shared_from_this<Session>, parser::API
     {
-        asio::io_service&        m_Service;
-        asio::io_service::strand m_Strand;
-        beast::tcp_stream        m_Stream;
-        RouterPtr                m_Router;
-        std::string              m_PeerName;
+        asio::io_service& m_Service;
+        Strand            m_Strand;
+        beast::tcp_stream m_Stream;
+        RouterPtr         m_Router;
+        std::string       m_PeerName;
 
         InputBuf     m_Input;
         parser::Main m_Parser;
@@ -73,7 +73,7 @@ namespace asio_http::v2 {
                 if (0 == sResponse.count(http::field::server))
                     sResponse.set(http::field::server, "Beast/cxx");
 
-                p->m_Strand.post([p, aID, sResponse = std::move(sResponse)]() mutable {
+                asio::post(p->m_Strand, [p, aID, sResponse = std::move(sResponse)]() mutable {
                     p->m_Output.enqueue(aID, sResponse);
                 });
             };
@@ -95,7 +95,7 @@ namespace asio_http::v2 {
     public:
         Session(asio::io_service& aService, beast::tcp_stream&& aStream, RouterPtr aRouter)
         : m_Service(aService)
-        , m_Strand(m_Service)
+        , m_Strand(m_Service.get_executor())
         , m_Stream(std::move(aStream))
         , m_Router(aRouter)
         , m_Parser(parser::SERVER, this)
@@ -145,7 +145,7 @@ namespace asio_http::v2 {
                         if (m_Input.append(sBuffer, m_Parser.hint() - sBuffer.size()))
                             break;
                         m_Stream.expires_after(std::chrono::seconds(30));
-                        //CATAPULT_EVENT("input", "async_read_some");
+                        // CATAPULT_EVENT("input", "async_read_some");
                         size_t sNew = m_Stream.async_read_some(m_Input.buffer(), yield[ec]);
                         if (ec)
                             throw ec;
