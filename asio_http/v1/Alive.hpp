@@ -103,21 +103,25 @@ namespace asio_http::v1 {
             return sPromise->get_future();
         }
 
-        std::shared_ptr<CT> async_y(ClientRequest&& aRequest, net::yield_context yield) override
+        std::future<Response> async_y(ClientRequest&& aRequest, asio::yield_context yield) override
         {
-            auto sPromise    = std::make_shared<std::promise<Response>>();
-            auto sCompletion = std::make_shared<CT>(yield);
+            auto sPromise = std::make_shared<std::promise<Response>>();
 
-            auto sCB = [sCompletion, sPromise, sHandler = sCompletion->completion_handler]() {
-                using boost::asio::asio_handler_invoke;
-                asio_handler_invoke(std::bind(sHandler, sPromise), &sHandler);
+            auto sInit = [this, aRequest = std::move(aRequest), sPromise, p = shared_from_this()](auto handler) mutable {
+                asio::post(m_Strand,
+                           [aRequest = std::move(aRequest), sPromise, p, handler = std::move(handler)]() mutable {
+                               auto sHolder = std::make_shared<decltype(handler)>(std::move(handler));
+                               p->async_i({std::move(aRequest),
+                                           sPromise,
+                                           [sHolder]() mutable {
+                                                boost::system::error_code ec;
+                                                (*sHolder)(ec); }});
+                           });
             };
 
-            asio::post(m_Strand, [aRequest = std::move(aRequest), sPromise, sCB, p = shared_from_this()]() mutable {
-                p->async_i({std::move(aRequest), sPromise, std::move(sCB)});
-            });
+            asio::async_initiate<asio::yield_context, void(boost::system::error_code)>(sInit, yield);
 
-            return sCompletion;
+            return sPromise->get_future();
         }
 
     private:

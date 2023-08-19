@@ -300,7 +300,7 @@ namespace asio_http::v2 {
             return sPromise->get_future();
         }
 
-        std::shared_ptr<CT> async_y(ClientRequest&& aRequest, net::yield_context yield) override
+        std::future<Response> async_y(ClientRequest&& aRequest, asio::yield_context yield) override
         {
             throw std::invalid_argument("async_y not implemented");
         }

@@ -6,7 +6,7 @@ class server
     struct Metrics
     {
     {%- call(doc, path, method, name) _for_every_method(doc) -%}
-        {% set tag = 'api="' + doc['info']['title'] + '", version="' + doc['info']['version'] + '", service="' + name + '"' %}
+        {% set tag = 'api="' + doc['info']['title'] + '", version="' + doc['info']['version'] + '", method="' + name + '"' %}
         {% set _open = '{' %}
         {% set _close = '}' %}
         Prometheus::Counter<> requests_{{ name }}      {R"(swagger_requests{{ _open }}{{ tag }}{{ _close }})"};
@@ -207,7 +207,7 @@ private:
         {% endif %}
 
         {% if x_jaeger %}
-            auto sTrace = Jaeger::Helper::create(aRequest["traceparent"].to_string(), "{{ name }}");
+            auto sTrace = Jaeger::Helper::create(aRequest["traceparent"], "{{ name }}");
             Util::Raii sSendTrace([&sTrace, this]()
             {
                 if (sTrace and m_JaegerHandler)
@@ -248,14 +248,14 @@ private:
                 {
                     Sentry::Message::Request sRequest;
                     sRequest.method = "{{ method }}";
-                    sRequest.url = aRequest.target().to_string();
+                    sRequest.url = aRequest.target();
                     sRequest.data = aRequest.body().substr(0, 10240); {# up to 10Kb body #}
                     {%- set p1 = doc['paths'][path].get('parameters', []) | swagger_expand_refs %}
                     {%- set p2 = doc['paths'][path][method].get('parameters', []) | swagger_expand_refs %}
                     {%- set params = p1 + p2 | sort(attribute='name') %}
                     {%- for param in params if param['in'] == 'header' %}
                         if (const auto& x = aRequest["{{ param.name }}"]; !x.empty())
-                            sRequest.headers["{{ param.name }}"] = x.to_string();
+                            sRequest.headers["{{ param.name }}"] = x;
                     {%- endfor %}
                     Sentry::Message sMessage("swagger");
                     if (sResponseStatus == http::status::unauthorized)
@@ -276,12 +276,12 @@ private:
         {% endif %}
 
         {% if x_queue %}
-            using CT = boost::asio::async_completion<asio_http::asio::yield_context, void(void)>;
-            CT sCompletion{ yield };
             {% if x_jaeger %}
             auto sTraceQueue = Jaeger::Helper::start(sTrace, "queue");
             {% endif %}
-            auto sTask = [&, sHandler = sCompletion.completion_handler](){
+            auto sInit = [&](auto handler) mutable {
+            auto sHolder = std::make_shared<decltype(handler)>(std::move(handler));
+            auto sTask = [&, sHolder](){
             {% if x_jaeger %} Jaeger::Helper::stop(sTraceQueue); {% endif %}
         {% endif %}
         {% if x_jaeger %} auto sTracePerform = Jaeger::Helper::start(sTrace, "perform"); {% endif %}
@@ -305,11 +305,12 @@ private:
         }
         {% if x_jaeger %} Jaeger::Helper::stop(sTracePerform); {% endif %}
         {% if x_queue %}
-                using boost::asio::asio_handler_invoke;
-                asio_handler_invoke(sHandler, &sHandler);
+                boost::system::error_code ec;
+                (*sHolder)(ec);
             }; // sTask
             m_Queue->insert(std::move(sTask));
-            sCompletion.result.get();
+            }; // sInit
+            boost::asio::async_initiate<asio_http::asio::yield_context, void(boost::system::error_code)>(sInit, yield);
         {% endif %}
     }
 {% endcall %}

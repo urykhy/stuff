@@ -159,8 +159,8 @@ public:
                                 "redirect without location",
                                 static_cast<unsigned>(sResponse.result())
                             );
-                        sRequest.url = sLocation.to_string();
-                        const auto sParsed = Parser::url(sLocation.to_string());
+                        sRequest.url = sLocation;
+                        const auto sParsed = Parser::url(sLocation);
                         sPeer = sParsed.host + ":" + sParsed.port;
                     {%- endif %}
                 }
@@ -177,8 +177,8 @@ public:
                                 "redirect without location",
                                 static_cast<unsigned>(sResponse.result())
                             );
-                        sRequest.url = sLocation.to_string();
-                        const auto sParsed = Parser::url(sLocation.to_string());
+                        sRequest.url = sLocation;
+                        const auto sParsed = Parser::url(sLocation);
                         sPeer = sParsed.host + ":" + sParsed.port;
                         Lock sLock(m_Mutex);
                         m_{{ name }}_redirect = sPeer;

@@ -64,7 +64,7 @@
         [[maybe_unused]] const auto sContentType = aResponse["Content-Type"];
         {%- if binary > 0 %}
             if (!sContentType.empty() and sContentType != "{{ content_type }}") {
-                throw std::runtime_error("unexpected content-type: `" + sContentType.to_string() + "`");
+                throw std::runtime_error("unexpected content-type: `" + std::string(sContentType) + "`");
             }
             body = aResponse.body();
         {%- elif json > 0 %}
@@ -75,12 +75,12 @@
                 const auto sJson = Parser::Json::parse(aResponse.body());
                 Parser::Json::from_value(sJson, body);
             } else {
-                throw std::runtime_error("unexpected content-type: `" + sContentType.to_string() + "`");
+                throw std::runtime_error("unexpected content-type: `" + std::string(sContentType) + "`");
             }
         {%- endif %}
 
         {%- for k,v in headers | dictsort %}
-            if (auto sValue = aResponse["{{ k }}"].to_string(); !sValue.empty())
+            if (auto sValue = aResponse["{{ k }}"]; !sValue.empty())
                 swagger::parse(sValue, {{ _name(k) }});
         {%- endfor %}
     }

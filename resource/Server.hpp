@@ -17,7 +17,7 @@ namespace resource {
             try {
                 auto sUrl = aRequest.target();
                 sUrl.remove_prefix(m_Path.size());
-                std::string sName = sUrl.to_string();
+                std::string sName(sUrl);
                 if (sName.empty())
                     sName = "index.html";
                 auto sData = m_Tar.get(sName);
@@ -33,7 +33,8 @@ namespace resource {
         Server(const std::string& aPath, const std::string_view aTarData)
         : m_Path(aPath)
         , m_Tar(aTarData)
-        {}
+        {
+        }
 
         void configure(asio_http::RouterPtr aRouter)
         {

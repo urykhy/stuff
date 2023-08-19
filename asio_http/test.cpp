@@ -132,9 +132,7 @@ BOOST_AUTO_TEST_CASE(alive)
                                           .url     = "http://127.0.0.1:2081/hello",
                                           .headers = {{asio_http::Headers::Host, "127.0.0.1"}}};
         BOOST_TEST_MESSAGE("async started");
-        auto sCompletion = sManager->async_y(std::move(sRequest), yield);
-        BOOST_TEST_MESSAGE("wait ...");
-        auto sResponse = sCompletion->result.get()->get_future().get();
+        auto sResponse = sManager->async_y(std::move(sRequest), yield).get();
         BOOST_TEST_MESSAGE("got result");
         BOOST_CHECK_EQUAL(sResponse.result(), http::status::ok);
     });

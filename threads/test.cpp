@@ -206,7 +206,7 @@ BOOST_AUTO_TEST_CASE(fair_test2)
 
     for (int j = 1; j < 20; j++)
         for (int i = 1; i < 4; i++)
-            sExecutor.insert(Task{.task = std::to_string(j), .user = "user-" + std::to_string(i), .now=j*i, .duration = 0.2});
+            sExecutor.insert(Task{.task = std::to_string(j), .user = "user-" + std::to_string(i), .now = j * i, .duration = 0.2});
 
     sExecutor.start(sGroup);
     sExecutor.wait(5);
@@ -225,29 +225,21 @@ BOOST_AUTO_TEST_SUITE_END() // Threads
 
 BOOST_AUTO_TEST_SUITE(Asio)
 
-// via: https://stackoverflow.com/questions/26694423/how-resume-the-execution-of-a-stackful-coroutine-in-the-context-of-its-strand/26728121#26728121
-template <typename Signature, typename CompletionToken>
-auto async_add_one(CompletionToken token, int value)
+template <typename Token>
+auto async_add_one(Token token, int value)
 {
-    // Initialize the async completion handler and result
-    // Careful to make sure token is a copy, as completion's handler takes a reference
-    using completion_type = boost::asio::async_completion<CompletionToken, Signature>;
-    completion_type completion{token};
-
-    BOOST_TEST_MESSAGE("spawning thread");
-    std::thread([handler = completion.completion_handler, value]() {
-        std::this_thread::sleep_for(std::chrono::seconds(1));
-
-        BOOST_TEST_MESSAGE("resume coroutine");
-        // separate using statement is important
-        // as asio_handler_invoke is overloaded based on handler's type
-        using boost::asio::asio_handler_invoke;
-        asio_handler_invoke(std::bind(handler, value + 1), &handler);
-    }).detach();
-
-    // Yield the coroutine.
-    BOOST_TEST_MESSAGE("yield coroutine");
-    return completion.result.get();
+    auto init = [value](auto handler) {
+        BOOST_TEST_MESSAGE("coroutine: spawn thread");
+        std::thread([handler = std::move(handler), value]() mutable {
+            boost::system::error_code ec;
+            BOOST_TEST_MESSAGE("thread: sleep");
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+            BOOST_TEST_MESSAGE("thread: resume coroutine");
+            handler(ec, value + 1);
+        }).detach();
+    };
+    BOOST_TEST_MESSAGE("coroutine: wait for result");
+    return boost::asio::async_initiate<Token, void(boost::system::error_code, int)>(init, token);
 }
 BOOST_AUTO_TEST_CASE(callback)
 {
@@ -257,9 +249,9 @@ BOOST_AUTO_TEST_CASE(callback)
 
     q.spawn([](boost::asio::yield_context yield) {
         BOOST_TEST_MESSAGE("started");
-        const auto result1 = async_add_one<void(int)>(yield, 0);
+        const auto result1 = async_add_one(yield, 0);
         BOOST_CHECK_EQUAL(result1, 1);
-        const auto result2 = async_add_one<void(int)>(yield, 41);
+        const auto result2 = async_add_one(yield, 41);
         BOOST_CHECK_EQUAL(result2, 42);
         BOOST_TEST_MESSAGE("finished");
     });

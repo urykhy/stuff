@@ -119,7 +119,7 @@ namespace asio_http::v2 {
 
             void assign_lower(boost::beast::string_view sName, boost::beast::string_view sValue)
             {
-                m_Shadow.push_back(sName.to_string());
+                m_Shadow.push_back(std::string(sName));
                 String::tolower(m_Shadow.back());
                 assign_ref(m_Shadow.back(), sValue);
             }

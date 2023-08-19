@@ -74,10 +74,8 @@ namespace asio_http {
 
     struct Client
     {
-        using CT = boost::asio::async_completion<asio_http::asio::yield_context, void(Promise)>;
-
-        virtual std::future<Response> async(ClientRequest&& aRequest)                             = 0;
-        virtual std::shared_ptr<CT>   async_y(ClientRequest&& aRequest, net::yield_context yield) = 0;
+        virtual std::future<Response> async(ClientRequest&& aRequest)                              = 0;
+        virtual std::future<Response> async_y(ClientRequest&& aRequest, asio::yield_context yield) = 0;
         virtual ~Client(){};
     };
     using ClientPtr = std::shared_ptr<Client>;

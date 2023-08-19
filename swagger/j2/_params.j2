@@ -48,7 +48,7 @@
         });
 
         {%- for param in params if param['in'] == 'header' %}
-            if (auto sValue = aRequest["{{ param.name }}"].to_string(); !sValue.empty())
+            if (auto sValue = aRequest["{{ param.name }}"]; !sValue.empty())
             {
                 swagger::parse(sValue, {{ _name(param) }});
                 {{ _limit(param) }}
@@ -150,7 +150,7 @@
 
         {%- for param in params if param['in'] == 'header' %}
             if (swagger::is_specified({{ _name(param) }}) )
-                sRequest.headers[swagger::header("{{ param.name }}").to_string()] = swagger::format({{ _name(param) }});
+                sRequest.headers[swagger::header("{{ param.name }}")] = swagger::format({{ _name(param) }});
         {%- endfor %}
 
         {%- if binary > 0 %}
