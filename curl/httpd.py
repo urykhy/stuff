@@ -17,6 +17,9 @@ def validate_password(realm, username, password):
     return False
 
 conf = {
+   'global' : {
+       'server.socket_port': 8088,
+    },
    '/auth': {
        'tools.auth_basic.on': True,
        'tools.auth_basic.realm': 'localhost',
