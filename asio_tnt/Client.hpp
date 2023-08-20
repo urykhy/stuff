@@ -20,7 +20,7 @@ namespace asio_tnt {
         const uint32_t sCount = MsgPack::read_array_size(sStream);
         T              sTmp;
         for (uint32_t i = 0; i < sCount; i++) {
-            sTmp.parse(sStream);
+            MsgPack::parse(sStream, sTmp);
             aHandler(std::move(sTmp));
             sTmp = {};
         }
@@ -149,8 +149,8 @@ namespace asio_tnt {
             imemstream sStream(aReply);
 
             try {
-                sHeader.parse(sStream);
-                sReply.parse(sStream);
+                MsgPack::parse(sStream, sHeader);
+                MsgPack::parse(sStream, sReply);
             } catch (const std::exception& e) {
                 // severe error, drop connection
                 on_error(boost::system::errc::make_error_code(boost::system::errc::protocol_error));
@@ -161,6 +161,7 @@ namespace asio_tnt {
             if (sReply.ok) {
                 sPromise.set_value(sStream.rest());
             } else {
+                // BOOST_TEST_MESSAGE("application error: " << sReply.error);
                 // normal error from server: just a bad client call. connection can be used
                 sPromise.set_exception(std::make_exception_ptr(TntError(sReply.error)));
             }
@@ -233,7 +234,8 @@ namespace asio_tnt {
         , m_Timer(aLoop)
         , m_Socket(aLoop)
         , m_Addr(aAddr)
-        {}
+        {
+        }
 
         void start()
         {

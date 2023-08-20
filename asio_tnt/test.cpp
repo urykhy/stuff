@@ -4,26 +4,26 @@
 #include <chrono>
 using namespace std::chrono_literals;
 
+#include "Cache.hpp"
+#include "Client.hpp"
+
 #include <threads/Asio.hpp>
 #include <threads/Group.hpp>
 #include <threads/WaitGroup.hpp>
 
-#include "Cache.hpp"
-#include "Client.hpp"
-
 struct DataEntry
 {
-    int         pk;
+    uint32_t    pk = 0;
     std::string value;
 
-    void parse(MsgPack::imemstream& in)
+    void from_msgpack(MsgPack::imemstream& in)
     {
         using namespace MsgPack;
         uint32_t array_len = read_array_size(in);
         if (array_len != 2)
             throw std::invalid_argument("msgpack array size is not 2");
-        read_uint(in, pk);
-        read_string(in, value);
+        MsgPack::parse(in, pk);
+        MsgPack::parse(in, value);
     }
     void serialize(MsgPack::omemstream& out) const
     {

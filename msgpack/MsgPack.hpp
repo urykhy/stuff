@@ -1,5 +1,7 @@
 #pragma once
 #include <list>
+#include <map>
+#include <vector>
 
 #include <container/Stream.hpp>
 
@@ -12,7 +14,8 @@ namespace MsgPack {
     {
         BadFormat()
         : std::runtime_error("Bad msgpack format")
-        {}
+        {
+        }
     };
 
     enum
@@ -231,4 +234,42 @@ namespace MsgPack {
         for (const auto& x : aList)
             write(aStream, x);
     }
+
+    // HELPERS
+
+    template <class T>
+    requires std::is_member_function_pointer_v<decltype(&T::from_msgpack)>
+    void parse(imemstream& aStream, T& t)
+    {
+        t.from_msgpack(aStream);
+    }
+
+    inline void parse(imemstream& aStream, std::string& aValue) { read_string(aStream, aValue); }
+    inline void parse(imemstream& aStream, uint64_t& aValue) { read_uint(aStream, aValue); }
+    inline void parse(imemstream& aStream, uint32_t& aValue) { read_uint(aStream, aValue); }
+    inline void parse(imemstream& aStream, time_t& aValue) { read_uint(aStream, aValue); }
+
+    template <class T>
+    void parse(imemstream& aStream, std::vector<T>& aValue)
+    {
+        const int size = read_array_size(aStream);
+        aValue.resize(size);
+        for (int i = 0; i < size; i++) {
+            parse(aStream, aValue[i]);
+        }
+    }
+
+    template <class K, class V>
+    void parse(imemstream& aStream, std::map<K, V>& aValue)
+    {
+        const int size = read_map_size(aStream);
+        for (int i = 0; i < size; i++) {
+            K key{};
+            parse(aStream, key);
+            V value;
+            parse(aStream, value);
+            aValue.emplace(std::move(key), std::move(value));
+        }
+    }
+
 } // namespace MsgPack

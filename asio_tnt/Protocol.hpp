@@ -1,13 +1,35 @@
 
+#include "Error.hpp"
+
 #include <mpl/Mpl.hpp>
 #include <msgpack/MsgPack.hpp>
-
-#include "Error.hpp"
 
 namespace asio_tnt {
     using binary     = MsgPack::binary;
     using omemstream = MsgPack::omemstream;
     using imemstream = MsgPack::imemstream;
+
+    // https://www.tarantool.io/en/doc/latest/dev_guide/internals/iproto/keys/
+    enum PROTO
+    {
+        IPROTO_REQUEST_TYPE   = 0x00,
+        IPROTO_SYNC           = 0x01,
+        IPROTO_SCHEMA_VERSION = 0x05,
+        IPROTO_ERROR          = 0x52,
+        IPROTO_ERROR_24       = 0x31,
+        IPROTO_DATA           = 0x30,
+    };
+
+    enum ERROR
+    {
+        MP_ERROR_TYPE    = 0x00,
+        MP_ERROR_FILE    = 0x01,
+        MP_ERROR_LINE    = 0x02,
+        MP_ERROR_MESSAGE = 0x03,
+        MP_ERROR_ERRNO   = 0x04,
+        MP_ERROR_ERRCODE = 0x05,
+        // MP_ERROR_FIELDS not implemented
+    };
 
     inline void assertProto(bool aFlag)
     {
@@ -21,21 +43,58 @@ namespace asio_tnt {
         uint64_t sync      = 0;
         uint64_t schema_id = 0;
 
-        void parse(imemstream& aStream)
+        void from_msgpack(MsgPack::imemstream& aStream)
         {
             using namespace MsgPack;
-            int tmp = 0;
-            tmp     = read_map_size(aStream);
-            assertProto(tmp == 3);
-            read_uint(aStream, tmp);
-            assertProto(tmp == 0);
-            read_uint(aStream, code);
-            read_uint(aStream, tmp);
-            assertProto(tmp == 1);
-            read_uint(aStream, sync);
-            read_uint(aStream, tmp);
-            assertProto(tmp == 5);
-            read_uint(aStream, schema_id);
+            const int size = read_map_size(aStream);
+            for (int i = 0; i < size; i++) {
+                int tmp = 0;
+                read_uint(aStream, tmp);
+                switch (tmp) {
+                case IPROTO_REQUEST_TYPE: parse(aStream, code); break;
+                case IPROTO_SYNC: parse(aStream, sync); break;
+                case IPROTO_SCHEMA_VERSION: parse(aStream, schema_id); break;
+                default: assertProto(false);
+                }
+            };
+        }
+    };
+
+    struct Error
+    {
+        struct detail
+        {
+            std::string type;
+            std::string file;
+            uint32_t    line = 0;
+            std::string message;
+            uint32_t    err_no   = 0;
+            uint32_t    err_code = 0;
+
+            void from_msgpack(MsgPack::imemstream& aStream)
+            {
+                using namespace MsgPack;
+                const int size = read_map_size(aStream);
+                for (int k = 0; k < size; k++) {
+                    int tmp = 0;
+                    read_uint(aStream, tmp);
+                    switch (tmp) {
+                    case MP_ERROR_TYPE: parse(aStream, type); break;
+                    case MP_ERROR_FILE: parse(aStream, file); break;
+                    case MP_ERROR_LINE: parse(aStream, line); break;
+                    case MP_ERROR_MESSAGE: parse(aStream, message); break;
+                    case MP_ERROR_ERRNO: parse(aStream, err_no); break;
+                    case MP_ERROR_ERRCODE: parse(aStream, err_code); break;
+                    default: assertProto(false);
+                    }
+                }
+            }
+        };
+        std::map<uint32_t, std::vector<detail>> errors;
+
+        void from_msgpack(imemstream& aStream)
+        {
+            MsgPack::parse(aStream, errors);
         }
     };
 
@@ -44,22 +103,28 @@ namespace asio_tnt {
         bool        ok = false;
         std::string error;
 
-        void parse(imemstream& aStream)
+        void from_msgpack(imemstream& aStream)
         {
             using namespace MsgPack;
-            int tmp = read_map_size(aStream);
-            if (0 == tmp) {
+            const int size = read_map_size(aStream);
+            if (0 == size) {
                 ok = true;
                 return;
             }
-            assertProto(tmp == 1);
-            read_uint(aStream, tmp);
-            if (tmp == 0x31)
-                read_string(aStream, error);
-            else if (tmp == 0x30)
-                ok = true;
-            else
-                assertProto(false);
+            for (int i = 0; i < size; i++) {
+                int tmp = 0;
+                read_uint(aStream, tmp);
+                switch (tmp) {
+                case IPROTO_ERROR: {
+                    Error e;
+                    MsgPack::parse(aStream, e);
+                    break;
+                }
+                case IPROTO_ERROR_24: parse(aStream, error); break;
+                case IPROTO_DATA: ok = true; break; // leave body in stream
+                default: assertProto(false);
+                }
+            }
         }
     };
 
@@ -196,7 +261,8 @@ namespace asio_tnt {
     public:
         Protocol(unsigned aSpace)
         : m_Space(aSpace)
-        {}
+        {
+        }
 
         struct Request
         {

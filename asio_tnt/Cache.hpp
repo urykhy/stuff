@@ -11,15 +11,15 @@ namespace asio_tnt::cache {
         time_t      timestamp = 0;
         std::string value;
 
-        void parse(MsgPack::imemstream& in)
+        void from_msgpack(MsgPack::imemstream& in)
         {
             using namespace MsgPack;
             uint32_t array_len = read_array_size(in);
             if (array_len != 3)
                 throw std::invalid_argument("msgpack array size is not 3");
-            read_string(in, key);
-            read_uint(in, timestamp);
-            read_string(in, value);
+            MsgPack::parse(in, key);
+            MsgPack::parse(in, timestamp);
+            MsgPack::parse(in, value);
         }
         void serialize(MsgPack::omemstream& out) const
         {
@@ -98,9 +98,9 @@ namespace asio_tnt::cache {
             {
                 uint32_t affected = 0;
 
-                void parse(MsgPack::imemstream& in)
+                void from_msgpack(MsgPack::imemstream& in)
                 {
-                    MsgPack::read_uint(in, affected);
+                    MsgPack::parse(in, affected);
                 }
             };
             auto sRequest = m_Client->formatCall("expire_cache", aMinimal, aLimit);
