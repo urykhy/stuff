@@ -207,11 +207,16 @@ private:
         {% endif %}
 
         {% if x_jaeger %}
-            auto sTrace = Jaeger::Helper::create(aRequest["traceparent"], "{{ name }}");
-            Util::Raii sSendTrace([&sTrace, this]()
+            auto sTraceSpans = Jaeger::Helper::create(aRequest["traceparent"]);
+            auto sTrace = Jaeger::Helper::start(sTraceSpans, "swagger");
+            Jaeger::Helper::set_tag(sTrace, "swagger.api", "{{ doc['info']['title'] }}");
+            Jaeger::Helper::set_tag(sTrace, "swagger.version", "{{ doc['info']['version'] }}");
+            Jaeger::Helper::set_tag(sTrace, "swagger.method", "{{ name }}");
+            Util::Raii sSendTrace([&sTraceSpans, &sTrace, this]()
             {
-                if (sTrace and m_JaegerHandler)
-                    m_JaegerHandler(*sTrace);
+                Jaeger::Helper::stop(sTrace);
+                if (sTraceSpans and m_JaegerHandler)
+                    m_JaegerHandler(*sTraceSpans);
             });
 
             auto sTraceParsing = Jaeger::Helper::start(sTrace, "parsing");

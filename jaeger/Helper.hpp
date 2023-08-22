@@ -1,15 +1,17 @@
 #pragma once
 
+#include <optional>
+
 #include "Jaeger.hpp"
 
 #include <unsorted/Log4cxx.hpp>
 
 namespace Jaeger::Helper {
 
-    inline auto create(const std::string& aParent, std::string_view aService)
+    inline auto create(const std::string& aParent)
     {
         if (!aParent.empty())
-            return std::make_unique<Trace>(Params::parse(aParent, aService));
+            return std::make_unique<Trace>(Params::parse(aParent));
         return std::unique_ptr<Trace>(nullptr);
     }
 
@@ -39,6 +41,13 @@ namespace Jaeger::Helper {
     {
         if (aSpan) {
             aSpan->set_error(aMsg);
+        }
+    }
+
+    inline void set_tag(std::optional<Span>& aSpan, const char* aKey, const char* aValue)
+    {
+        if (aSpan) {
+            aSpan->set_tag(Tag{aKey, aValue});
         }
     }
 } // namespace Jaeger::Helper

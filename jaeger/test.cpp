@@ -28,7 +28,7 @@ static void waitTrace(const std::string& aTraceID)
 BOOST_AUTO_TEST_SUITE(Jaeger)
 BOOST_AUTO_TEST_CASE(params)
 {
-    const auto sParams = Jaeger::Params::uuid("test");
+    const auto sParams = Jaeger::Params::uuid();
     BOOST_TEST_MESSAGE("parent: " << sParams.traceparent());
 
     const auto sParsed = Jaeger::Params::parse(sParams.traceparent());
@@ -36,15 +36,14 @@ BOOST_AUTO_TEST_CASE(params)
     BOOST_CHECK_EQUAL(sParsed.traceIdHigh, sParams.traceIdHigh);
     BOOST_CHECK_EQUAL(sParsed.traceIdLow, sParams.traceIdLow);
     BOOST_CHECK_EQUAL(sParsed.parentId, sParams.parentId);
-    BOOST_CHECK_EQUAL(sParsed.service, "");
 }
 BOOST_AUTO_TEST_CASE(simple)
 {
     using Tag = Jaeger::Tag;
-    Jaeger::Client sJaeger;
+    Jaeger::Queue sJaeger("test.cpp", "0.1/test");
+    sJaeger.start();
 
-    Jaeger::Trace sTrace(Jaeger::Params::uuid("test.cpp"));
-    sTrace.set_process_tag(Tag{"service.version", "0.1/test"});
+    Jaeger::Trace sTrace(Jaeger::Params::uuid());
 
     {
         Jaeger::Span sM(sTrace, "initialize");
@@ -88,22 +87,22 @@ BOOST_AUTO_TEST_CASE(simple)
 BOOST_AUTO_TEST_CASE(parts)
 {
     using Tag = Jaeger::Tag;
-    Jaeger::Client sJaeger;
+    Jaeger::Queue sJaeger("test.cpp", "0.1/test");
+    sJaeger.start();
 
-    Jaeger::Trace sTrace(Jaeger::Params::uuid("test.cpp"));
-    sTrace.set_process_tag(Tag{"service.version", "0.1/test"});
+    Jaeger::Trace sTrace(Jaeger::Params::uuid());
 
     Jaeger::Span sRoot(sTrace, "root");
     {
         Jaeger::Span sCall = sRoot.child("call");
         std::this_thread::sleep_for(30ms);
 
-        // 50 is starting id for new spans
         auto sState = sCall.extract();
         BOOST_TEST_MESSAGE("parent: " << sState.traceparent());
 
         // remote side
-        sState.service = "s3";
+        Jaeger::Queue sRemoteJaeger("s3", "0.2/test");
+        sRemoteJaeger.start();
         Jaeger::Trace sTrace2(sState);
         {
             Jaeger::Span sPerform(sTrace2, "perform");
@@ -115,7 +114,7 @@ BOOST_AUTO_TEST_CASE(parts)
             }
             std::this_thread::sleep_for(2ms);
         }
-        sJaeger.send(sTrace2);
+        sRemoteJaeger.send(sTrace2);
         std::this_thread::sleep_for(10ms);
     }
     sRoot.close();

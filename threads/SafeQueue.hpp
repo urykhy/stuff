@@ -99,9 +99,7 @@ namespace Threads {
             return sResult;
         }
 
-        bool wait(
-            Node&                            aItem,
-            std::function<bool(const Node&)> aTest = [](const Node&) -> bool { return true; })
+        bool wait(Node& aItem, std::function<bool(const Node&)> aTest = {})
         {
             Lock lk(m_Mutex);
 
@@ -111,7 +109,7 @@ namespace Threads {
             if (m_List.empty())
                 return false;
 
-            if (!aTest(m_List.top())) { // have some data, but we can't consume it yet. so pause a bit
+            if (aTest and !aTest(m_List.top())) { // have some data, but we can't consume it yet. so pause a bit
                 wait_for(lk);
                 return false;
             }
@@ -141,7 +139,8 @@ namespace Threads {
             float  delay  = 1;     // sleep before next retry in seconds
             time_t linger = 0;     // delay exit if have pending tasks
 
-            std::function<bool(const T&)> check = [](const T&) -> bool { return true; }; // condition to pick task from queue
+            std::function<bool(const T&)> check = {}; // condition to pick task from queue
+            std::function<void()>         idle  = {}; // called if no tasks to process
         };
 
     private:
@@ -193,6 +192,9 @@ namespace Threads {
                         if (m_Queue.wait(sItem, m_Params.check)) {
                             handle(sItem);
                             m_Done++;
+                        } else {
+                            if (m_Params.idle)
+                                m_Params.idle();
                         }
                     }
                 },

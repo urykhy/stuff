@@ -58,3 +58,25 @@
     ...
     fun:_ZN4cctz9time_zone4Impl3UTCEv
 }
+{
+   <protobuf/DescriptorPool>
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   fun:_ZN6google8protobuf14DescriptorPool24InternalAddGeneratedFileEPKvi
+}
+{
+   <protobuf/OnShutdownRun>
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   fun:_ZN6google8protobuf8internal13OnShutdownRunEPFvPKvES3_
+}
+{
+   <protobuf/InternalRegisterGeneratedFile>
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   fun:_ZN6google8protobuf14MessageFactory29InternalRegisterGeneratedFileEPKNS0_8internal15DescriptorTableE
+}
+

@@ -487,7 +487,7 @@ BOOST_FIXTURE_TEST_CASE(queue, WithServer)
 }
 BOOST_FIXTURE_TEST_CASE(jaeger, WithServer)
 {
-    Jaeger::Queue sQueue;
+    Jaeger::Queue sQueue("swagger.cpp", "0.1");
     sQueue.start();
 
     Threads::QueueExecutor sTaskQueue;
@@ -501,7 +501,7 @@ BOOST_FIXTURE_TEST_CASE(jaeger, WithServer)
 
     api::tutorial_1_0::client sClient(m_HttpClient, "127.0.0.1:3000");
 
-    Jaeger::Trace sTrace(Jaeger::Params::uuid("swagger.cpp"));
+    Jaeger::Trace sTrace(Jaeger::Params::uuid());
     {
         Jaeger::Span sTraceSpan(sTrace, "make test");
 

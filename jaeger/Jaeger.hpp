@@ -17,10 +17,9 @@ namespace Jaeger {
 
     struct Params
     {
-        int64_t     traceIdHigh = 0;
-        int64_t     traceIdLow  = 0;
-        int64_t     parentId    = 0;
-        std::string service{};
+        int64_t traceIdHigh = 0;
+        int64_t traceIdLow  = 0;
+        int64_t parentId    = 0;
 
         std::string traceparent() const // for HTTP headers
         {
@@ -69,18 +68,10 @@ namespace Jaeger {
             return sNew;
         }
 
-        static Params parse(std::string_view aParent, std::string_view aService)
-        {
-            auto sParams    = parse(aParent);
-            sParams.service = aService;
-            return sParams;
-        }
-
-        static Params uuid(const std::string& aService)
+        static Params uuid()
         {
             Params sNew;
             std::tie(sNew.traceIdHigh, sNew.traceIdLow) = Util::Uuid64();
-            sNew.service                                = aService;
             return sNew;
         }
     };
@@ -107,6 +98,7 @@ namespace Jaeger {
     };
 
     class Span;
+
     struct Trace : boost::noncopyable
     {
         friend class Span;
@@ -114,24 +106,12 @@ namespace Jaeger {
     private:
         const Params m_Params;
 
-        opentelemetry::proto::trace::v1::TracesData     m_Traces;
-        opentelemetry::proto::trace::v1::ResourceSpans* m_Spans = nullptr;
-        opentelemetry::proto::trace::v1::ScopeSpans*    m_Scope = nullptr;
+        opentelemetry::proto::trace::v1::ScopeSpans m_Scope;
 
     public:
         Trace(const Params& aParams)
         : m_Params(aParams)
         {
-            m_Spans = m_Traces.add_resource_spans();
-            m_Scope = m_Spans->add_scope_spans();
-
-            Tag sTag{"service.name", m_Params.service};
-            sTag.convert(m_Spans->mutable_resource()->add_attributes());
-        }
-
-        void set_process_tag(const Tag& aTag)
-        {
-            aTag.convert(m_Spans->mutable_resource()->add_attributes());
         }
 
         std::string trace_id() const
@@ -139,9 +119,9 @@ namespace Jaeger {
             return Format::to_hex(m_Params.binary_trace_id());
         }
 
-        std::string to_string() const
+        auto& spans()
         {
-            return m_Traces.SerializeAsString();
+            return m_Scope;
         }
     };
 
@@ -166,7 +146,7 @@ namespace Jaeger {
         : m_XCount(std::uncaught_exceptions())
         , m_Trace(aTrace)
         {
-            m_Span = m_Trace.m_Scope->add_spans();
+            m_Span = m_Trace.m_Scope.add_spans();
             m_Span->set_name(aName);
             m_Span->set_trace_id(m_Trace.m_Params.binary_trace_id());
             m_Span->set_span_id(to_binary(m_SpanId));
