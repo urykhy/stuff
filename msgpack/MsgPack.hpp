@@ -6,7 +6,6 @@
 #include <container/Stream.hpp>
 
 namespace MsgPack {
-    using binary     = Container::binary;
     using omemstream = Container::omemstream;
     using imemstream = Container::imemstream;
 

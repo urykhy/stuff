@@ -17,19 +17,14 @@
 template <class T>
 std::string simpleFilter(const std::string& aStr)
 {
+    T           sFilter;
+    size_t      sInputPos = 0;
     std::string sResult;
-    std::string sBuffer(2, ' '); // dst buffer contain 2 bytes
+    std::string sBuffer(sFilter.estimate(2), ' '); // dst buffer contain 2 bytes
 
-    T      sFilter;
-    size_t sInputPos = 0;
     while (sInputPos < aStr.size()) {
         auto sInputSize = std::min(aStr.size() - sInputPos, 2ul); // input upto 2 bytes
-
-        auto sDstSize = sFilter.estimate(sInputSize);
-        if (sDstSize > 0)
-            sBuffer.resize(sDstSize);
-
-        auto sInfo = sFilter.filter(aStr.data() + sInputPos, sInputSize, &sBuffer[0], sBuffer.size());
+        auto sInfo      = sFilter.filter(aStr.data() + sInputPos, sInputSize, &sBuffer[0], sBuffer.size());
         sInputPos += sInfo.usedSrc;
         sResult.append(sBuffer.substr(0, sInfo.usedDst));
         if (sInfo.usedDst == 0 and sInfo.usedSrc == 0)
@@ -37,10 +32,6 @@ std::string simpleFilter(const std::string& aStr)
     }
 
     while (true) {
-        auto sDstSize = sFilter.estimate(0);
-        if (sDstSize > 0)
-            sBuffer.resize(sDstSize);
-
         auto sInfo = sFilter.finish(&sBuffer[0], sBuffer.size());
         sResult.append(sBuffer.substr(0, sInfo.usedDst));
         if (sInfo.done)
@@ -126,7 +117,7 @@ BOOST_AUTO_TEST_CASE(Lz4BufferSize)
 }
 BOOST_AUTO_TEST_CASE(ZstdThreads)
 {
-    const std::string sData = File::to_string("/usr/bin/blender");
+    const std::string sData = File::to_string("/usr/bin/docker");
     BOOST_TEST_MESSAGE("source file size: " << sData.size());
 
     Zstd::C      sCompressor1(3);
@@ -145,14 +136,14 @@ BOOST_AUTO_TEST_CASE(ZstdThreads)
 }
 BOOST_AUTO_TEST_CASE(ZstdLong)
 {
-    const std::string sData = File::to_string("/usr/bin/blender");
+    const std::string sData = File::to_string("/usr/bin/docker");
     BOOST_TEST_MESSAGE("source file size: " << sData.size());
 
-    Zstd::C      sCompressor1(3);
-    const auto   sC1    = Archive::filter(sData, &sCompressor1);
+    Zstd::C    sCompressor1(3);
+    const auto sC1 = Archive::filter(sData, &sCompressor1);
 
-    Zstd::C sCompressor2(3, Zstd::C::Params{.long_matching = true});
-    const auto   sC2    = Archive::filter(sData, &sCompressor2);
+    Zstd::C    sCompressor2(3, Zstd::C::Params{.long_matching = true});
+    const auto sC2 = Archive::filter(sData, &sCompressor2);
 
     BOOST_TEST_MESSAGE("normal size: " << sC1.size());
     BOOST_TEST_MESSAGE("long   size: " << sC2.size());

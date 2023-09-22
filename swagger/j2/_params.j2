@@ -163,6 +163,10 @@
             sRequest.body = sOut.str();
         {%- endif %}
 
+        {%- if x_compress > 0 %}
+            sRequest.headers[asio_http::Headers::AcceptEncoding] = "lz4";
+        {%- endif %}
+
         return sRequest;
     }
 {% endif %}

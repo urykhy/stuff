@@ -4,6 +4,9 @@
 
 #include <boost/beast/http/field.hpp>
 
+#include <archive/LZ4.hpp>
+#include <archive/Util.hpp>
+#include <asio_http/API.hpp>
 #include <format/Json.hpp>
 #include <format/List.hpp>
 #include <format/Url.hpp>
@@ -13,11 +16,37 @@
 
 namespace swagger {
 
+    // parse and compress lz4
+
+    inline void pack(const asio_http::Request& aRequest, asio_http::Response& aResponse, std::string&& aData, const size_t aBorder)
+    {
+        if (aBorder > 0 and aData.size() > aBorder and aRequest[asio_http::http::field::accept_encoding] == "lz4") {
+            Archive::WriteLZ4 sFilter;
+            aResponse.body() = Archive::filter(aData, &sFilter);
+            aResponse.set(asio_http::http::field::content_encoding, "lz4");
+        } else {
+            aResponse.body() = std::move(aData);
+        }
+    }
+
+    inline std::string unpack(const asio_http::Response& aResponse)
+    {
+        if (aResponse[asio_http::http::field::content_encoding] == "lz4") {
+            Archive::ReadLZ4 sFilter;
+            return Archive::filter(aResponse.body(), &sFilter);
+        } else {
+            return aResponse.body();
+        }
+    }
+
     // format
 
     template <class T>
     requires std::is_member_function_pointer_v<decltype(&T::to_json)>
-    std::string        format(const T& t) { return Format::Json::to_string(t.to_json()); }
+    std::string format(const T& t)
+    {
+        return Format::Json::to_string(t.to_json());
+    }
     inline std::string format(const bool v) { return (v ? "true" : "false"); }
     inline std::string format(const std::string& v) { return v; }
     inline std::string format(const int64_t v) { return std::to_string(v); }
@@ -42,7 +71,10 @@ namespace swagger {
 
     template <class T>
     requires std::is_member_function_pointer_v<decltype(&T::from_json)>
-    void        parse(const std::string& s, T& t) { t.from_json(Parser::Json::parse(s)); }
+    void parse(const std::string& s, T& t)
+    {
+        t.from_json(Parser::Json::parse(s));
+    }
     inline void parse(const std::string& s, bool& v) { v = (s == "true" or s == "yes" or s == "1"); }
     inline void parse(const std::string& s, std::string& v) { v = s; }
     inline void parse(const std::string& s, int64_t& v) { v = Parser::Atoi<int64_t>(s); }

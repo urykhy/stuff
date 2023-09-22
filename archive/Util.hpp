@@ -2,19 +2,20 @@
 
 #include <string>
 
-#include <exception/Error.hpp>
-
 #include "Interface.hpp"
 
+#include <exception/Error.hpp>
+
 namespace Archive {
-    std::string filter(const std::string& aStr, IFilter* aFilter)
+    inline std::string filter(const std::string& aStr, IFilter* aFilter)
     {
-        std::string sResult;
-        std::string sBuffer(64 * 1024, ' '); // tmp buffer
+        const size_t MAX_INPUT_CHUNK = 64 * 1024;
+        std::string  sResult;
+        std::string  sBuffer(aFilter->estimate(MAX_INPUT_CHUNK), ' '); // tmp buffer
 
         size_t sInputPos = 0;
         while (sInputPos < aStr.size()) {
-            auto sInputSize = aStr.size() - sInputPos;
+            auto sInputSize = std::min(aStr.size() - sInputPos, MAX_INPUT_CHUNK);
             auto sInfo      = aFilter->filter(aStr.data() + sInputPos, sInputSize, &sBuffer[0], sBuffer.size());
             sInputPos += sInfo.usedSrc;
             sResult.append(sBuffer.substr(0, sInfo.usedDst));

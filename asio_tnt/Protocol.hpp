@@ -5,7 +5,6 @@
 #include <msgpack/MsgPack.hpp>
 
 namespace asio_tnt {
-    using binary     = MsgPack::binary;
     using omemstream = MsgPack::omemstream;
     using imemstream = MsgPack::imemstream;
 

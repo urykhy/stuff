@@ -9,10 +9,9 @@
 #include <file/Interface.hpp>
 
 namespace Container {
-    using binary = std::string;
-
     class imemstream : public File::IMemReader
     {
+        const std::string      m_Buffer;
         const std::string_view m_Data;
         size_t                 m_Offset = 0;
 
@@ -36,8 +35,9 @@ namespace Container {
         {
         }
 
-        imemstream(const binary& aBuffer)
-        : m_Data((const char*)&aBuffer[0], aBuffer.size())
+        imemstream(std::string&& aBuffer)
+        : m_Buffer(std::move(aBuffer))
+        , m_Data((const char*)&m_Buffer[0], m_Buffer.size())
         {
         }
 

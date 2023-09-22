@@ -5,6 +5,7 @@
 
 #include "MetricsDiscovery.hpp"
 #include "common.v1.hpp"
+#include "compress.v1.hpp"
 #include "discovery.v1.hpp"
 #include "jsonParam.v1.hpp"
 #include "keyValue.v1.hpp"
@@ -316,6 +317,18 @@ struct RedirectServerX : api::redirect_1_0::server
     }
 };
 
+struct Compress : api::compress_1_0::server
+{
+    get_test1_octet_response_v
+    get_test1_octet_i(asio_http::asio::io_service&      aService,
+                      const get_test1_octet_parameters& aRequest,
+                      asio_http::asio::yield_context    yield) override
+    {
+        std::string sTmp(aRequest.size.value(), 'a');
+        return get_test1_octet_response_200{.body = sTmp};
+    }
+};
+
 struct WithServer
 {
     Threads::Asio                      m_Asio;
@@ -620,6 +633,15 @@ BOOST_FIXTURE_TEST_CASE(breaker, WithServer)
     const auto sActual = Prometheus::Manager::instance().toPrometheus();
     for (auto x : sActual)
         BOOST_TEST_MESSAGE(x);
+}
+BOOST_FIXTURE_TEST_CASE(compress, WithServer)
+{
+    Compress sCommon;
+    sCommon.configure(m_Router);
+    api::compress_1_0::client sClient(m_HttpClient, "127.0.0.1:3000");
+
+    auto sResponse = sClient.get_test1_octet({.size = 101234});
+    BOOST_CHECK_EQUAL(std::string(101234, 'a'), sResponse.body);
 }
 BOOST_AUTO_TEST_SUITE_END() // rpc
 

@@ -4,15 +4,15 @@
 #include <boost/asio/spawn.hpp>
 #include <boost/beast/core.hpp>
 
-#include <threads/Asio.hpp>
 #include "Packet.hpp"
 
-namespace asio_mysql
-{
-    namespace asio = boost::asio;
+#include <threads/Asio.hpp>
+
+namespace asio_mysql {
+    namespace asio  = boost::asio;
     namespace beast = boost::beast;
-    namespace net = boost::asio;
-    using tcp = boost::asio::ip::tcp;
+    namespace net   = boost::asio;
+    using tcp       = boost::asio::ip::tcp;
 
     struct ImplFace
     {
@@ -25,9 +25,9 @@ namespace asio_mysql
 
     inline void session(beast::tcp_stream& aStream, ImplPtr aImpl, net::yield_context yield)
     {
-        beast::error_code  ec;
-        Container::binary sBuffer;
-        omemstream sStream;
+        beast::error_code ec;
+        std::string       sBuffer;
+        omemstream        sStream;
 
         aStream.expires_after(std::chrono::seconds(2));
 
@@ -40,7 +40,7 @@ namespace asio_mysql
 
         // read client response
         HandshakeResponse sResponse;
-        ec = read(aStream, yield ,sBuffer);
+        ec = read(aStream, yield, sBuffer);
         if (ec)
             return;
         sResponse.parse(sBuffer);
@@ -53,7 +53,7 @@ namespace asio_mysql
             return;
 
         // read auth switch response... and ignore one
-        ec = read(aStream, yield ,sBuffer);
+        ec = read(aStream, yield, sBuffer);
         if (ec)
             return;
 
@@ -64,11 +64,10 @@ namespace asio_mysql
         if (ec)
             return;
 
-        while(true)
-        {
+        while (true) {
             aStream.expires_after(std::chrono::seconds(600));
 
-            ec = read(aStream, yield ,sBuffer);
+            ec = read(aStream, yield, sBuffer);
             if (ec)
                 break;
 
@@ -91,12 +90,10 @@ namespace asio_mysql
 
     inline void server(std::shared_ptr<tcp::acceptor> aAcceptor, std::shared_ptr<tcp::socket> aSocket, ImplPtr aImpl)
     {
-        aAcceptor->async_accept(*aSocket, [=](beast::error_code ec)
-        {
-            if (!ec)
-            {
+        aAcceptor->async_accept(*aSocket, [=](beast::error_code ec) {
+            if (!ec) {
                 aSocket->set_option(tcp::no_delay(true));
-                boost::asio::spawn(aAcceptor->get_executor(), [sStream = beast::tcp_stream(std::move(*aSocket)), aImpl] (boost::asio::yield_context yield) mutable {
+                boost::asio::spawn(aAcceptor->get_executor(), [sStream = beast::tcp_stream(std::move(*aSocket)), aImpl](boost::asio::yield_context yield) mutable {
                     session(sStream, aImpl, yield);
                 });
             }
@@ -106,9 +103,9 @@ namespace asio_mysql
 
     void startServer(Threads::Asio& aContext, uint16_t aPort, ImplPtr aImpl)
     {
-        auto const sAddress = net::ip::make_address("0.0.0.0");
-        auto sAcceptor = std::make_shared<tcp::acceptor>(aContext.service(), tcp::endpoint(sAddress, aPort));
-        auto sSocket = std::make_shared<tcp::socket>(aContext.service());
+        auto const sAddress  = net::ip::make_address("0.0.0.0");
+        auto       sAcceptor = std::make_shared<tcp::acceptor>(aContext.service(), tcp::endpoint(sAddress, aPort));
+        auto       sSocket   = std::make_shared<tcp::socket>(aContext.service());
         server(sAcceptor, sSocket, aImpl);
     }
-}
+} // namespace asio_mysql

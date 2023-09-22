@@ -55,8 +55,6 @@ namespace Archive {
 
         size_t estimate(size_t aSize) override
         {
-            if (!m_Started)
-                return LZ4F_HEADER_SIZE_MAX;
             return LZ4F_compressBound(aSize, nullptr);
         }
 
@@ -108,7 +106,7 @@ namespace Archive {
 
             // reduce input size based on 64K block size
             size_t sDstBlockCount = aDstLen / sDstMinimal;
-            aSrcLen = std::min(sDstBlockCount * 64 * 1024, aSrcLen);
+            aSrcLen               = std::min(sDstBlockCount * 64 * 1024, aSrcLen);
 
             // ensure reduced size is ok
             if (aDstLen < estimate(aSrcLen))

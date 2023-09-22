@@ -28,10 +28,11 @@ namespace asio_http {
     using Response = http::response<http::string_body>;
 
     namespace Headers {
-        static const std::string Accept      = "Accept";
-        static const std::string ContentType = "Content-Type";
-        static const std::string Host        = "Host";
-        static const std::string UserAgent   = "User-Agent";
+        static const std::string Accept         = "Accept";
+        static const std::string ContentType    = "Content-Type";
+        static const std::string Host           = "Host";
+        static const std::string UserAgent      = "User-Agent";
+        static const std::string AcceptEncoding = "Accept-Encoding";
     } // namespace Headers
 
     struct Addr

@@ -25,8 +25,6 @@ namespace asio_mysql {
         CLIENT_PROTOCOL_41 = 512,
     };
 
-    using binary = Container::binary;
-
     struct omemstream : Container::omemstream
     {
         using Container::omemstream::write;
@@ -58,7 +56,7 @@ namespace asio_mysql {
     struct imemstream : Container::imemstream
     {
         using Container::imemstream::read;
-        imemstream(const Container::binary& aData)
+        imemstream(const std::string aData)
         : Container::imemstream(aData)
         {
         }
@@ -80,7 +78,7 @@ namespace asio_mysql {
         }
     };
 
-    inline beast::error_code read(beast::tcp_stream& aStream, net::yield_context yield, binary& aBuffer)
+    inline beast::error_code read(beast::tcp_stream& aStream, net::yield_context yield, std::string& aBuffer)
     {
         beast::error_code ec;
         uint32_t          sSize = 0;
@@ -93,7 +91,7 @@ namespace asio_mysql {
         return ec;
     }
 
-    inline beast::error_code write(beast::tcp_stream& aStream, net::yield_context yield, const binary& aBuffer, uint8_t aSequence = 0)
+    inline beast::error_code write(beast::tcp_stream& aStream, net::yield_context yield, const std::string& aBuffer, uint8_t aSequence = 0)
     {
         beast::error_code ec;
         uint32_t          sSize = aBuffer.size();
@@ -137,7 +135,7 @@ namespace asio_mysql {
         std::string username; // login user name, string<NUL>
         std::string auth;     // authentication response data, string<EOF>
 
-        void parse(binary aBinary)
+        void parse(const std::string& aBinary)
         {
             imemstream sStream(aBinary);
             sStream.read(client_flag);
@@ -202,7 +200,7 @@ namespace asio_mysql {
         uint8_t     command = 0;
         std::string query;
 
-        void parse(const binary& aBinary)
+        void parse(const std::string& aBinary)
         {
             imemstream sStream(aBinary);
             sStream.read(command);

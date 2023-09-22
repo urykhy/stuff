@@ -1,13 +1,15 @@
 {%- set json = response.get('content',{}).get('application/json',{}) | length %}
 {%- set binary = (json == 0 and response.get('content',{}) | length == 1) %}
 {%- set headers = response.get('headers',{}) %}
+{%- if binary > 0 %}
+    {%- set content_type = response.get('content') | first %}
+{%- endif %}
 
 {% if not x_hpp_name %}
     struct {{ name }}_response_{{ k }}
         {%- if k | int >= 400 %} : public {{ _err_class(k) }}{%- endif %}
     {
         {%- if binary > 0 %}
-            {%- set content_type = response.get('content') | first %}
             std::string body;
         {%- elif json > 0 %}
             {%- set schema = response.get('content',{}).get('application/json').get('schema') -%}
@@ -34,7 +36,7 @@
         namespace http = boost::beast::http;
         {%- if binary > 0 %}
             aResponse.set(http::field::content_type, "{{ content_type }}");
-            aResponse.body() = std::move(body);
+            swagger::pack(aRequest, aResponse, std::move(body), {{ x_compress }});
         {%- elif json > 0 %}
             const auto sAccept = aRequest["Accept"];
             const auto sContentType = aRequest["Content-Type"];
@@ -42,11 +44,11 @@
                 cbor::omemstream sOut;
                 cbor::write(sOut, body);
                 aResponse.set(http::field::content_type, "application/cbor");
-                aResponse.body() = std::move(sOut.str());
+                swagger::pack(aRequest, aResponse, std::move(sOut.str()), {{ x_compress }});
             } else {
                 ::Json::Value sValue = Format::Json::to_value(body);
                 aResponse.set(http::field::content_type, "application/json");
-                aResponse.body() = Format::Json::to_string(sValue);
+                swagger::pack(aRequest, aResponse, Format::Json::to_string(sValue), {{ x_compress }});
             }
         {%- endif %}
 
@@ -66,13 +68,13 @@
             if (!sContentType.empty() and sContentType != "{{ content_type }}") {
                 throw std::runtime_error("unexpected content-type: `" + std::string(sContentType) + "`");
             }
-            body = aResponse.body();
+            body = swagger::unpack(aResponse);
         {%- elif json > 0 %}
             if (sContentType == "application/cbor") {
-                cbor::imemstream sIn(aResponse.body());
+                cbor::imemstream sIn(swagger::unpack(aResponse));
                 cbor::read(sIn, body);
-            } if (sContentType == "application/json" or sContentType.empty()) {
-                const auto sJson = Parser::Json::parse(aResponse.body());
+            } else if (sContentType == "application/json" or sContentType.empty()) {
+                const auto sJson = Parser::Json::parse(swagger::unpack(aResponse));
                 Parser::Json::from_value(sJson, body);
             } else {
                 throw std::runtime_error("unexpected content-type: `" + std::string(sContentType) + "`");

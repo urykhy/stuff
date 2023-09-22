@@ -64,6 +64,8 @@
 {% set bearer_scheme = bearer_schemas | first | default('') %}
 {% set x_bearer = doc.get('security',[]) | selectattr(bearer_scheme, 'defined') | list | length %}
 
+{% set x_compress = doc['info'].get('x-compress', 0) %}
+
 {% from '_schema.j2'  import complex_schema %}
 
 {% macro _err_class(k) %}
