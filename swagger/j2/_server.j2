@@ -233,9 +233,40 @@ private:
         }
 
         auto sResponseStatus = http::status::bad_request;
+
+        {% if x_sentry %}
+        auto sNotifySentry = [&](const std::exception& e)
+        {
+            std::unique_lock sLock(m_SentryLock, std::defer_lock);
+            if (sLock.try_lock() and m_SentryHandler and time(nullptr) > m_SentryLastCall + m_SentryRateLimit)
+            {
+                Sentry::Message::Request sRequest;
+                sRequest.method = "{{ method }}";
+                sRequest.url = aRequest.target();
+                sRequest.data = aRequest.body().substr(0, 10240); {# up to 10Kb body #}
+                {%- set p1 = doc['paths'][path].get('parameters', []) | swagger_expand_refs %}
+                {%- set p2 = doc['paths'][path][method].get('parameters', []) | swagger_expand_refs %}
+                {%- set params = p1 + p2 | sort(attribute='name') %}
+                {%- for param in params if param['in'] == 'header' %}
+                    if (const auto& x = aRequest["{{ param.name }}"]; !x.empty())
+                        sRequest.headers["{{ param.name }}"] = x;
+                {%- endfor %}
+                Sentry::Message sMessage("swagger");
+                if (sResponseStatus == http::status::unauthorized)
+                    sMessage.set_request(sRequest).set_exception("unauthorized", e.what());
+                else
+                    sMessage.set_request(sRequest).set_exception("bad request", e.what());
+                sMessage.set_version("{{ doc['info']['title'] }}", "{{ doc['info']['version'] }}");
+                if (sPeer.has_value())
+                    sMessage.set_user("", *sPeer);
+                m_SentryLastCall = time(nullptr);
+                m_SentryHandler(sMessage);
+            }
+        };
+        {% endif %}
+
         try {
             sParameters.__parse(aRequest);
-
             {% if x_bearer %}
             sResponseStatus = http::status::unauthorized;
             if (!{{ name }}_auth(__auth_helper(aRequest), sParameters))
@@ -248,31 +279,7 @@ private:
             aResponse.body() = e.what();
             {% if x_jaeger %} Jaeger::Helper::set_error(sTraceParsing, e.what()); {% endif %}
             {% if x_sentry %}
-                std::unique_lock sLock(m_SentryLock, std::defer_lock);
-                if (sLock.try_lock() and m_SentryHandler and time(nullptr) > m_SentryLastCall + m_SentryRateLimit)
-                {
-                    Sentry::Message::Request sRequest;
-                    sRequest.method = "{{ method }}";
-                    sRequest.url = aRequest.target();
-                    sRequest.data = aRequest.body().substr(0, 10240); {# up to 10Kb body #}
-                    {%- set p1 = doc['paths'][path].get('parameters', []) | swagger_expand_refs %}
-                    {%- set p2 = doc['paths'][path][method].get('parameters', []) | swagger_expand_refs %}
-                    {%- set params = p1 + p2 | sort(attribute='name') %}
-                    {%- for param in params if param['in'] == 'header' %}
-                        if (const auto& x = aRequest["{{ param.name }}"]; !x.empty())
-                            sRequest.headers["{{ param.name }}"] = x;
-                    {%- endfor %}
-                    Sentry::Message sMessage("swagger");
-                    if (sResponseStatus == http::status::unauthorized)
-                        sMessage.set_request(sRequest).set_exception("unauthorized", e.what());
-                    else
-                        sMessage.set_request(sRequest).set_exception("bad request", e.what());
-                    sMessage.set_version("{{ doc['info']['title'] }}", "{{ doc['info']['version'] }}");
-                    if (sPeer.has_value())
-                        sMessage.set_user("", *sPeer);
-                    m_SentryLastCall = time(nullptr);
-                    m_SentryHandler(sMessage);
-                }
+                sNotifySentry(e);
             {% endif %}
             return;
         }
