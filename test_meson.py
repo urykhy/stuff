@@ -23,6 +23,8 @@ def prepare_cases():
             )
             if len(p.stderr.decode()) == 0:
                 for name in p.stdout.decode().splitlines():
+                    if name == "ninja: no work to do.":
+                        continue
                     cases.append("/".join([x, name]))
     return cases
 
