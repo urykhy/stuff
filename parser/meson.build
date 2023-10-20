@@ -8,5 +8,5 @@ benchmark = dependency('benchmark', required : true)
 
 a = executable('a.out', 'test.cpp', dependencies : [boost, threads, json], include_directories : includes)
 b  = executable('b.out',  'benchmark.cpp',  dependencies : [boost, threads, json, benchmark], include_directories : includes)
-test('basic test', a, args : ['-l', 'all'])
+test('basic', a, args : ['-l', 'all'])
 benchmark('bench', b)

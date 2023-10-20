@@ -11,4 +11,4 @@ cxx      = meson.get_compiler('cpp')
 cxx.has_header('rapidxml/rapidxml.hpp', required: true)
 
 a = executable('a.out', 'test.cpp', dependencies : [boost, threads, curl, ssl, cctz, fmt], include_directories : includes)
-test('basic test', a, args : ['-l', 'all'])
+test('basic', a, args : ['-l', 'all'])

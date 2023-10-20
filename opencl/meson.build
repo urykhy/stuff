@@ -6,4 +6,4 @@ threads   = dependency('threads')
 compute   = dependency('compute')
 
 a = executable('a.out', 'test.cpp', dependencies : [boost, threads, compute], include_directories : includes)
-test('basic test', a, args : ['-l', 'all'])
+test('basic', a, args : ['-l', 'all'])

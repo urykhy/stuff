@@ -12,4 +12,4 @@ bison_gen = generator(bison, output : ['@BASENAME@.tab.cpp','@BASENAME@.tab.h'],
 bison_src = bison_gen.process('sql.y')
 
 a = executable('a.out', flex_src, bison_src, dependencies : [boost], include_directories : includes)
-test('basic test', a, args : ['-l', 'all'])
+test('basic', a, args : ['-l', 'all'])

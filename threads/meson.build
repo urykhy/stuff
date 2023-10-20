@@ -7,7 +7,7 @@ benchmark = dependency('benchmark', required : true)
 fmt       = dependency('fmt')
 
 a = executable('a.out', 'test.cpp', dependencies : [boost, threads, fmt], include_directories : includes)
-test('basic test', a, args : ['-l', 'all'])
+test('basic', a, args : ['-l', 'all'])
 
 b  = executable('b.out',  'benchmark.cpp',  dependencies : [boost, threads, benchmark])
 benchmark('bench', b)

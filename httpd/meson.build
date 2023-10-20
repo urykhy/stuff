@@ -7,4 +7,4 @@ curl      = dependency('libcurl')
 subdir('http_parser')
 
 a = executable('a.out', 'test.cpp', dependencies : [boost, threads, http_parser, curl], include_directories : includes)
-test('basic test', a, args : ['-l', 'all'])
+test('basic', a, args : ['-l', 'all'])

@@ -7,6 +7,6 @@ json      = dependency('jsoncpp')
 fmt       = dependency('fmt')
 
 a = executable('a.out', 'test.cpp', dependencies : [boost, threads, json, fmt], include_directories : includes)
-test('basic test', a, args : ['-l', 'all'])
+test('basic', a, args : ['-l', 'all'])
 
 d = executable('d.out', 'demo.cpp', dependencies : [boost, threads, json, fmt], include_directories : includes)

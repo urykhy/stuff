@@ -22,6 +22,6 @@ cxa_lib = static_library('sentry_cxa', cxa_src, include_directories : includes, 
 cxa_dep = declare_dependency(link_with : cxa_lib)
 
 a = executable('a.out', 'test.cpp', dependencies : [boost, test, threads, uuid, json, curl, dl, dw, log4cxx], include_directories : includes)
-test('basic test', a, args : ['-l', 'all'])
+test('basic', a, args : ['-l', 'all'])
 
 cxa = executable('cxa', 'test_cxa.cpp', dependencies : [boost, threads, uuid, json, cxa_dep, log4cxx], include_directories : includes)

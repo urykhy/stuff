@@ -16,7 +16,7 @@ go_env.set('GO111MODULE', 'off')
 go_server = custom_target('go_server', output: 'server', input: 'server.go', env: go_env, command: [golang, 'build', '../server.go'])
 
 a = executable('a.out', 'test.cpp', go_server, dependencies : [boost, threads, curl, log4cxx, nghttp2, json], include_directories : includes)
-test('basic test', a, args : ['-l', 'all'])
+test('basic', a, args : ['-l', 'all'])
 
 b  = executable('b.out',  'benchmark.cpp',  dependencies : [boost, threads, curl, log4cxx, nghttp2, json, benchmark], include_directories : includes)
 benchmark('http2 parsing', b)

@@ -6,4 +6,4 @@ json      = dependency('jsoncpp')
 threads   = dependency('threads')
 
 a = executable('a.out', 'test.cpp', dependencies : [boost, threads, json], include_directories : includes)
-test('basic test', a, args : ['-l', 'all'])
+test('basic', a, args : ['-l', 'all'])

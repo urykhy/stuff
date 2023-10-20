@@ -10,7 +10,7 @@ gperf_gen = generator(gperf, output : ['@BASENAME@.hpp'], arguments : ['-t','-E'
 gperf_src = gperf_gen.process('gperf.in')
 
 a = executable('a.out', 'test.cpp', gperf_src, dependencies : [boost, xxh], include_directories : includes)
-test('basic test', a, args : ['-l', 'all'])
+test('basic', a, args : ['-l', 'all'])
 
 b  = executable('b.out',  'benchmark.cpp',  gperf_src, dependencies : [boost, benchmark], include_directories : includes)
 benchmark('protobuf', b)

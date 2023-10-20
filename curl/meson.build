@@ -6,4 +6,4 @@ threads   = dependency('threads')
 curl      = dependency('libcurl')
 
 a = executable('a.out', 'test.cpp', dependencies : [boost, threads, curl], include_directories : includes)
-test('basic test', a, args : ['-l', 'all'])
+test('basic', a, args : ['-l', 'all'])

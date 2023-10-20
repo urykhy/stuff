@@ -6,6 +6,6 @@ threads   = dependency('threads')
 benchmark = dependency('benchmark', required : true)
 
 a = executable('a.out', 'test.cpp', dependencies : [boost, threads], include_directories : includes)
-test('basic test', a, args : ['-l', 'all'])
+test('basic', a, args : ['-l', 'all'])
 
 b  = executable('b.out',  'benchmark.cpp',  dependencies : [boost, benchmark], include_directories : includes)

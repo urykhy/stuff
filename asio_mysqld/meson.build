@@ -7,4 +7,4 @@ threads   = dependency('threads')
 mysql     = dependency('mysqlclient')
 
 a = executable('a.out', 'test.cpp', dependencies : [boost, threads, mysql], include_directories : includes)
-test('basic test', a, args : ['-l', 'all'])
+test('basic', a, args : ['-l', 'all'])

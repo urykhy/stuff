@@ -16,4 +16,4 @@ foreach name : ['test.drawio']
 endforeach
 
 a  = executable('a.out', 'test.cpp', api_src, dependencies : [boost], include_directories: [includes])
-test('basic test', a, args : ['-l', 'all'])
+test('basic', a, args : ['-l', 'all'])

@@ -11,4 +11,4 @@ bzip2     = dependency('BZip2')
 ssl       = dependency('openssl') # for File::Block
 
 a = executable('a.out', 'test.cpp', dependencies : [boost, threads, lz4, zstd, lzma, zlib, bzip2, ssl], include_directories : includes)
-test('basic test', a, args : ['-l', 'all'])
+test('basic', a, args : ['-l', 'all'])

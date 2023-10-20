@@ -10,4 +10,4 @@ log4cxx   = dependency('liblog4cxx')
 subdir('otlp_proto')
 
 a = executable('a.out', 'test.cpp', dependencies : [boost, threads, curl, uuid, otlp_dep, log4cxx], include_directories : includes)
-test('basic test', a, args : ['-l', 'all'])
+test('basic', a, args : ['-l', 'all'])

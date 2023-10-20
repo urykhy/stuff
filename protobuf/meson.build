@@ -35,7 +35,7 @@ endif
 a  = executable('a.out',  'test.cpp',       api_src, dependencies : [tutorial_dep, protobuf, boost, json, exprtk], cpp_args : cpp_args, include_directories : includes)
 b  = executable('b.out',  'benchmark.cpp',  api_src, dependencies : [tutorial_dep, protobuf, boost, json, benchmark], include_directories : includes)
 b2 = executable('b2.out', 'benchmark2.cpp', api_src, dependencies : [tutorial_dep, protobuf, boost, json, benchmark, exprtk], cpp_args : cpp_args, include_directories : includes)
-test('basic test', a, args : ['-l', 'all'])
+test('basic', a, args : ['-l', 'all'])
 benchmark('protobuf', b)
 benchmark('protobuf', b2)
 #run_target('bench', command : ['./build/b.out'])

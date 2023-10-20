@@ -7,4 +7,4 @@ log4cxx  = dependency('liblog4cxx')
 sqlite   = dependency('sqlite3')
 
 a = executable('a.out', 'test.cpp', dependencies : [boost, threads, sqlite, log4cxx], include_directories : includes)
-test('basic test', a, args : ['-l', 'all'])
+test('basic', a, args : ['-l', 'all'])

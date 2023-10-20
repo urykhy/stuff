@@ -8,4 +8,4 @@ threads   = dependency('threads')
 log4cxx   = dependency('liblog4cxx')
 
 a = executable('a.out', 'test.cpp', dependencies : [boost, threads, curl, json, log4cxx], include_directories : includes)
-test('basic test', a, args : ['-l', 'all'])
+test('basic', a, args : ['-l', 'all'])

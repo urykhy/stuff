@@ -11,4 +11,4 @@ zlib      = dependency('zlib')
 bzip2     = dependency('BZip2') # via cmake
 
 a = executable('a.out', 'test.cpp', dependencies : [boost, threads, lz4, zstd, lzma, zlib, bzip2], include_directories : includes)
-test('basic test', a, args : ['-l', 'all'])
+test('basic', a, args : ['-l', 'all'])

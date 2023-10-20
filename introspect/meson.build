@@ -17,4 +17,4 @@ foreach name : ['Test.hpp']
 endforeach
 
 a  = executable('a.out',  'test.cpp', intro_src, dependencies : [boost, json], include_directories : includes)
-test('basic test', a, args : ['-l', 'all'])
+test('basic', a, args : ['-l', 'all'])

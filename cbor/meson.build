@@ -11,7 +11,7 @@ tutorial_lib = static_library('tutorial', tutorial_src)
 tutorial_dep = declare_dependency(link_with : tutorial_lib, include_directories: tutorial_lib.private_dir_include())
 
 a  = executable('a.out',  'test.cpp', dependencies : [boost, tutorial_dep], include_directories : includes)
-test('basic test', a, args : ['-l', 'all'])
+test('basic', a, args : ['-l', 'all'])
 
 # play with clang fuzzer/coverage
 # meson test fuzz
