@@ -101,6 +101,11 @@ def render(api_name):
     global doc
     doc = yaml.safe_load(open(api_name, "r"))
 
+    meta_path = os.path.join(Path(api_name).parent.absolute(), "_meta.yaml")
+    if os.path.exists(meta_path):
+        meta_doc = yaml.safe_load(open(meta_path, "r"))
+        doc["info"].update(meta_doc.get(Path(api_name).name, {}))
+
     hpp_name = Path(api_name).name.replace(".yaml", ".hpp")
     print(template.render(doc=doc), file=open(hpp_name, "w"))
 

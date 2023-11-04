@@ -1,0 +1,10 @@
+common.v1.yaml:
+  x-prometheus: true
+compress.v1.yaml:
+  x-compress: 1024
+discovery.v1.yaml:
+  x-discovery: true
+tutorial.v1.yaml:
+  x-sentry: true
+  x-queue: true
+  x-jaeger: true
