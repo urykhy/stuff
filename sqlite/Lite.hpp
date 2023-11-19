@@ -29,22 +29,22 @@ namespace Lite {
             throw Error("Error " + std::to_string(aRC) + ": " + sqlite3_errstr(aRC));
     }
 
-    class Statment : public boost::noncopyable
+    class Statement : public boost::noncopyable
     {
         sqlite3*                 m_Handle   = nullptr;
-        sqlite3_stmt*            m_Statment = nullptr;
+        sqlite3_stmt*            m_Statement = nullptr;
         unsigned                 m_Columns  = 0;
         std::vector<const char*> m_Names;
 
         friend class DB;
-        Statment(sqlite3* aHandle, sqlite3_stmt* aStatment)
+        Statement(sqlite3* aHandle, sqlite3_stmt* aStatement)
         : m_Handle(aHandle)
-        , m_Statment(aStatment)
-        , m_Columns(sqlite3_column_count(m_Statment))
+        , m_Statement(aStatement)
+        , m_Columns(sqlite3_column_count(m_Statement))
         {
             m_Names.reserve(m_Columns);
             for (unsigned i = 0; i < m_Columns; i++)
-                m_Names.push_back(sqlite3_column_name(m_Statment, i));
+                m_Names.push_back(sqlite3_column_name(m_Statement, i));
         }
 
     public:
@@ -56,9 +56,9 @@ namespace Lite {
                 [this, &sIndex](auto&& aValue) {
                     using X = std::decay_t<decltype(aValue)>;
                     if constexpr (std::numeric_limits<X>::is_integer) {
-                        Check(sqlite3_bind_int64(m_Statment, sIndex, aValue));
+                        Check(sqlite3_bind_int64(m_Statement, sIndex, aValue));
                     } else if constexpr (std::is_same_v<X, std::string_view>) {
-                        Check(sqlite3_bind_text(m_Statment, sIndex, aValue.data(), aValue.size(), SQLITE_STATIC));
+                        Check(sqlite3_bind_text(m_Statement, sIndex, aValue.data(), aValue.size(), SQLITE_STATIC));
                     } else {
                         throw std::invalid_argument("assign: not supported type");
                     }
@@ -74,12 +74,12 @@ namespace Lite {
             const char* sValues[m_Columns] = {};
 
             do {
-                int sCode = sqlite3_step(m_Statment);
+                int sCode = sqlite3_step(m_Statement);
                 if (sCode == SQLITE_DONE)
                     return;
                 if (sCode == SQLITE_ROW) {
                     for (unsigned i = 0; i < m_Columns; i++) {
-                        sValues[i] = (const char*)sqlite3_column_text(m_Statment, i);
+                        sValues[i] = (const char*)sqlite3_column_text(m_Statement, i);
                         auto sCode = sqlite3_errcode(m_Handle);
                         if (SQLITE_ROW != sCode)
                             Check(sCode); // ensure no OOM occured
@@ -93,13 +93,13 @@ namespace Lite {
 
         void Reset()
         {
-            sqlite3_reset(m_Statment);
-            sqlite3_clear_bindings(m_Statment);
+            sqlite3_reset(m_Statement);
+            sqlite3_clear_bindings(m_Statement);
         }
 
-        ~Statment()
+        ~Statement()
         {
-            sqlite3_finalize(m_Statment);
+            sqlite3_finalize(m_Statement);
         }
     };
 
@@ -164,11 +164,11 @@ namespace Lite {
                 Check(sRC);
         }
 
-        Statment Prepare(const std::string& aQuery)
+        Statement Prepare(const std::string& aQuery)
         {
             sqlite3_stmt* sData = nullptr;
             Check(sqlite3_prepare(m_Handle, aQuery.c_str(), aQuery.size() + 1, &sData, nullptr));
-            return Statment(m_Handle, sData);
+            return Statement(m_Handle, sData);
         }
 
         ~DB()
