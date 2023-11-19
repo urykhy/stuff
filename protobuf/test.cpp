@@ -14,6 +14,9 @@
 #include "tutorial.pb.h"
 
 #include <format/Hex.hpp>
+#include <google/protobuf/stubs/common.h>
+
+const bool gProtobufCleanup = []() { std::atexit(google::protobuf::ShutdownProtobufLibrary); return true; }();
 
 struct MyPerson
 {
@@ -285,5 +288,5 @@ BOOST_AUTO_TEST_CASE(exprtk)
 
     BOOST_CHECK_EQUAL(sExpr.eval(), 10);
 }
-#endif // WITH_REFLECTION
+#endif                      // WITH_REFLECTION
 BOOST_AUTO_TEST_SUITE_END() // Protobuf

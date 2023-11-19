@@ -5,7 +5,10 @@
 #include "tutorial.pb.h"
 
 #include <Protobuf.hpp>
+#include <google/protobuf/stubs/common.h>
 #include <google/protobuf/util/json_util.h>
+
+const bool gProtobufCleanup = []() { std::atexit(google::protobuf::ShutdownProtobufLibrary); return true; }();
 
 struct PhoneNumber
 {

@@ -59,24 +59,16 @@
     fun:_ZN4cctz9time_zone4Impl3UTCEv
 }
 {
-   <protobuf/DescriptorPool>
+   <benchmark/CPUInfo>
    Memcheck:Leak
    match-leak-kinds: reachable
    ...
-   fun:_ZN6google8protobuf14DescriptorPool24InternalAddGeneratedFileEPKvi
+   fun:_ZN9benchmark7CPUInfo3GetEv
 }
 {
-   <protobuf/OnShutdownRun>
+   <benchmark/SystemInfo>
    Memcheck:Leak
    match-leak-kinds: reachable
    ...
-   fun:_ZN6google8protobuf8internal13OnShutdownRunEPFvPKvES3_
+   fun:_ZN9benchmark10SystemInfo3GetEv
 }
-{
-   <protobuf/InternalRegisterGeneratedFile>
-   Memcheck:Leak
-   match-leak-kinds: reachable
-   ...
-   fun:_ZN6google8protobuf14MessageFactory29InternalRegisterGeneratedFileEPKNS0_8internal15DescriptorTableE
-}
-

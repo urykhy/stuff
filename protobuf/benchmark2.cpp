@@ -1,5 +1,6 @@
 #include <benchmark/benchmark.h>
 
+#include <google/protobuf/stubs/common.h>
 #include <google/protobuf/util/json_util.h>
 
 // clang-format off
@@ -17,6 +18,8 @@
 #include <container/ListArray.hpp>
 
 constexpr unsigned P_COUNT = 1024 * 1024;
+
+const bool gProtobufCleanup = []() { std::atexit(google::protobuf::ShutdownProtobufLibrary); return true; }();
 
 const std::string gBuf = []() {
     tutorial::Person  sMsg;
