@@ -1,0 +1,40 @@
+#!/bin/bash
+
+msg="IFB"
+IFB="ifb-wlan"
+WLAN="wlan1"
+RATE="200mbit"
+
+case "$1" in
+    start)
+        echo "Starting $msg"
+        ip link add name $IFB type ifb
+        tc qdisc replace dev $WLAN handle ffff: ingress
+        #tc qdisc replace dev $IFB root handle 1: tbf rate "$RATE" latency 40ms burst 64kb
+        #tc qdisc add     dev $IFB      parent 1: fq_codel
+        tc qdisc replace dev $IFB root cake bandwidth $RATE nat egress ack-filter dual-dsthost ethernet
+        ip link set $IFB up
+        tc filter add dev $WLAN parent ffff: matchall action mirred egress redirect dev $IFB
+    ;;
+    stop)
+        echo "Stopping $msg"
+        tc qdisc replace dev $WLAN root fq_codel
+        tc qdisc del dev $IFB root
+        tc qdisc del dev $WLAN handle ffff: ingress
+        ip l set $IFB down
+        ip l del $IFB
+    ;;
+    restart)
+        $0 stop
+        $0 start
+    ;;
+    status)
+        tc -s qdisc show dev $IFB
+        echo
+        tc -s filter show dev $WLAN parent ffff:
+    ;;
+    *)
+        echo "Usage: $0 {start|stop|restart|status}"
+        exit 1
+    ;;
+esac

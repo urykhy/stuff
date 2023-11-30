@@ -17,7 +17,7 @@ NSPACE_UDP="-i space+ -p udp -m multiport --dports 53"
 NSPACE_FWD="-i space+ -o wlan1"
 
 # via tor
-VIA_TOR=("rutracker.org" "booktracker.org" "flibusta.is" "ru.linkedin.com" "linkedin.com" "proton.me" "mail.proton.me", "medium.com")
+VIA_TOR=("rutracker.org" "booktracker.org" "flibusta.is" "proton.me" "mail.proton.me")
 
 VIA_PROXY=("bt.rutracker.org" "bt2.rutracker.org" "bt3.rutracker.org" "bt4.rutracker.org" "bt.booktracker.work")
 
@@ -38,8 +38,8 @@ function ipset_start()
     do
         for a in `host $x | sed -ne 's/.*has address \(.*\)/\1/p'`;
         do
-            echo "add $x as $a"
-            ipset add TOR $a
+            echo "ipset add TOR $a # $x"
+            ipset -q add TOR $a
         done
     done
 
