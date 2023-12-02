@@ -12,9 +12,19 @@
 #include <networking/Servername.hpp>
 
 BOOST_AUTO_TEST_SUITE(Prometheus)
+BOOST_AUTO_TEST_CASE(makename)
+{
+    BOOST_CHECK_EQUAL(Prometheus::makeName("aaa", "c=\"d\""), "aaa{c=\"d\"}");
+    BOOST_CHECK_EQUAL(Prometheus::makeName(
+                          "aaa{a=\"b\"}",
+                          "c=\"d\"",
+                          std::pair("e", "f"),
+                          std::string("g=\"h\"")),
+                      R"(aaa{a="b",c="d",e="f",g="h"})");
+}
 BOOST_AUTO_TEST_CASE(counter)
 {
-    Prometheus::Counter sCounter("test{some=\"value\"}");
+    Prometheus::Counter sCounter("test", std::make_pair("some", "value"));
     sCounter.set(10);
 
     const auto                     sActual   = Prometheus::Manager::instance().toPrometheus();
@@ -24,9 +34,10 @@ BOOST_AUTO_TEST_CASE(counter)
 BOOST_AUTO_TEST_CASE(ago)
 {
     time_t          sNow = ::time(nullptr);
-    Prometheus::Age sAge("test{some=\"value\"}");
+    Prometheus::Age sAge("test", "some=\"value\"");
     sAge.set(sNow);
     BOOST_CHECK_EQUAL(sAge.format(), std::to_string(0));
+    BOOST_CHECK_EQUAL(sAge.m_Name, "test{some=\"value\"}");
 }
 BOOST_AUTO_TEST_CASE(histogramm)
 {

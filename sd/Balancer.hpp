@@ -66,11 +66,11 @@ namespace SD::Balancer {
         Prometheus::Counter<double> weight;
 
         Metrics(const Params& aParams, const std::string& aKey)
-        : allowed("sd_call_count" + Prometheus::appendTag(aParams.metrics_tags, "peer=\"" + aKey + "\", kind=\"allowed\""))
-        , failed("sd_call_count" + Prometheus::appendTag(aParams.metrics_tags, "peer=\"" + aKey + "\", kind=\"failed\""))
-        , blocked("sd_call_count" + Prometheus::appendTag(aParams.metrics_tags, "peer=\"" + aKey + "\", kind=\"blocked\""))
-        , closed("sd_circuit_closed" + Prometheus::appendTag(aParams.metrics_tags, "peer=\"" + aKey + '\"'))
-        , weight("sd_weight" + Prometheus::appendTag(aParams.metrics_tags, "peer=\"" + aKey + '\"'))
+        : allowed("sd_call_count", aParams.metrics_tags, std::pair("peer", aKey), std::pair("kind","allowed"))
+        , failed("sd_call_count", aParams.metrics_tags, std::pair("peer", aKey), std::pair("kind", "failed"))
+        , blocked("sd_call_count", aParams.metrics_tags, std::pair("peer", aKey), std::pair("kind", "blocked"))
+        , closed("sd_circuit_closed", aParams.metrics_tags, std::pair("peer", aKey))
+        , weight("sd_weight", aParams.metrics_tags, std::pair("peer", aKey))
         {
         }
     };

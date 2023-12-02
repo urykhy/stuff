@@ -6,14 +6,14 @@ class server
     struct Metrics
     {
     {%- call(doc, path, method, name) _for_every_method(doc) -%}
-        {% set tag = 'api="' + doc['info']['title'] + '", version="' + doc['info']['version'] + '", method="' + name + '"' %}
+        {% set tag = 'api="' + doc['info']['title'] + '",version="' + doc['info']['version'] + '",method="' + name + '"' %}
         {% set _open = '{' %}
         {% set _close = '}' %}
         Prometheus::Counter<> requests_{{ name }}      {R"(swagger_requests{{ _open }}{{ tag }}{{ _close }})"};
         Prometheus::Time      time_{{ name }}          {R"(swagger_time{{ _open }}{{ tag }}{{ _close }})"};
-        Prometheus::Counter<> responses_{{ name }}_2xx {R"(swagger_responses{{ _open }}{{ tag }}, status="2xx"{{ _close }})"};
-        Prometheus::Counter<> responses_{{ name }}_4xx {R"(swagger_responses{{ _open }}{{ tag }}, status="4xx"{{ _close }})"};
-        Prometheus::Counter<> responses_{{ name }}_5xx {R"(swagger_responses{{ _open }}{{ tag }}, status="5xx"{{ _close }})"};
+        Prometheus::Counter<> responses_{{ name }}_2xx {R"(swagger_responses{{ _open }}{{ tag }},status="2xx"{{ _close }})"};
+        Prometheus::Counter<> responses_{{ name }}_4xx {R"(swagger_responses{{ _open }}{{ tag }},status="4xx"{{ _close }})"};
+        Prometheus::Counter<> responses_{{ name }}_5xx {R"(swagger_responses{{ _open }}{{ tag }},status="5xx"{{ _close }})"};
     {%- endcall -%}
     };
     Metrics m_Metrics;

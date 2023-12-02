@@ -14,7 +14,7 @@ namespace Prometheus {
     {
         const std::string m_Name;
 
-        MetricFace(const std::string& aName);
+        MetricFace(std::string&& aName);
         virtual std::string format() const = 0;
         virtual ~MetricFace();
     };
@@ -98,8 +98,8 @@ namespace Prometheus {
 
     inline Manager Manager::m_Instance;
 
-    inline MetricFace::MetricFace(const std::string& aName)
-    : m_Name(aName)
+    inline MetricFace::MetricFace(std::string&& aName)
+    : m_Name(std::move(aName))
     {
         Manager::instance().MetricInsert(this);
     }

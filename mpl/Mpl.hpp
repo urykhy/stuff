@@ -5,7 +5,7 @@
 namespace Mpl {
     //  call f with every argument from pack
     template <class F, class... T>
-    void for_each_argument(F f, T&&... a)
+    void for_each_argument([[maybe_unused]] F f, T&&... a)
     {
         (void)std::initializer_list<int>{(f(std::forward<T>(a)), 0)...};
     }

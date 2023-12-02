@@ -24,9 +24,10 @@ namespace Prometheus {
         , m_RSS("rss_bytes")
         , m_FDS("files_count")
         , m_Thr("threads_count")
-        , m_User("cpu_seconds_total{mode=\"user\"}")
-        , m_System("cpu_seconds_total{mode=\"system\"}")
-        {}
+        , m_User("cpu_seconds_total", std::pair("mode", "user"))
+        , m_System("cpu_seconds_total", std::pair("mode", "system"))
+        {
+        }
 
         void update() override
         {

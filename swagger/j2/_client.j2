@@ -72,7 +72,7 @@ public:
             SD::Balancer::Params sParams;
             sParams.prefix = "discovery/swagger/" + aService + "/{{ doc['info']['title'] }}/{{ doc['info']['version'] }}/";
             sParams.location = aLocation;
-            sParams.metrics_tags = "{api=\"{{ doc['info']['title'] }}\", version=\"{{ doc['info']['version'] }}\", service=\"" + m_Service + "\"}";
+            sParams.metrics_tags = "api=\"{{ doc['info']['title'] }}\",version=\"{{ doc['info']['version'] }}\",service=\"" + m_Service + "\"";
             m_Balancer = std::make_shared<SD::Balancer::Engine>(aAsio, sParams);
             m_BalancerStart = m_Balancer->start();
         }
