@@ -66,7 +66,7 @@ namespace SD::Balancer {
         Prometheus::Counter<double> weight;
 
         Metrics(const Params& aParams, const std::string& aKey)
-        : allowed("sd_call_count", aParams.metrics_tags, std::pair("peer", aKey), std::pair("kind","allowed"))
+        : allowed("sd_call_count", aParams.metrics_tags, std::pair("peer", aKey), std::pair("kind", "allowed"))
         , failed("sd_call_count", aParams.metrics_tags, std::pair("peer", aKey), std::pair("kind", "failed"))
         , blocked("sd_call_count", aParams.metrics_tags, std::pair("peer", aKey), std::pair("kind", "blocked"))
         , closed("sd_circuit_closed", aParams.metrics_tags, std::pair("peer", aKey))
@@ -250,6 +250,7 @@ namespace SD::Balancer {
 #ifdef BOOST_TEST_MODULE
     public:
 #endif
+
         const Params m_Params;
 
         double   m_RPS         = 0;
