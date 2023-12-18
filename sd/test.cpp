@@ -86,7 +86,7 @@ BOOST_AUTO_TEST_CASE(notify_weight)
     const time_t NOW   = time(nullptr);
     const int    COUNT = 2000;
     for (int i = 0; i < COUNT; i++) {
-        sNotify.add(0.002, NOW + i / 10);
+        sNotify.add(NOW + i / 10, 0.002);
         std::this_thread::sleep_for(1ms);
     }
     std::this_thread::sleep_for(0.2s);

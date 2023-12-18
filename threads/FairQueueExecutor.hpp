@@ -94,7 +94,7 @@ namespace Threads::Fair {
                 if (sDuration > 0)
                     sElapsed = sDuration;
 #endif
-                sState->add(sElapsed, sNow > 0 ? sNow : time(nullptr), aSuccess);
+                sState->add(sNow > 0 ? sNow : time(nullptr), sElapsed, aSuccess);
             };
 
             try {

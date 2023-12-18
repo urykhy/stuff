@@ -71,15 +71,15 @@ namespace SD {
             m_Notify->start();
         }
 
-        void add(double aLatency, time_t aNow)
+        void add(time_t aNow, double aLatency)
         {
             Lock lk(m_Mutex);
-            bool sNewSecond = m_Ewma.add(aLatency, aNow, true);
+            bool sNewSecond = m_Ewma.add(aNow, aLatency, true);
             if (sNewSecond) {
-                constexpr int MAX_CHANGE = 10;
-                auto [sLatency, sRPS, sSuccessRate]    = info_i();
-                const double sWeight     = m_Params.threads / sLatency;
-                const int    sRelative   = std::max(
+                constexpr int MAX_CHANGE            = 10;
+                auto [sLatency, sRPS, sSuccessRate] = info_i();
+                const double sWeight                = m_Params.threads / sLatency;
+                const int    sRelative              = std::max(
                     relative(m_LastWeight, sWeight),
                     relative(m_LastRPS, sRPS));
                 if (sRelative > MAX_CHANGE or

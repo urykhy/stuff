@@ -49,7 +49,7 @@ namespace Util {
         {
         }
 
-        bool add(double aElapsed, time_t aNow, bool aSuccess)
+        bool add(time_t aNow, double aElapsed, bool aSuccess)
         {
             Lock lk(m_Mutex);
             bool sNewSecond = false;

@@ -57,15 +57,15 @@ struct Server
             sELA += m_Offset[m_Thread] - aMoment;
         }
         if (sELA >= MAX_LATENCY) {
-            aPeerInfo->add(m_Settings.net_latency, sNow, false);
+            aPeerInfo->add(sNow, m_Settings.net_latency, false);
             return false;
         }
 
         m_Offset[m_Thread]  = aMoment + sELA;
         m_Thread            = (m_Thread + 1) % m_Offset.size();
         const bool sSuccess = Util::drand48() < m_Settings.success_rate;
-        m_Notify->add(m_Settings.latency, sNow); // account server time
-        aPeerInfo->add(sELA + m_Settings.net_latency, sNow, sSuccess);
+        m_Notify->add(sNow, m_Settings.latency); // account server time
+        aPeerInfo->add(sNow, sELA + m_Settings.net_latency, sSuccess);
         return sSuccess;
     }
 };

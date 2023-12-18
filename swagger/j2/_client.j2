@@ -139,9 +139,9 @@ public:
                 INFO("{{ method }} " << sRequest.url {% if x_jaeger %} << ( sTraceCall ? " [J:" + sTraceCall->trace_id() + "]" : "") {% endif %});
                 {# copy request to make a call, since we need one if redirect #}
                 {%- if x_discovery %}
-                    sResponse = sPeerInfo->wrap([&, this]() {
+                    sResponse = sPeerInfo->wrap(time(nullptr), [&, this]() {
                         return m_HttpClient->async(asio_http::ClientRequest(sRequest)).get();
-                    }, time(nullptr));
+                    });
                 {%- else %}
                     sResponse = m_HttpClient->async(asio_http::ClientRequest(sRequest)).get();
                 {%- endif %}

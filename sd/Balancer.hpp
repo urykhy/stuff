@@ -205,30 +205,30 @@ namespace SD::Balancer {
             return !m_Breaker.is_close();
         }
 
-        void add(double aLatency, time_t aNow, bool aSuccess)
+        void add(time_t aNow, double aLatency, bool aSuccess)
         {
             Lock sLock(m_Mutex);
             prepare(aNow);
             m_Metrics.allowed.tick();
-            m_Ewma.add(aLatency, aNow, aSuccess);
+            m_Ewma.add(aNow, aLatency, aSuccess);
             if (!aSuccess)
                 m_Metrics.failed.tick();
         }
 
-        asio_http::Response wrap(std::function<asio_http::Response()> aHandler, time_t aNow)
+        asio_http::Response wrap(time_t aNow, std::function<asio_http::Response()> aHandler)
         {
             try {
                 Time::Meter         sMeter;
                 asio_http::Response sResponse = aHandler();
                 const double        sELA      = sMeter.get().to_double();
                 if (is_good_response(sResponse)) {
-                    add(sELA, aNow, true);
+                    add(aNow, sELA, true);
                 } else {
-                    add(0, aNow, false);
+                    add(aNow, 0, false);
                 }
                 return sResponse;
             } catch (...) {
-                add(0, aNow, false);
+                add(aNow, 0, false);
                 throw;
             }
         };
