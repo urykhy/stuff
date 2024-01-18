@@ -27,6 +27,8 @@ struct Entry
     std::string to_date;
 };
 
+const bool gMySQLCleanup = []() { std::atexit(mysql_library_end); return true; }();
+
 MySQL::Config cfg{.database = "employees", .program_name = "mysql-test-simple"};
 
 BOOST_AUTO_TEST_SUITE(MySQL)
@@ -81,7 +83,7 @@ BOOST_AUTO_TEST_CASE(updateable)
     {
         using Container = std::map<std::string, std::string>;
         using Timestamp = time_t;
-        using Pair = std::pair<std::string, std::string>;
+        using Pair      = std::pair<std::string, std::string>;
 
         static Pair parse(const MySQL::Row& aRow)
         {
