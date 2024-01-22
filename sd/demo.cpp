@@ -151,7 +151,7 @@ int main(int argc, char** argv)
         for (int i = 0; i < REQUEST_COUNT; i++) {
             const double sMoment = sTime + (double)i / REQUEST_COUNT;
             try {
-                auto sPeerInfo = sBalancer->random(sTime);
+                auto sPeerInfo = sBalancer->random(sTime).first;
                 auto sIt       = sServers.find(sPeerInfo->key());
                 assert(sIt != sServers.end());
                 if (sIt->second->add(sPeerInfo, sMoment))

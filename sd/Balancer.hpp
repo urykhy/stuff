@@ -7,6 +7,7 @@
 #include <boost/asio/steady_timer.hpp>
 
 #include <etcd/Etcd.hpp>
+#include <hash/Ring.hpp>
 #include <parser/Json.hpp>
 #include <prometheus/Metrics.hpp>
 #include <time/Meter.hpp>
@@ -62,6 +63,7 @@ namespace SD::Balancer {
         Prometheus::Counter<>       allowed;
         Prometheus::Counter<>       failed;
         Prometheus::Counter<>       blocked;
+        Prometheus::Counter<>       session;
         Prometheus::Counter<>       closed;
         Prometheus::Counter<double> weight;
 
@@ -69,6 +71,7 @@ namespace SD::Balancer {
         : allowed("sd_call_count", aParams.metrics_tags, std::pair("peer", aKey), std::pair("kind", "allowed"))
         , failed("sd_call_count", aParams.metrics_tags, std::pair("peer", aKey), std::pair("kind", "failed"))
         , blocked("sd_call_count", aParams.metrics_tags, std::pair("peer", aKey), std::pair("kind", "blocked"))
+        , session("sd_call_count", aParams.metrics_tags, std::pair("peer", aKey), std::pair("kind", "session"))
         , closed("sd_circuit_closed", aParams.metrics_tags, std::pair("peer", aKey))
         , weight("sd_weight", aParams.metrics_tags, std::pair("peer", aKey))
         {
@@ -205,7 +208,7 @@ namespace SD::Balancer {
             return !m_Breaker.is_close();
         }
 
-        void add(time_t aNow, double aLatency, bool aSuccess)
+        void add(time_t aNow, double aLatency, bool aSuccess, bool aBySession = false)
         {
             Lock sLock(m_Mutex);
             prepare(aNow);
@@ -213,22 +216,24 @@ namespace SD::Balancer {
             m_Ewma.add(aNow, aLatency, aSuccess);
             if (!aSuccess)
                 m_Metrics.failed.tick();
+            if (aBySession)
+                m_Metrics.session.tick();
         }
 
-        asio_http::Response wrap(time_t aNow, std::function<asio_http::Response()> aHandler)
+        asio_http::Response wrap(time_t aNow, std::function<asio_http::Response()> aHandler, bool aBySession = false)
         {
             try {
                 Time::Meter         sMeter;
                 asio_http::Response sResponse = aHandler();
                 const double        sELA      = sMeter.get().to_double();
                 if (is_good_response(sResponse)) {
-                    add(aNow, sELA, true);
+                    add(aNow, sELA, true, aBySession);
                 } else {
-                    add(aNow, 0, false);
+                    add(aNow, 0, false, aBySession);
                 }
                 return sResponse;
             } catch (...) {
-                add(aNow, 0, false);
+                add(aNow, 0, false, aBySession);
                 throw;
             }
         };
@@ -244,6 +249,7 @@ namespace SD::Balancer {
         }
     };
     using PeerInfoPtr = std::shared_ptr<PeerInfo>;
+    using Pair        = std::pair<PeerInfoPtr, bool /* sticky session */>;
 
     class ByWeight
     {
@@ -262,6 +268,7 @@ namespace SD::Balancer {
         std::map<std::string, PeerInfoPtr> m_Store;
         std::vector<PeerInfoPtr>           m_Info;
         std::vector<Entry>                 m_Peers;
+        Hash::Ring                         m_Ring;
 
         void adjust_info(std::vector<Entry>& aState)
         {
@@ -289,6 +296,30 @@ namespace SD::Balancer {
         {
             for (uint32_t i = 0; i < m_Peers.size(); i++)
                 m_Info[i]->m_Budget += m_Peers[i].weight;
+        }
+
+        uint32_t try_session(uint64_t aSession)
+        {
+            const bool sNoBudget = [this]() {
+                for (uint32_t i = 0; i < m_Peers.size(); i++) {
+                    if (m_Info[i]->m_Budget >= m_Step) {
+                        return false;
+                    }
+                }
+                return true;
+            }();
+
+            if (sNoBudget)
+                rewind();
+
+            for (auto& sPos : m_Ring(aSession)) {
+                if (m_Info[sPos]->m_Budget >= m_Step) {
+                    assert(m_Info[sPos]->m_Key == m_Peers[sPos].key);
+                    m_Info[sPos]->m_Budget -= m_Step;
+                    return sPos;
+                }
+            }
+            return -1;
         }
 
         uint32_t random_i()
@@ -340,6 +371,12 @@ namespace SD::Balancer {
                 }
             }
 
+            Hash::Ring sRing;
+            for (uint32_t i = 0; i < m_Peers.size(); i++)
+                sRing.insert(m_Peers[i].key, i, i /* no rack-id */, 10 /* fixed weight */);
+            sRing.prepare();
+            m_Ring = std::move(sRing);
+
             struct S
             {
                 double rps          = 0;
@@ -361,7 +398,7 @@ namespace SD::Balancer {
             m_Step        = sStat.min_weight;
         }
 
-        PeerInfoPtr random(time_t aNow)
+        Pair random(time_t aNow, const std::optional<uint64_t>& aSession)
         {
             if (aNow > m_LastTime) {
                 // allow peer to recover from `CB closed` state
@@ -376,18 +413,27 @@ namespace SD::Balancer {
             if (m_TotalWeight < MIN_WEIGHT)
                 throw Error("SD: no peers available");
 
-            uint32_t sEntry = random_i();
+            bool     sBySession = false;
+            uint32_t sEntry     = (uint32_t)-1;
+            if (aSession.has_value() and m_Peers.size() > 1) {
+                sEntry = try_session(aSession.value());
+                if (sEntry != (uint32_t)-1)
+                    sBySession = true;
+            }
+            if (sEntry == (uint32_t)-1)
+                sEntry = random_i();
             if (allow_second_chance()) {
                 if (m_Info[sEntry]->test(aNow)) {
-                    return m_Info[sEntry];
+                    return {m_Info[sEntry], sBySession};
                 } else {
-                    sEntry = random_i();
+                    sBySession = false;
+                    sEntry     = random_i();
                 }
             }
             if (!m_Info[sEntry]->test(aNow))
                 throw Error("SD: request to " + m_Peers[sEntry].key + " blocked by circuit breaker");
 
-            return m_Info[sEntry];
+            return {m_Info[sEntry], sBySession};
         }
 
         std::vector<Entry> state() const { return m_Peers; }
@@ -471,10 +517,10 @@ namespace SD::Balancer {
             return m_State.state();
         }
 
-        PeerInfoPtr random(time_t aNow = time(nullptr))
+        Pair random(time_t aNow = time(nullptr), std::optional<uint64_t> aSession = {})
         {
             Lock lk(m_Mutex);
-            return m_State.random(aNow);
+            return m_State.random(aNow, aSession);
         }
 
         std::string lastError() const

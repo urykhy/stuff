@@ -57,7 +57,7 @@ public:
             {%- set returnType = name + "_response_v" %}
         {%- endif %}
         using {{ name }}_response = {{ returnType }};
-        {{ name }}_response {{ name }}(const {{ name }}_parameters& aRequest {% if x_jaeger %}, Jaeger::Span* aTraceParent = nullptr{% endif %});
+        {{ name }}_response {{ name }}(const {{ name }}_parameters& aRequest);
 
     {% endcall %}
 };
@@ -92,25 +92,25 @@ public:
 
     {% call(doc, path, method, name) _for_every_method(doc) %}
         {# client response with successful struct, or throw #}
-        client::{{ name }}_response client::{{ name }}(const {{ name }}_parameters& aRequest {% if x_jaeger %}, Jaeger::Span* aTraceParent{% endif %})
+        client::{{ name }}_response client::{{ name }}(const {{ name }}_parameters& aRequest)
         {
             namespace http = boost::beast::http;
             asio_http::ClientRequest sRequest = aRequest.__format();
 
             {% if x_jaeger %}
             std::unique_ptr<Jaeger::Span> sTraceCall;
-            if (aTraceParent)
+            if (aRequest.__trace)
             {
-                sTraceCall = std::make_unique<Jaeger::Span>(aTraceParent->child("call {{ Aname }}/{{ name }}"));
+                sTraceCall = std::make_unique<Jaeger::Span>(aRequest.__trace->child("call {{ Aname }}/{{ name }}"));
                 sRequest.headers["traceparent"] = sTraceCall->extract().traceparent();
             }
             {% endif %}
 
             {%- if x_discovery %}
-                auto [sPeer, sPeerInfo] = [this]()
+                auto [sPeer, sPeerInfo, sBySession] = [this, &aRequest]()
                 {
-                    auto sPeerInfo = m_Balancer->random();
-                    return std::make_pair(sPeerInfo->key(), sPeerInfo);
+                    auto [sPeerInfo, sBySession] = m_Balancer->random(time(nullptr), aRequest.__session);
+                    return std::make_tuple(sPeerInfo->key(), sPeerInfo, sBySession);
                 }();
             {%- else %}
                 std::string sPeer = [this]()
@@ -141,7 +141,7 @@ public:
                 {%- if x_discovery %}
                     sResponse = sPeerInfo->wrap(time(nullptr), [&, this]() {
                         return m_HttpClient->async(asio_http::ClientRequest(sRequest)).get();
-                    });
+                    }, sBySession);
                 {%- else %}
                     sResponse = m_HttpClient->async(asio_http::ClientRequest(sRequest)).get();
                 {%- endif %}

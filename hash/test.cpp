@@ -49,7 +49,7 @@ BOOST_AUTO_TEST_CASE(basic)
     std::vector<std::string> sNames{"dc01my01:3306", "dc02my01:3306", "dc02my02:3306", "dc03my01:3306", "dc03my02:3306"};
 
     Hash::Ring sRing;
-    sRing.insert(sNames[0], 0, 1, 10); // name, server-id, datacenter-id, weight
+    sRing.insert(sNames[0], 0, 1, 10); // name, server-id, rack-id, weight
     sRing.insert(sNames[1], 1, 2, 5);
     sRing.insert(sNames[2], 2, 2, 15);
     sRing.insert(sNames[3], 3, 3, 20);

@@ -11,6 +11,7 @@ fmt       = dependency('fmt')
 ssl       = dependency('openssl')
 lz4       = dependency('liblz4')
 nghttp2   = dependency('libnghttp2') # for hpack
+xxh       = dependency('libxxhash')
 subdir('otlp_proto')
 import('python').find_installation('python3', modules : ['jinja2','pytest','syrupy'])
 fs        = import('fs')
@@ -34,7 +35,7 @@ swagger_ui_tar = custom_target('swagger_ui_tar', output: 'swagger_ui.tar', comma
 subdir('asio_http_lib')
 
 a = executable('a.out', 'test.cpp', api_src, swagger_ui_tar,
-               dependencies : [boost, threads, json, log4cxx, curl, uuid, fmt, otlp_dep, ssl, nghttp2, lz4, asio_dep],
+               dependencies : [boost, threads, json, log4cxx, curl, uuid, fmt, otlp_dep, ssl, nghttp2, lz4, xxh, asio_dep],
                include_directories : includes,
                cpp_pch : 'pch/test_pch.hpp')
 test('basic', a, args : ['-l', 'all'])

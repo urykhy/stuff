@@ -5,8 +5,9 @@ boost     = dependency('boost', modules : ['unit_test_framework', 'system', 'cor
 threads   = dependency('threads')
 json      = dependency('jsoncpp')
 fmt       = dependency('fmt')
+xxh       = dependency('libxxhash')
 
-a = executable('a.out', 'test.cpp', dependencies : [boost, threads, json, fmt], include_directories : includes)
+a = executable('a.out', 'test.cpp', dependencies : [boost, threads, json, fmt, xxh], include_directories : includes)
 test('basic', a, args : ['-l', 'all'])
 
-d = executable('d.out', 'demo.cpp', dependencies : [boost, threads, json, fmt], include_directories : includes)
+d = executable('d.out', 'demo.cpp', dependencies : [boost, threads, json, fmt, xxh], include_directories : includes)

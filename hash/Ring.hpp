@@ -2,6 +2,7 @@
 
 #include <xxhash.h>
 
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -14,7 +15,7 @@ namespace Hash {
         {
             uint64_t hash = 0;
             uint32_t id   = 0;
-            uint32_t dc   = 0;
+            uint32_t rack = 0;
         };
         std::vector<Info> m_Map;
 
@@ -35,11 +36,11 @@ namespace Hash {
         {
         }
 
-        void insert(const std::string& aName, uint32_t aID, uint32_t aDC, double aWeight)
+        void insert(const std::string& aName, uint32_t aID, uint32_t aRack, uint32_t aWeight)
         {
             const uint64_t sHash = hash(aName);
-            for (auto i = 0; i < aWeight; i++)
-                m_Map.push_back(Info{hash(i, sHash), aID, aDC});
+            for (uint32_t i = 0; i < aWeight; i++)
+                m_Map.push_back(Info{hash(i, sHash), aID, aRack});
         }
 
         void prepare()
@@ -53,17 +54,15 @@ namespace Hash {
         {
             constexpr unsigned STEPS = 15;
             IDS                sIDS;
-            IDS                sDC;
+            IDS                sRacks;
             auto               sIt = std::lower_bound(m_Map.begin(), m_Map.end(), aHash, [](const auto& a, uint64_t aVal) { return a.hash < aVal; });
 
             for (unsigned i = 0; sIDS.size() < sIDS.capacity() && i < STEPS; i++, sIt++) {
                 if (sIt == m_Map.end())
                     sIt = m_Map.begin();
-                if (std::find(sDC.begin(), sDC.end(), sIt->dc) != sDC.end())
+                if (std::find(sRacks.begin(), sRacks.end(), sIt->rack) != sRacks.end())
                     continue;
-                if (std::find(sIDS.begin(), sIDS.end(), sIt->id) != sIDS.end())
-                    continue;
-                sDC.push_back(sIt->dc);
+                sRacks.push_back(sIt->rack);
                 sIDS.push_back(sIt->id);
             }
             return sIDS;

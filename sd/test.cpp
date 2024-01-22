@@ -14,6 +14,8 @@ using namespace std::chrono_literals;
 #include "Notify.hpp"
 #include "NotifyWeight.hpp"
 
+#include <parser/Atoi.hpp>
+
 struct WithClient
 {
     Threads::Asio        m_Asio;
@@ -64,7 +66,7 @@ BOOST_AUTO_TEST_CASE(simple)
     BOOST_CHECK_EQUAL(10, sEntry.weight);
 
     // pick
-    BOOST_CHECK_EQUAL("a01", sBalancer->random()->key());
+    BOOST_CHECK_EQUAL("a01", sBalancer->random().first->key());
 
     // stop notifier
     sNotify->stop();
@@ -155,7 +157,7 @@ struct WithBreaker : WithClient
     {
         for (size_t i = 0; i < COUNT; i++) {
             try {
-                auto sPeer = m_Balancer->random(i / 100)->key();
+                auto sPeer = m_Balancer->random(i / 100).first->key();
                 m_Stat[sPeer].success++;
             } catch (const SD::Balancer::Error& e) {
                 std::string sTmp  = e.what();
@@ -191,7 +193,7 @@ BOOST_FIXTURE_TEST_CASE(balance_by_weight, WithClient)
     std::map<std::string, size_t> sStat;
     const size_t                  COUNT = 20000;
     for (size_t i = 0; i < COUNT; i++) {
-        sStat[sBalancer->random()->key()]++;
+        sStat[sBalancer->random().first->key()]++;
     }
     for (auto& x : sStat) {
         if (x.first == "a")
@@ -247,5 +249,37 @@ BOOST_AUTO_TEST_CASE(with_client_latency)
     BOOST_CHECK_CLOSE(sFinal["a"], 1., 1.);
     BOOST_CHECK_CLOSE(sFinal["b"], 0.67, 1.);
     BOOST_CHECK_CLOSE(sFinal["c"], 0.5, 1.);
+}
+BOOST_AUTO_TEST_CASE(with_session)
+{
+    WithBreaker                      sFixture;
+    std::vector<SD::Balancer::Entry> sData{{"a", 10}, {"b", 10}, {"c", 10}};
+    sFixture.apply_weights(sData, [&sFixture]() {
+        sFixture.m_Balancer->m_State.m_Info[0]->reset(0.0, 1.0); // latency, success_rate
+        sFixture.m_Balancer->m_State.m_Info[1]->reset(0.0, 1.0);
+        sFixture.m_Balancer->m_State.m_Info[2]->reset(0.0, 1.0);
+    });
+
+    // to place 10 calls to single peer, set minimal step to 1
+    sFixture.m_Balancer->m_State.m_Step = 1;
+    for (size_t i = 0; i < 10; i++) {
+        auto sPair = sFixture.m_Balancer->random(1 /* timestamp */, 5 /* single session */);
+        sPair.first->add(1 /* timestamp */, 0, true, sPair.second);
+        auto sPeer = sPair.first->key();
+        BOOST_CHECK_EQUAL("c", sPeer);
+    }
+
+    // log/check metrics
+    uint32_t          sCalls  = 0;
+    const auto        sActual = Prometheus::Manager::instance().toPrometheus();
+    const std::string sVar    = "sd_call_count{peer=\"c\",kind=\"session\"} ";
+    for (auto x : sActual) {
+        if (x.find("peer=\"c\"") != std::string::npos) {
+            BOOST_TEST_MESSAGE(x);
+            if (String::starts_with(x, sVar))
+                sCalls = Parser::Atoi<uint32_t>(x.substr(sVar.size()));
+        }
+    }
+    BOOST_CHECK_EQUAL(10, sCalls);
 }
 BOOST_AUTO_TEST_SUITE_END()
