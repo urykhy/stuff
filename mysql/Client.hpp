@@ -159,7 +159,7 @@ namespace MySQL {
     template <>
     constexpr enum_field_types GetEnum<double>() { return MYSQL_TYPE_DOUBLE; }
 
-    class Statment : boost::noncopyable
+    class Statement : boost::noncopyable
     {
         MYSQL_STMT* m_Stmt = nullptr;
         void        cleanup()
@@ -209,7 +209,7 @@ namespace MySQL {
         }
 
     public:
-        Statment(MYSQL* aHandle, const std::string& aQuery)
+        Statement(MYSQL* aHandle, const std::string& aQuery)
         {
             m_Stmt = mysql_stmt_init(aHandle);
             if (!m_Stmt)
@@ -220,13 +220,13 @@ namespace MySQL {
                 report("mysql_stmt_prepare");
             }
         }
-        Statment(Statment&& aParent)
+        Statement(Statement&& aParent)
         {
             cleanup();
             m_Stmt         = aParent.m_Stmt;
             aParent.m_Stmt = nullptr;
         }
-        ~Statment()
+        ~Statement()
         {
             cleanup();
         }
@@ -374,12 +374,12 @@ namespace MySQL {
             close();
         }
 
-        Statment Prepare(const std::string& aQuery)
+        Statement Prepare(const std::string& aQuery)
         {
             if (m_Closed)
                 throw Error("attempt to use closed connection");
 
-            return Statment(&m_Handle, aQuery);
+            return Statement(&m_Handle, aQuery);
         }
 
         void Query(const std::string& aQuery) override

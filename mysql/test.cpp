@@ -182,9 +182,9 @@ BOOST_AUTO_TEST_CASE(upload)
 BOOST_AUTO_TEST_CASE(prepare)
 {
     MySQL::Connection c(cfg);
-    // MySQL::Statment s=c.Prepare("select * from departments limit 6");
+    // MySQL::Statement s=c.Prepare("select * from departments limit 6");
     // s.Execute();
-    MySQL::Statment s = c.Prepare("select * from departments where dept_no > ? and dept_no < ? order by dept_no");
+    MySQL::Statement s = c.Prepare("select * from departments where dept_no > ? and dept_no < ? order by dept_no");
     s.Execute("d004", "d007");
     s.Use([i = 0](const auto& aRow, const auto& aMeta) mutable {
         BOOST_CHECK_EQUAL(aMeta[0], "dept_no");
@@ -204,7 +204,7 @@ BOOST_AUTO_TEST_CASE(prepare)
         BOOST_CHECK(i <= 2);
     });
 
-    MySQL::Statment s1 = c.Prepare("select * from salaries where from_date=? and emp_no > ? order by emp_no");
+    MySQL::Statement s1 = c.Prepare("select * from salaries where from_date=? and emp_no > ? order by emp_no");
     s1.Execute("1997-11-28", 494301);
     s1.Use([i = 0](const auto& aRow, const auto& aMeta) mutable {
         BOOST_TEST_MESSAGE(aRow[0] << ' ' << aRow[1] << ' ' << aRow[2] << ' ' << aRow[3]);
