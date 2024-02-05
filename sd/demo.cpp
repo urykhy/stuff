@@ -119,10 +119,10 @@ int main(int argc, char** argv)
     auto sBalancer                 = std::make_shared<SD::Balancer::Engine>(sAsio.service(), sBalancerParams);
 
     auto sRefresh = [&]() {
-        std::vector<SD::Balancer::Entry> sState;
+        std::vector<SD::Entry> sState;
         for (auto& [sName, sServer] : sServers) {
-            auto                sValue = Parser::Json::parse(sServer->m_Etcd->m_Data);
-            SD::Balancer::Entry sTmp;
+            auto      sValue = Parser::Json::parse(sServer->m_Etcd->m_Data);
+            SD::Entry sTmp;
             sTmp.key = sName;
             Parser::Json::from_value(sValue, sTmp);
             sState.push_back(std::move(sTmp));

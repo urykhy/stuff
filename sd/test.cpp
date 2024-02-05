@@ -37,7 +37,7 @@ BOOST_AUTO_TEST_CASE(simple)
     sParams.key        = "notify/instance/a01";
     sParams.ttl        = 2;
     sParams.period     = 1;
-    std::string sValue = R"({"weight": 10})";
+    std::string sValue = R"({"latency": 0.1})";
 
     auto sNotify = std::make_shared<SD::Notify>(m_Asio.service(), sParams, sValue);
     sNotify->start();
@@ -48,7 +48,7 @@ BOOST_AUTO_TEST_CASE(simple)
     BOOST_CHECK_EQUAL(sValue, m_Client.get(sParams.key));
 
     // update value, it must be updated in etcd too
-    sValue = R"({"weight": 10, "idle": 5})";
+    sValue = R"({"latency": 0.1, "idle": 5})";
     sNotify->update(sValue);
     std::this_thread::sleep_for(2s);
     BOOST_CHECK_EQUAL(sValue, m_Client.get(sParams.key));
@@ -99,7 +99,7 @@ BOOST_AUTO_TEST_CASE(notify_weight)
     const std::string sValue = m_Client.get(sParams.notify.key);
     BOOST_TEST_MESSAGE("etcd value: " << sValue);
     auto sRoot = Parser::Json::parse(sValue);
-    BOOST_CHECK_CLOSE(sRoot["weight"].asDouble(), 1 / sNotify.info().latency, 5 /* % */);
+    BOOST_CHECK_CLOSE(sRoot["latency"].asDouble(), sNotify.info().latency, 5 /* % */);
 }
 BOOST_AUTO_TEST_SUITE_END()
 
@@ -121,10 +121,10 @@ struct WithBreaker : WithClient
 
     void init_state()
     {
-        std::vector<SD::Balancer::Entry> sData{
-            {.key = "a", .weight = 1, .rps = 0.3},
-            {.key = "b", .weight = 1, .rps = 0.3},
-            {.key = "c", .weight = 1, .rps = 0.3},
+        std::vector<SD::Entry> sData{
+            {.key = "a", .rps = 0.3, .weight = 1},
+            {.key = "b", .rps = 0.3, .weight = 1},
+            {.key = "c", .rps = 0.3, .weight = 1},
         };
         apply_weights(sData, [this]() {
             m_Balancer->m_State.m_Info[0]->reset(0, 1.0); // latency, success_rate
@@ -134,11 +134,11 @@ struct WithBreaker : WithClient
     }
 
     template <class T>
-    void apply_weights(const std::vector<SD::Balancer::Entry>& aData, T&& aTune)
+    void apply_weights(const std::vector<SD::Entry>& aData, T&& aTune)
     {
         // ajust and print weights
         auto sStep = [&]() {
-            std::vector<SD::Balancer::Entry> sTmpData{aData}; // force tmp copy
+            std::vector<SD::Entry> sTmpData{aData}; // force tmp copy
             m_Balancer->update(std::move(sTmpData));
             {
                 auto sState = m_Balancer->state();
@@ -186,8 +186,8 @@ BOOST_FIXTURE_TEST_CASE(balance_by_weight, WithClient)
     sBalancerParams.prefix = "notify/instance/";
     auto sBalancer         = std::make_shared<SD::Balancer::Engine>(m_Asio.service(), sBalancerParams);
 
-    const double                     TOTALW = 1 + 3 + 6;
-    std::vector<SD::Balancer::Entry> sData{{"a", 1}, {"b", 3}, {"c", 6}};
+    const double           TOTALW = 1 + 3 + 6;
+    std::vector<SD::Entry> sData{{.key = "a", .weight = 1}, {.key = "b", .weight = 3}, {.key = "c", .weight = 6}};
     sBalancer->update(std::move(sData));
 
     std::map<std::string, size_t> sStat;
@@ -229,7 +229,7 @@ BOOST_AUTO_TEST_CASE(with_client_latency)
 {
     WithBreaker sFixture;
 
-    std::vector<SD::Balancer::Entry> sData{{"a", 1}, {"b", 1}, {"c", 1}};
+    std::vector<SD::Entry> sData{{.key = "a", .weight = 1}, {.key = "b", .weight = 1}, {.key = "c", .weight = 1}};
     sFixture.apply_weights(sData, [&sFixture]() {
         sFixture.m_Balancer->m_State.m_Info[0]->reset(1.0, 1.0); // latency, success_rate
         sFixture.m_Balancer->m_State.m_Info[1]->reset(1.5, 1.0);
@@ -252,8 +252,8 @@ BOOST_AUTO_TEST_CASE(with_client_latency)
 }
 BOOST_AUTO_TEST_CASE(with_session)
 {
-    WithBreaker                      sFixture;
-    std::vector<SD::Balancer::Entry> sData{{"a", 10}, {"b", 10}, {"c", 10}};
+    WithBreaker            sFixture;
+    std::vector<SD::Entry> sData{{.key = "a", .weight = 10}, {.key = "b", .weight = 10}, {.key = "c", .weight = 10}};
     sFixture.apply_weights(sData, [&sFixture]() {
         sFixture.m_Balancer->m_State.m_Info[0]->reset(0.0, 1.0); // latency, success_rate
         sFixture.m_Balancer->m_State.m_Info[1]->reset(0.0, 1.0);

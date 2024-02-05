@@ -6,9 +6,10 @@
 
 #include <boost/asio/steady_timer.hpp>
 
+#include "Entry.hpp"
+
 #include <etcd/Etcd.hpp>
 #include <hash/Ring.hpp>
-#include <parser/Json.hpp>
 #include <prometheus/Metrics.hpp>
 #include <time/Meter.hpp>
 #include <unsorted/Ewma.hpp>
@@ -27,32 +28,6 @@ namespace SD::Balancer {
         bool                 use_circuit_breaker = true;
         bool                 second_chance       = true;
         std::string          metrics_tags        = {};
-    };
-
-    struct Entry
-    {
-        std::string key;
-        double      weight   = 0;
-        double      rps      = 0;
-        uint32_t    threads  = 1;
-        std::string location = {};
-
-        void from_json(const ::Json::Value& aJson)
-        {
-            Parser::Json::from_object(aJson, "weight", weight);
-            Parser::Json::from_object(aJson, "rps", rps);
-            Parser::Json::from_object(aJson, "threads", threads);
-            Parser::Json::from_object(aJson, "location", location);
-            // TODO: success_rate ?
-        }
-        double latency() const
-        {
-            return threads / weight;
-        }
-        double utilization() const
-        {
-            return rps / weight;
-        }
     };
 
     class ByWeight;
@@ -162,12 +137,12 @@ namespace SD::Balancer {
             const double sPreviousWeight = m_LastWeight > 0 ? m_LastWeight : aEntry.weight;
             double       sWeight         = aEntry.weight;
             // BOOST_TEST_MESSAGE("adjust " << aEntry.key << " success_rate " << sEWMA.success_rate << ", latency " << sEWMA.latency);
-            if (m_Params.use_client_latency and sEWMA.latency > aEntry.latency()) {
+            if (m_Params.use_client_latency and sEWMA.latency > aEntry.latency) {
                 double sClientWeight = aEntry.threads / sEWMA.latency;
                 sWeight              = std::max(sClientWeight, sWeight * LOSS_MAX);
             }
-            if (m_Params.use_server_rps and aEntry.utilization() > UTIL_MAX) {
-                double sUtil = std::min(aEntry.utilization(), 1.);
+            if (m_Params.use_server_rps and aEntry.utilization > UTIL_MAX) {
+                double sUtil = std::min(aEntry.utilization, 1.);
                 sWeight *= (1. + UTIL_MAX - sUtil);
             }
             if (sEWMA.success_rate < 0.95) {

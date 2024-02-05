@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Entry.hpp"
 #include "Notify.hpp"
 
 #include <format/Json.hpp>
@@ -41,13 +42,13 @@ namespace SD {
 
         std::string format_i()
         {
-            Format::Json::Value sJson(::Json::objectValue);
-            auto [sLatency, sRPS, sSuccessRate] = info_i();
-            Format::Json::write(sJson, "weight", m_Params.threads / sLatency);
-            Format::Json::write(sJson, "rps", sRPS);
-            Format::Json::write(sJson, "threads", m_Params.threads);
-            Format::Json::write(sJson, "location", m_Params.location);
-            return Format::Json::to_string(sJson, false /* indent */);
+            const auto [sLatency, sRPS, sSuccessRate] = info_i();
+            Entry sEntry;
+            sEntry.latency  = sLatency;
+            sEntry.rps      = sRPS;
+            sEntry.threads  = m_Params.threads;
+            sEntry.location = m_Params.location;
+            return Format::Json::to_string(sEntry.to_json(), false /* indent */);
         }
 
         static int relative(double a, double b)
