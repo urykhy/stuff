@@ -180,6 +180,29 @@ struct WithBreaker : WithClient
 };
 
 BOOST_AUTO_TEST_SUITE(balancer)
+BOOST_AUTO_TEST_CASE(ewma)
+{
+    Util::Ewma sSlow(0.95, 0.1); // start with 0.1 latency
+    Util::Ewma sFast(0.95 * 0.75, 0.1);
+    Util::EwmaRps sRPS(0.95, 0.1);
+
+    for (int i = 0; i < 5; i++)
+    {
+        sSlow.add(0.2); // latency 0.2 now
+        sFast.add(0.2);
+        sRPS.add(i, 0.2, true);
+    }
+    BOOST_CHECK(sSlow.estimate() < sFast.estimate());
+    BOOST_TEST_MESSAGE("estimate1: " << sSlow.estimate() << "/" << sFast.estimate() << "; ewma rps: " << sRPS.estimate().latency);
+
+    for (int i = 5; i < 10; i++)
+    {
+        sSlow.add(0.1); // latency 0.1 again
+        sFast.add(0.1);
+        sRPS.add(i, 0.1, true);
+    }
+    BOOST_TEST_MESSAGE("estimate2: " << sSlow.estimate() << "/" << sFast.estimate() << "; ewma rps: " << sRPS.estimate().latency);
+}
 BOOST_FIXTURE_TEST_CASE(balance_by_weight, WithClient)
 {
     SD::Balancer::Params sBalancerParams;

@@ -25,7 +25,8 @@ namespace Util {
         mutable std::mutex                   m_Mutex;
         typedef std::unique_lock<std::mutex> Lock;
 
-        Ewma m_Latency;
+        Ewma m_SlowLatency;
+        Ewma m_FastLatency;
         Ewma m_RPS;
         Ewma m_SuccessRate;
 
@@ -43,7 +44,8 @@ namespace Util {
         };
 
         EwmaRps(double aFactor = 0.95, double aLatency = 0, double aSuccessRate = 1.0)
-        : m_Latency(aFactor, aLatency)
+        : m_SlowLatency(aFactor, aLatency)
+        , m_FastLatency(aFactor * 0.75, aLatency)
         , m_RPS(aFactor, 0)
         , m_SuccessRate(aFactor, aSuccessRate)
         {
@@ -56,7 +58,8 @@ namespace Util {
             if (aNow > m_LastUpdateTs) {
                 if (m_Count > 0) {
                     double sTime = aNow - m_LastUpdateTs;
-                    m_Latency.add(m_Elapsed / (double)m_Count);
+                    m_SlowLatency.add(m_Elapsed / (double)m_Count);
+                    m_FastLatency.add(m_Elapsed / (double)m_Count);
                     m_RPS.add(m_Count / sTime);
                     m_SuccessRate.add(m_Success / (double)m_Count);
                 }
@@ -75,12 +78,13 @@ namespace Util {
         Info estimate() const
         {
             Lock lk(m_Mutex);
-            return {m_Latency.estimate(), m_RPS.estimate(), m_SuccessRate.estimate()};
+            return {std::max(m_SlowLatency.estimate(), m_FastLatency.estimate()), m_RPS.estimate(), m_SuccessRate.estimate()};
         }
         void reset(const Info& aInfo)
         {
             Lock lk(m_Mutex);
-            m_Latency.reset(aInfo.latency);
+            m_SlowLatency.reset(aInfo.latency);
+            m_FastLatency.reset(aInfo.latency);
             m_RPS.reset(aInfo.rps);
             m_SuccessRate.reset(aInfo.success_rate);
         }
