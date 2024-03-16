@@ -1,0 +1,13 @@
+# serializer version: 1
+# name: test_ewma
+  0.12262190625000002
+# ---
+# name: test_ewma.1
+  0.18163781564331058
+# ---
+# name: test_ewma.2
+  0.11750439982616213
+# ---
+# name: test_ewma.3
+  0.11499048621319893
+# ---
