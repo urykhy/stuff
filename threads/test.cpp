@@ -4,6 +4,7 @@
 #include <stdlib.h>
 
 #include <chrono>
+#include <future>
 #include <iostream>
 
 #include <boost/asio/coroutine.hpp> // for pipeline::task
@@ -295,3 +296,31 @@ BOOST_AUTO_TEST_CASE(basic)
     h.destroy();
 }
 BOOST_AUTO_TEST_SUITE_END() // Coro
+
+BOOST_AUTO_TEST_SUITE(Async)
+BOOST_AUTO_TEST_CASE(basic)
+{
+    // step 1.
+    auto sFuture = std::async(std::launch::async, []() -> int {
+        sleep(2);
+        return 1;
+    });
+    sleep(1);
+    BOOST_CHECK_EQUAL(sFuture.valid(), true);
+    while (sFuture.wait_for(0us) != std::future_status::ready) {
+        Threads::sleep(0.1);
+        BOOST_TEST_MESSAGE(".");
+    }
+    BOOST_CHECK_EQUAL(sFuture.valid(), true);
+    BOOST_CHECK(sFuture.get() == 1);
+    BOOST_CHECK_EQUAL(sFuture.valid(), false);
+
+    // step 2
+    sFuture = std::async(std::launch::async, []() -> int {
+        sleep(2);
+        return 2;
+    });
+    BOOST_CHECK_EQUAL(sFuture.valid(), true);
+    BOOST_CHECK(sFuture.get() == 2);
+}
+BOOST_AUTO_TEST_SUITE_END()
