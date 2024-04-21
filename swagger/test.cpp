@@ -579,7 +579,7 @@ BOOST_FIXTURE_TEST_CASE(discovery, WithServer)
         auto                 sList = sClient.list("discovery/swagger");
         BOOST_REQUIRE_EQUAL(1, sList.size());
         BOOST_CHECK_EQUAL(sList[0].key, "discovery/swagger/test-service/discovery/1.0/127.0.0.1:3000");
-        BOOST_CHECK_EQUAL(sList[0].value, R"({"location":"test-location","rps":0.001,"threads":1,"weight":10.0})");
+        BOOST_CHECK_EQUAL(sList[0].value, R"({"latency":0.10000000000000001,"location":"test-location","rps":0.001,"threads":1})");
     }
 
     auto sResponse = sClient.get_discovery({});
