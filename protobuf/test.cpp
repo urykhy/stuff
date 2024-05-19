@@ -222,6 +222,12 @@ BOOST_AUTO_TEST_CASE(person)
     // print in json
     BOOST_TEST_MESSAGE("json: " << Format::Json::to_string(sCustom.to_json()));
     BOOST_TEST_MESSAGE("view: " << Format::Json::to_string(sView.to_json()));
+
+    //
+    pmr_tutorial::Person sFromJson(&sPool);
+    Parser::Json::from_value(sView.to_json(), sFromJson);
+    BOOST_TEST_MESSAGE("from: " << Format::Json::to_string(sFromJson.to_json()));
+    BOOST_CHECK(sView.to_json() == sFromJson.to_json());
 }
 
 #ifdef WITH_REFLECTION

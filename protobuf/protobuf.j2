@@ -7,6 +7,7 @@
 
 #ifdef WITH_JSON
 #include <format/Json.hpp>
+#include <parser/Json.hpp>
 #endif
 
 {%- macro _type(x) %}
@@ -161,6 +162,20 @@ namespace {{ doc.namespace | replace(".", "::") }}
             {%- endfor %}
             return sValue;
         }
+        {%- set x_can_parse_json = (m.fields|map(attribute="cxx_type")|select("equalto","std::string_view")|list|count == 0) %}
+        {%- if x_can_parse_json %}
+        void from_json(const Format::Json::Value& aJson)
+        {
+            using namespace Parser::Json;
+            {%- for f in m.fields %}
+                {%- if f.pmr %}
+                    from_object(aJson, "{{ f.name }}", {{ f.name }}, m_Pool);
+                {%- else %}
+                    from_object(aJson, "{{ f.name }}", {{ f.name }});
+                {%- endif %}
+            {%- endfor %}
+        }
+        {%- endif %}
 #endif
 #ifdef WITH_REFLECTION
         struct ReflectionKey {const char* name = nullptr; uint32_t id = 0;};
