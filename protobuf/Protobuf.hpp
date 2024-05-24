@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stdint.h>
+
 #include <cstring>
 #include <stdexcept>
 #include <string>
@@ -27,19 +29,22 @@ namespace Protobuf {
     {
         EndOfBuffer()
         : std::runtime_error("End of buffer")
-        {}
+        {
+        }
     };
     struct BadTag : std::runtime_error
     {
         BadTag()
         : std::runtime_error("Bad tag")
-        {}
+        {
+        }
     };
     struct BadInput : std::runtime_error
     {
         BadInput()
         : std::runtime_error("Bad input")
-        {}
+        {
+        }
     };
 
     enum Action
@@ -65,12 +70,14 @@ namespace Protobuf {
         FieldInfo(uint64_t aTag)
         : tag((uint8_t)(aTag & 0x07))
         , id(aTag >> 3)
-        {}
+        {
+        }
 
         FieldInfo(uint8_t aTag, uint64_t aId)
         : tag(aTag)
         , id(aId)
-        {}
+        {
+        }
 
         int decodeSize() const
         {
@@ -176,7 +183,8 @@ namespace Protobuf {
     public:
         Reader(std::string_view aBuffer)
         : m_Buffer(aBuffer)
-        {}
+        {
+        }
 
         // get destination in argument
         template <class T>
@@ -265,7 +273,8 @@ namespace Protobuf {
     public:
         Writer(std::string& aStr)
         : m_Buffer(aStr)
-        {}
+        {
+        }
 
         template <class T>
         typename std::enable_if<

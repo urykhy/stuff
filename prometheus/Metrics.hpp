@@ -34,7 +34,7 @@ namespace Prometheus {
                             aName.push_back(',');
                         aName.append(aStr);
                     },
-                    [&aName](const std::pair<auto, auto>& aTag) {
+                    [&aName](const /*std::pair<auto, auto>*/ auto& aTag) {
                         if (aName.back() != '{')
                             aName.push_back(',');
                         aName.append(aTag.first);

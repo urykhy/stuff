@@ -8,6 +8,10 @@
 
 #include <exprtk.hpp>
 
+extern template class exprtk::symbol_table<double>;
+extern template class exprtk::expression<double>;
+extern template class exprtk::parser<double>;
+
 namespace Protobuf {
 
     struct ExprTK

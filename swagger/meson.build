@@ -34,8 +34,11 @@ swagger_ui_tar = custom_target('swagger_ui_tar', output: 'swagger_ui.tar', comma
 
 subdir('asio_http_lib')
 
+xt_lib = static_library('xt', 'xt.cpp', dependencies : [], include_directories : includes)
+
 a = executable('a.out', 'test.cpp', api_src, swagger_ui_tar,
                dependencies : [boost, threads, json, log4cxx, curl, uuid, fmt, otlp_dep, ssl, nghttp2, lz4, xxh, asio_dep],
+               link_with: [xt_lib],
                include_directories : includes,
                cpp_pch : 'pch/test_pch.hpp')
 test('basic', a, args : ['-l', 'all'])

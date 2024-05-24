@@ -7,6 +7,13 @@
 #include "{{ x_hpp_name }}"
 #include <regex>
 
+extern template class std::basic_regex<char>;
+extern template bool std::regex_match(
+    const std::string&,
+    const std::regex&,
+    std::regex_constants::match_flag_type
+  );
+
 #include <container/Algorithm.hpp>
 #include <container/Session.hpp>
 #include <exception/Error.hpp>
