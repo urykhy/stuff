@@ -1,5 +1,7 @@
 #pragma once
 
+#include <pthread.h>
+
 #include <atomic>
 #include <thread>
 
@@ -24,6 +26,28 @@ namespace Threads {
 
     private:
         std::atomic<bool> locked{false};
+    };
+
+    class Adaptive
+    {
+        pthread_mutex_t m_Mutex;
+
+    public:
+        Adaptive()
+        {
+            pthread_mutexattr_t sAttr;
+            pthread_mutexattr_init(&sAttr);
+            pthread_mutexattr_settype(&sAttr, PTHREAD_MUTEX_ADAPTIVE_NP);
+            pthread_mutex_init(&m_Mutex, &sAttr);
+        }
+        void lock()
+        {
+            pthread_mutex_lock(&m_Mutex);
+        }
+        void unlock()
+        {
+            pthread_mutex_unlock(&m_Mutex);
+        }
     };
 
 } // namespace Threads

@@ -2,6 +2,7 @@
 #include <sys/time.h>
 
 #include <mutex>
+#include <shared_mutex>
 
 #include "Spinlock.hpp"
 
@@ -17,8 +18,24 @@ static void BM_Test(benchmark::State& state)
     }
 }
 
+template <class T>
+static void BM_STest(benchmark::State& state)
+{
+    uint64_t sCounter = 0;
+    static T sMutex;
+    for (auto _ : state) {
+        sMutex.lock_shared();
+        benchmark::DoNotOptimize(sCounter++);
+        sMutex.unlock_shared();
+    }
+}
+
 BENCHMARK_TEMPLATE(BM_Test, std::mutex)->Threads(1)->Threads(4)->Threads(12);
+BENCHMARK_TEMPLATE(BM_Test, std::shared_mutex)->Threads(1)->Threads(4)->Threads(12);
+BENCHMARK_TEMPLATE(BM_STest, std::shared_mutex)->Threads(1)->Threads(4)->Threads(12);
+BENCHMARK_TEMPLATE(BM_Test, std::timed_mutex)->Threads(1)->Threads(4)->Threads(12);
 BENCHMARK_TEMPLATE(BM_Test, Threads::Spinlock)->Threads(1)->Threads(4)->Threads(12);
+BENCHMARK_TEMPLATE(BM_Test, Threads::Adaptive)->Threads(1)->Threads(4)->Threads(12);
 
 /*
 some results for i5-8400 (6 core, no HT)
