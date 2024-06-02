@@ -1,104 +1,83 @@
 #!/usr/bin/env python3
 
-#
-# Licensed under terms of JSON license
-# http://www.json.org/license.html
-# (c) urykhy
-#
+# need python3-mysqldb python3-sqlalchemy-ext
 
-import os, sys, string, codecs, re
-import zipfile,shutil
-from elasticsearch import Elasticsearch
-from elasticsearch import helpers
+import os
+import sys
 
-ela_host="elasticsearch.elk"
-ela_index="fb2-index"
-ela_doc="fb2"
-timeout=600
-threads=6
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.dirname(SCRIPT_DIR))
 
-files_to_process = 0
-files_read = 0
+import zipfile
+import time
+from flibusta.common import *
+
 
 mirror_path = "/u03/mirror/fb2.Flibusta.Net"
+init_logger()
+logger = logging.getLogger(__name__)
 
-from multiprocessing.dummy import Pool
-pool = Pool(processes=threads)
+engine = engine()
 
-def index_name(f):
-    m = re.search('.*(-\d+-\d+)\.inp', f)
-    return ela_index + m.group(1)
-
-def new_index(es, name):
-    es.indices.delete(index=name, ignore=[400, 404])
-    es.indices.create(index=name, ignore=400, body={
-        'settings': {
-            'number_of_shards': 1,
-        },
-        "mappings": {
-            ela_doc : {
-                '_source': {'enabled': 'true'},
-                '_all':    {'enabled': 'false'},
-                'properties': {
-                    'author': {'type': 'string'},
-                    'title': {'type': 'string'},
-                    'id':    {'type': 'long', 'index' : 'not_analyzed'},
-                    'size':  {'type': 'long', 'index' : 'not_analyzed'},
-                    'date':  {'type': 'date', 'index' : 'not_analyzed', 'format': 'yyyy-MM-dd'}
-                }
-            }
-        }
-    })
 
 def indexer(fname, books):
-    index_name_ = index_name(fname)
-    actions = []
-    for a in books:
-        [author, title, id, size, date] = a
-        doc = {
-                "_id"    : int(id),
-                'author' : author,
-                'title'  : title,
-                'id'     : int(id),
-                'size'   : int(size),
-                'date'   : date
-        }
-        actions.append(doc)
-    es = Elasticsearch([ela_host], timeout=timeout)
-    new_index(es, index_name_)
-    helpers.bulk(es, actions, index=index_name_, doc_type=ela_doc)
-    global files_read
-    files_read += 1
-    progress = files_read / float(files_to_process)
-    print ("\rIndexing: [{0:50s}] {1:.1f}%".format('#' * int(progress * 50), progress * 100), end="")
+    with Session(engine) as session:
+        start_ts = time.time()
+        for batch in batched(books, 1000):
+            ids = []
+            for a in batch:
+                [author, title, id, size, date] = a
+                ids.append(id)
+            already = Book.already(session, ids)
 
-def read_inp(z,fname):
-    books = []
+            for a in batch:
+                [author, title, id, size, date] = a
+                # FIXME: cut tail on space, ise field size from Book
+                if len(author) > 127:
+                    logger.debug(f"too long author: {author}")
+                    author = author[:127]
+                if len(title) > 256:
+                    logger.debug(f"too long title: {author}")
+                    title = title[255]
+                if id not in already:
+                    b = Book(id=id, author=author, title=title, size=size, date=date)
+                    session.add(b)
+        session.commit()
+        logger.info(f"{fname} processed in {time.time() - start_ts:.2f} seconds")
+
+
+def read_inp(z, fname):
     with z.open(fname) as f:
+        books = []
         for l in f:
-            l=l.strip().decode(sys.stdin.encoding)
+            l = l.strip().decode(sys.stdin.encoding)
             # http://forum.home-lib.net/index.php?showtopic=16
             # AUTHOR;GENRE;TITLE;SERIES;SERNO;LIBID;SIZE;FILE;DEL;EXT;DATE;LANG;LIBR ATE;KEYWORDS;
-            (au, genre, name, seq, _None, id, size, _None, f_del, _None, date, _None) = l.split("\04",11)
+            (
+                au,
+                genre,
+                name,
+                seq,
+                _None,
+                id,
+                size,
+                _None,
+                f_del,
+                _None,
+                date,
+                _None,
+            ) = l.split("\04", 11)
             if f_del == "0":
                 au = au.rstrip(":,-")
-                au = au.replace(',',", ")
+                au = au.replace(",", ", ")
                 if len(seq):
-                    books.append((au, seq + '/' + name, id, size, date))
+                    books.append((au, seq + "/" + name, id, size, date))
                 else:
                     books.append((au, name, id, size, date))
-    pool.apply_async(indexer, [fname, books])
+        indexer(fname, books)
+
 
 with zipfile.ZipFile(mirror_path + "/flibusta_fb2_local.inpx") as zfile:
     for info in zfile.infolist():
-        if info.filename.endswith('.inp'):
-            files_to_process+=1
-    for info in zfile.infolist():
-        if info.filename.endswith('.inp'):
+        if info.filename.endswith(".inp"):
             read_inp(zfile, info.filename)
-pool.close()
-pool.join()
-
-print("done!")
-
-

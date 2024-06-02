@@ -57,7 +57,7 @@
     function run_search() {
         var arg = ""
         $('input[type=text]').each(function(){
-            arg = arg + $(this)[0].id + "=" + $(this)[0].value + "&";
+            arg = arg + $(this)[0].id + "=" + encodeURIComponent($(this)[0].value) + "&";
         });
         arg = arg + "wild=" + ($('#wild').is(":checked") ? "1" : "0");
         t.ajax.url('search?' + arg).load();
