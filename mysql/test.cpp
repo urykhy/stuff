@@ -288,91 +288,61 @@ BOOST_AUTO_TEST_SUITE_END()
 BOOST_AUTO_TEST_SUITE(TaskQueue)
 BOOST_AUTO_TEST_CASE(simple)
 {
-    size_t sCount = 0;
     using namespace std::chrono_literals;
-    struct TestHandler : MySQL::TaskQueue::HandlerFace
-    {
-        size_t& m_Count;
-        TestHandler(size_t& aCount)
-        : m_Count(aCount)
-        {
-        }
 
-        bool process(const MySQL::TaskQueue::Task& task, MySQL::TaskQueue::updateCookie&& api) override
-        {
-            BOOST_TEST_MESSAGE("process task " << task.task);
-            m_Count++;
-            return true;
-        }
-        void report(const char* e) noexcept override
-        {
-            BOOST_TEST_MESSAGE("exception: " << e);
-        }
-        virtual ~TestHandler() {}
-    };
-    TestHandler sHandler(sCount);
-
-    MySQL::TaskQueue::Config sQueueCfg;
+    MySQL::TaskQueue::Config sQueueCfg{.reverse = true};
     MySQL::Config            sCfg = MySQL::Config{.database = "test"};
     MySQL::Connection        sConnection(sCfg);
 
     sConnection.Query("TRUNCATE TABLE task_queue");
     sConnection.Query("INSERT INTO task_queue(task) VALUES ('one'),('two'),('three')");
 
-    MySQL::TaskQueue::Manager sQueue(sQueueCfg, &sConnection, &sHandler);
-    Threads::Group            sGroup;
-    sQueue.start(sGroup);
+    MySQL::TaskQueue::Manager sQueue(sQueueCfg, &sConnection);
+    BOOST_CHECK_EQUAL(3, sQueue.size());
 
-    std::this_thread::sleep_for(1s);
-    BOOST_CHECK_EQUAL(sCount, 3);
+    const std::vector<std::string> sExpected{"three", "two", "one"};
+    std::vector<std::string>       sActual;
+    while (true) {
+        auto sTask = sQueue.get("test-worker");
+        if (!sTask)
+            break;
+        sActual.push_back(sTask->task);
+        BOOST_TEST_MESSAGE("process task " << sTask->task);
+    }
+    BOOST_CHECK_EQUAL_COLLECTIONS(sExpected.begin(), sExpected.end(), sActual.begin(), sActual.end());
 }
+
 BOOST_AUTO_TEST_CASE(mock)
 {
-    struct TestHandler : MySQL::TaskQueue::HandlerFace
-    {
-        size_t& m_Count;
-        TestHandler(size_t& aCount)
-        : m_Count(aCount)
-        {
-        }
-
-        bool process(const MySQL::TaskQueue::Task& task, MySQL::TaskQueue::updateCookie&& api) override
-        {
-            BOOST_CHECK_EQUAL(task.id, 12);
-            BOOST_CHECK_EQUAL(task.task, "mock task");
-            BOOST_CHECK_EQUAL(*task.cookie, "existing cookie");
-            api("updated cookie");
-            m_Count++;
-            return true;
-        }
-        void report(const char* e) noexcept override
-        {
-            BOOST_TEST_MESSAGE("exception: " << e);
-        }
-        virtual ~TestHandler() {}
-    };
-    size_t      sCount = 0;
-    TestHandler sHandler(sCount);
-
     MySQL::Mock::SqlSet sExpectedSQL{
         {"BEGIN"},
-        {"SELECT id, task, worker, cookie FROM task_queue WHERE status = 'new' OR (status = 'started' AND updated < DATE_SUB(NOW(), INTERVAL 1 HOUR)) ORDER BY id ASC LIMIT 1 FOR UPDATE",
-         MySQL::Mock::Rows{.rows = {{"12", "mock task", "", "existing cookie"}}, .meta = {"id", "task", "worker", "cookie"}}},
+        {"SELECT id, task, worker, cookie FROM task_queue WHERE status = 'new' OR (status = 'started' AND updated < DATE_SUB(NOW(), INTERVAL 1 HOUR)) ORDER BY id ASC LIMIT 1 FOR UPDATE SKIP LOCKED",
+         MySQL::Mock::Rows{.rows = {{"12", "mock task", "test", "existing cookie"}}, .meta = {"id", "task", "worker", "cookie"}}},
         {"UPDATE task_queue SET status = 'started', worker = 'test' WHERE id = 12"},
         {"COMMIT"},
-        {"UPDATE task_queue SET cookie = 'updated cookie' WHERE id = 12"},
-        {"UPDATE task_queue SET status = 'done' WHERE id = 12"},
+        {"UPDATE task_queue SET cookie = 'updated cookie' WHERE id = 12 AND status IN ('started')"},
+        {"UPDATE task_queue SET status = 'done' WHERE id = 12 AND status IN ('started','done')"},
         {"BEGIN"},
-        {"SELECT id, task, worker, cookie FROM task_queue WHERE status = 'new' OR (status = 'started' AND updated < DATE_SUB(NOW(), INTERVAL 1 HOUR)) ORDER BY id ASC LIMIT 1 FOR UPDATE"},
+        {"SELECT id, task, worker, cookie FROM task_queue WHERE status = 'new' OR (status = 'started' AND updated < DATE_SUB(NOW(), INTERVAL 1 HOUR)) ORDER BY id ASC LIMIT 1 FOR UPDATE SKIP LOCKED"},
         {"COMMIT"}};
     MySQL::Mock sMock(sExpectedSQL);
 
     MySQL::TaskQueue::Config  sQueueCfg;
-    MySQL::TaskQueue::Manager sQueue(sQueueCfg, sMock, &sHandler);
-    Threads::Group            sGroup;
-    sQueue.start(sGroup);
+    MySQL::TaskQueue::Manager sQueue(sQueueCfg, sMock);
 
-    std::this_thread::sleep_for(100ms);
+    size_t sCount = 0;
+    while (true) {
+        auto sTask = sQueue.get("test");
+        if (!sTask)
+            break;
+
+        BOOST_CHECK_EQUAL(sTask->id, 12);
+        BOOST_CHECK_EQUAL(sTask->task, "mock task");
+        BOOST_CHECK_EQUAL(sTask->cookie.value(), "existing cookie");
+        sQueue.update(sTask->id, "updated cookie");
+        sQueue.done(sTask->id, true);
+        sCount++;
+    }
     BOOST_CHECK_EQUAL(sCount, 1);
 }
 BOOST_AUTO_TEST_SUITE_END()
