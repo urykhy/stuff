@@ -6,6 +6,7 @@
 #include "Expiration.hpp"
 #include "LFU.hpp"
 #include "LRU.hpp"
+#include "Redis.hpp"
 #include "S_LRU.hpp"
 
 #define FILE_NO_ARCHIVE
@@ -138,5 +139,16 @@ BOOST_AUTO_TEST_CASE_TEMPLATE(zipf, T, CacheTypes)
             sCache.Put(sVal, 0);
     }
     BOOST_TEST_MESSAGE("Got " << sHits << " hits from " << CALLS << " requests, hit rate: " << sHits * 100 / double(CALLS) << '%');
+}
+BOOST_AUTO_TEST_SUITE_END()
+
+BOOST_AUTO_TEST_SUITE(Redis)
+BOOST_AUTO_TEST_CASE(basic)
+{
+    Cache::Redis::Config  sConfig;
+    Cache::Redis::Manager sRedis(sConfig);
+    sRedis.set("basic", "value");
+    auto sResult = sRedis.get("basic");
+    BOOST_CHECK_EQUAL(*sResult, "value");
 }
 BOOST_AUTO_TEST_SUITE_END()

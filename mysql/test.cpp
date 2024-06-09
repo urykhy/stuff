@@ -4,6 +4,7 @@
 #include <cassert>
 #include <iostream>
 
+#include "Cacheable.hpp"
 #include "Client.hpp"
 #include "Format.hpp"
 #include "MessageQueue.hpp"
@@ -14,6 +15,7 @@
 #include "Upload.hpp"
 
 #include <container/Pool.hpp>
+#include <format/List.hpp>
 #include <time/Meter.hpp>
 #include <time/Time.hpp>
 
@@ -282,6 +284,32 @@ BOOST_AUTO_TEST_CASE(mock)
         BOOST_CHECK_EQUAL(CR_SERVER_LOST, e.m_Errno);
         BOOST_CHECK_EQUAL(MySQL::Error::NETWORK, e.decode());
     }
+}
+BOOST_AUTO_TEST_CASE(cacheable)
+{
+    MySQL::Connection c(cfg);
+    MySQL::Cacheable  sCache({}, &c);
+
+    MySQL::CacheableQuery sQuery{
+        .table = "salaries",
+        .from  = "2002-07-01",
+        .to    = "2002-07-10",
+        .where = "emp_no BETWEEN 492590 AND 499961",
+        .query = "SELECT from_date, sum(salary) FROM {0} WHERE from_date IN({1}) AND {2} GROUP BY 1",
+        .parse = [](const MySQL::Row& aRow) { return std::pair(aRow[0].as_string(), aRow[1].as_string()); }};
+
+    // run query and cache
+    Time::XMeter sMeter;
+    auto         sResp = sCache(sQuery);
+    BOOST_CHECK_EQUAL(9, sResp.size());
+    BOOST_CHECK_EQUAL("1303398", sResp.find("2002-07-02")->second);
+    BOOST_TEST_MESSAGE("elapsed " << sMeter.duration().count() / 1000 / 1000.0 << " ms");
+
+    // ensure response cached
+    auto [sMissing, sCached] = sCache.prepare(sQuery);
+    BOOST_CHECK_EQUAL(0, sMissing.size());
+    BOOST_CHECK_EQUAL(9, sCached.size());
+    BOOST_CHECK_EQUAL("1303398", sCached.find("2002-07-02")->second);
 }
 BOOST_AUTO_TEST_SUITE_END()
 

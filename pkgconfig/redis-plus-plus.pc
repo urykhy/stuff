@@ -1,0 +1,6 @@
+Name: redis-plus-plus
+Description: C++ client library for Redis
+URL: https://github.com/sewenew/redis-plus-plus
+Version: 1.0
+Libs: -L/home/ury/tmp/redispp/usr/local/lib -lredis++ -lhiredis
+Cflags: -I/home/ury/tmp/redispp/usr/local/include

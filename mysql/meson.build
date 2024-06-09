@@ -8,8 +8,9 @@ cctz      = dependency('cctz')
 mysql     = dependency('mysqlclient')
 fmt       = dependency('fmt')
 log4cxx   = dependency('liblog4cxx')
+redispp   = dependency('redis-plus-plus')
 
-a = executable('a.out', 'test.cpp', dependencies : [boost, threads, cctz, mysql, fmt, log4cxx], include_directories : includes)
+a = executable('a.out', 'test.cpp', dependencies : [boost, threads, cctz, mysql, fmt, log4cxx, redispp], include_directories : includes)
 test('basic', a, args : ['-l', 'all'])
 
 # need tool: https://github.com/golang-migrate/migrate
