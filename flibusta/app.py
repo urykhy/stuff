@@ -35,6 +35,7 @@ class App(object):
     _cp_config = {
         "tools.staticdir.on": True,
         "tools.staticdir.dir": _home,
+        "request.show_tracebacks": True,
     }
 
     def __init__(self):
