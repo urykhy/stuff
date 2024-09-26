@@ -9,6 +9,21 @@
 
 #include <boost/asio/coroutine.hpp> // for pipeline::task
 
+// for boost_cpp20 test
+#include <boost/asio/co_spawn.hpp>
+#include <boost/asio/detached.hpp>
+
+// for boost_generator test
+#include <boost/asio/experimental/coro.hpp>
+
+// for timer test
+#include <boost/asio/steady_timer.hpp>
+#include <boost/asio/this_coro.hpp>
+
+// new timer test
+#include <boost/asio/as_tuple.hpp>
+#include <boost/asio/experimental/awaitable_operators.hpp>
+
 #include "Asio.hpp"
 #include "Coro.hpp"
 #include "FairQueueExecutor.hpp"
@@ -294,6 +309,102 @@ BOOST_AUTO_TEST_CASE(basic)
     if (promise.exception_ != nullptr)
         BOOST_TEST_MESSAGE("exit with exception");
     h.destroy();
+}
+
+// boost + cpp20 coroutines
+using boost::asio::awaitable;
+using boost::asio::co_spawn;
+using boost::asio::detached;
+
+awaitable<void> cpp20_step2()
+{
+    BOOST_TEST_MESSAGE("step2");
+    co_return;
+}
+
+awaitable<void> cpp20_step1()
+{
+    BOOST_TEST_MESSAGE("step1 enter");
+    co_await cpp20_step2();
+    BOOST_TEST_MESSAGE("step1 exit");
+}
+
+BOOST_AUTO_TEST_CASE(boost_cpp20)
+{
+    boost::asio::io_context sContext(1);
+    co_spawn(sContext, cpp20_step1(), detached);
+    BOOST_TEST_MESSAGE("io context enter");
+    sContext.run();
+    BOOST_TEST_MESSAGE("io context exit");
+}
+
+boost::asio::experimental::generator<int> cpp20_gen2(boost::asio::any_io_executor exec)
+{
+    int i = 5;
+    while (i >= 0)
+        co_yield i--;
+}
+
+awaitable<void> cpp20_gen1()
+{
+    auto sGen = cpp20_gen2(co_await boost::asio::this_coro::executor);
+    while (auto i = co_await sGen.async_resume(boost::asio::use_awaitable)) {
+        BOOST_TEST_MESSAGE(*i);
+    }
+    co_return;
+}
+
+BOOST_AUTO_TEST_CASE(boost_generator)
+{
+    boost::asio::io_context sContext(1);
+    co_spawn(sContext, cpp20_gen1(), detached);
+    sContext.run();
+}
+
+awaitable<void> cpp20_timer(const std::string& aName)
+{
+    using namespace std::chrono_literals;
+    using boost::asio::use_awaitable;
+    using boost::asio::this_coro::executor;
+
+    boost::asio::steady_timer sTimer(co_await executor);
+    for (int i = 0; i < 5; i++) {
+        BOOST_TEST_MESSAGE(aName << " " << i);
+        sTimer.expires_from_now(100ms);
+        co_await sTimer.async_wait(use_awaitable);
+    }
+}
+
+BOOST_AUTO_TEST_CASE(boost_timer)
+{
+    boost::asio::io_context sContext(1);
+    co_spawn(sContext, cpp20_timer("first"), detached);
+    co_spawn(sContext, cpp20_timer("second"), detached);
+    sContext.run();
+}
+
+// copy paste from
+// https://stackoverflow.com/questions/76922347/use-error-codes-with-c20-coroutines-i-e-awaitables-with-boost-asio
+
+boost::asio::awaitable<void> timer2(auto aDuration)
+{
+    namespace asio = boost::asio;
+    auto [ec]      = co_await asio::steady_timer{
+        co_await asio::this_coro::executor,
+        aDuration}
+                    .async_wait(as_tuple(asio::use_awaitable));
+    BOOST_TEST_MESSAGE("Wait for " << (aDuration / 1.s) << "s: " << ec.message());
+};
+
+BOOST_AUTO_TEST_CASE(boost_timer2)
+{
+    namespace asio = boost::asio;
+    using namespace std::chrono_literals;
+    using namespace asio::experimental::awaitable_operators;
+
+    asio::io_context sContext(1);
+    asio::co_spawn(sContext, timer2(1s) || timer2(400ms), asio::detached);
+    sContext.run();
 }
 BOOST_AUTO_TEST_SUITE_END() // Coro
 
