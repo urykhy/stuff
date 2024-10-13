@@ -80,6 +80,12 @@
       },
       "command": "source .envrc && for x in */meson.build; do echo $x; done | awk -F/ '{print $1}' | grep -v http_parser | parallel -I% 'pushd % && meson setup --wipe build && pushd build && ninja -j1'",
       "problemMatcher": []
-    }
+    },
+    {
+      "label": "prepare compile_commands.json",
+      "type": "shell",
+      "command": "cat */build/compile_commands.json | jq -s 'map(.[])' > compile_commands.json",
+      "problemMatcher": []
+    },
   ]
 }
