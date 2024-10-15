@@ -19,6 +19,7 @@
 #include <format/Hex.hpp>
 #include <jaeger/Client.hpp>
 #include <jwt/JWT.hpp>
+#include <mock/fakeit.hpp>
 #include <prometheus/API.hpp>
 #include <resource/Get.hpp>
 #include <resource/Server.hpp>
@@ -380,6 +381,29 @@ BOOST_FIXTURE_TEST_CASE(simple, WithServer)
     Prometheus::Manager::instance().onTimer();
     for (auto& x : Prometheus::Manager::instance().toPrometheus())
         BOOST_TEST_MESSAGE(x);
+}
+BOOST_FIXTURE_TEST_CASE(simple_mock, WithServer)
+{
+    using namespace fakeit;
+    Mock<api::common_1_0::server> sMock;
+    When(Method(sMock, get_enum_i)).Do([](asio_http::asio::io_service&, auto, auto) {
+        api::common_1_0::get_enum_response_200 sResult;
+        sResult.body.push_back("bar");
+        sResult.body.push_back("foo");
+        return sResult;
+    });
+    sMock.get().configure(m_Router);
+
+    api::common_1_0::client        sClient(m_HttpClient, "127.0.0.1:3000");
+    auto                           sResponse = sClient.get_enum({});
+    const std::vector<std::string> sExpected = {{"bar"}, {"foo"}};
+    BOOST_CHECK_EQUAL_COLLECTIONS(sExpected.begin(),
+                                  sExpected.end(),
+                                  sResponse.body.begin(),
+                                  sResponse.body.end());
+
+    Verify(Method(sMock, get_enum_i)).Exactly(1);
+    VerifyNoOtherInvocations(sMock);
 }
 BOOST_FIXTURE_TEST_CASE(kv_with_auth, WithServer)
 {
