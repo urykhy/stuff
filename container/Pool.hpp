@@ -2,6 +2,7 @@
 
 #include <functional>
 #include <list>
+#include <map>
 #include <memory>
 #include <optional>
 
@@ -104,7 +105,8 @@ namespace Container {
         ProducePool(Create aCreate, Check aCheck)
         : m_Create(aCreate)
         , m_Check(aCheck)
-        {}
+        {
+        }
 
         T get()
         {
