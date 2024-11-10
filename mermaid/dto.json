@@ -1,0 +1,10 @@
+{
+    "sql": "std::string",
+    "user": "std::string",
+    "etl": "ETL",
+    "id": "uint64_t",
+    "kafkaMessage": "std::string",
+    "etlList": "std::list<ETL>",
+    "httpRequest": "AsioHttp::Request",
+    "httpResponse": "AsioHttp::Response"
+}

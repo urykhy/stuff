@@ -1,0 +1,30 @@
+#pragma once
+
+{% macro resolve(v, a) -%}
+    {%- if a %}
+        {%- if v-%}const {{ v }}&{% endif -%}
+    {%- else %}
+        {{- v | default("void") -}}
+    {%- endif -%}
+{% endmacro %}
+
+{% for n in dto %}
+    using {{ n }} = {{ dto.get(n) }};
+{%- endfor %}
+
+{% for n in doc.root %}
+{% if 'namespace' in n %}
+namespace {{ n.namespace.NAMESPACENAME }} {
+    {%- for c in n.namespace.contains  recursive %}
+    class I{{ c.class.CLASSNAME }} {
+        {%- for m in c.class.contains  recursive %}
+            {%- if 'method' in m %}
+                virtual {{ resolve(m.method.RETURNTYPE, False) }} {{ m.method.METHODNAME }}({{ resolve(m.method.ARGNAME, True) }}) = 0;
+            {%- endif %}
+        {%- endfor %}
+        virtual ~I{{ c.class.CLASSNAME }}() = default;
+    };
+    {% endfor -%}
+}
+{% endif %}
+{% endfor %}
