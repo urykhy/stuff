@@ -4,6 +4,8 @@ vars:
   topics: |
     t_source
     t_destination
+    py_test1
+    py_test2
   groups: |
     g_basic
     g_transform
