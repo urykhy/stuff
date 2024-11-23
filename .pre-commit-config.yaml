@@ -15,6 +15,13 @@ repos:
       types_or: [c++, c]
       args: ["-p", ".", "--warnings-as-errors", "*"]
       require_serial: true
+    - id: spectral
+      name: spectral
+      entry: spectral
+      language: system
+      files: ^swagger\/api\/.+\.v.*\.yaml$
+      args: ["lint"]
+      require_serial: true
     - id: black
       name: black
       entry: black
