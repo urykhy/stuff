@@ -1,6 +1,7 @@
 Checks:
   -*,
-  readability-identifier-naming
+  readability-identifier-naming,
+  bugprone-*,
 CheckOptions:
  - { key: readability-identifier-naming.ClassCase,              value: CamelCase  }
  - { key: readability-identifier-naming.ClassMethodCase,        value: CamelCase  }
