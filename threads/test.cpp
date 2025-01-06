@@ -24,6 +24,7 @@
 #include <boost/asio/as_tuple.hpp>
 #include <boost/asio/experimental/awaitable_operators.hpp>
 
+// for cache adapter test
 #include "Asio.hpp"
 #include "Coro.hpp"
 #include "FairQueueExecutor.hpp"
@@ -34,6 +35,7 @@
 #include "Pipeline.hpp"
 #include "WaitGroup.hpp"
 
+#include <cache/LRU.hpp>
 #include <unsorted/Random.hpp>
 
 using namespace std::chrono_literals;
@@ -406,6 +408,79 @@ BOOST_AUTO_TEST_CASE(boost_timer2)
     asio::co_spawn(sContext, timer2(1s) || timer2(400ms), asio::detached);
     sContext.run();
 }
+
+BOOST_AUTO_TEST_SUITE(cache)
+BOOST_AUTO_TEST_CASE(refresh)
+{
+    boost::asio::io_service                           sAsio;
+    uint64_t                                          sNowMs        = 123;
+    uint64_t                                          sRefreshCount = 0;
+    Threads::Coro::CacheAdapter<int, int, Cache::LRU> sCache(
+        1000 /* max size */,
+        1000 /* deadline, ms */,
+        [&sNowMs, &sRefreshCount](int a) mutable -> boost::asio::awaitable<std::pair<int, uint64_t>> {
+            sRefreshCount++;
+            using boost::asio::this_coro::executor;
+            boost::asio::steady_timer sTimer(co_await executor);
+            sTimer.expires_from_now(10ms);
+            co_await sTimer.async_wait(boost::asio::use_awaitable);
+            co_return std::pair(a, sNowMs);
+        });
+
+    uint64_t sSumTime = 0;
+    for (int i = 0; i < 10; i++) {
+        boost::asio::co_spawn(
+            sAsio,
+            [&]() -> boost::asio::awaitable<void> {
+                Time::Meter sMeter;
+                int         sValue = co_await sCache.Get(1, sNowMs);
+                sSumTime += sMeter.get().to_ms();
+                BOOST_CHECK_EQUAL(sValue, 1);
+            },
+            boost::asio::detached);
+    }
+    sAsio.run_for(500ms);
+    BOOST_CHECK_EQUAL(sRefreshCount, 1);
+    BOOST_TEST_MESSAGE("ela ms: " << sSumTime);
+    BOOST_CHECK_GT(sSumTime, 98);
+}
+BOOST_AUTO_TEST_CASE(early_refresh)
+{
+    boost::asio::io_service                           sAsio;
+    uint64_t                                          sNowMs        = 1000;
+    uint64_t                                          sRefreshCount = 0;
+    Threads::Coro::CacheAdapter<int, int, Cache::LRU> sCache(
+        1000 /* max size */,
+        1000 /* deadline, ms */,
+        [&sNowMs, &sRefreshCount](int a) mutable -> boost::asio::awaitable<std::pair<int, uint64_t>> {
+            sRefreshCount++;
+            using boost::asio::this_coro::executor;
+            boost::asio::steady_timer sTimer(co_await executor);
+            sTimer.expires_from_now(10ms);
+            co_await sTimer.async_wait(boost::asio::use_awaitable);
+            co_return std::pair(a, sNowMs);
+        });
+    sCache.Put(1, 1, sNowMs);
+    sNowMs += 950; // shift now to hit force early refresh
+
+    uint64_t sSumTime = 0;
+    for (int i = 0; i < 2; i++) {
+        boost::asio::co_spawn(
+            sAsio,
+            [&]() mutable -> boost::asio::awaitable<void> {
+                Time::Meter sMeter;
+                int         sValue = co_await sCache.Get(1, sNowMs);
+                sSumTime += sMeter.get().to_ms();
+                BOOST_CHECK_EQUAL(sValue, 1);
+            },
+            boost::asio::detached);
+    }
+    sAsio.run_for(50ms);
+    BOOST_CHECK_EQUAL(sRefreshCount, 1);
+    BOOST_TEST_MESSAGE("ela ms: " << sSumTime);
+    BOOST_CHECK_LE(sSumTime, 2);
+}
+BOOST_AUTO_TEST_SUITE_END() // cache
 BOOST_AUTO_TEST_SUITE_END() // Coro
 
 BOOST_AUTO_TEST_SUITE(Async)
