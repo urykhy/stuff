@@ -92,28 +92,35 @@ BOOST_AUTO_TEST_CASE(lfu)
     cache.Debug([](auto& x) { if (x.key == 11 ) BOOST_CHECK_EQUAL(x.bucket, 22); });
 
     cache.Debug([](auto& x) { BOOST_TEST_MESSAGE(x.key << ' ' << x.bucket); });
+
+    BOOST_CHECK_NE(cache.Get(11), nullptr);
+    cache.Remove(11);
+    BOOST_CHECK_EQUAL(cache.Get(11), nullptr);
 }
 BOOST_AUTO_TEST_CASE(expiration)
 {
-    Cache::Expiration<int, std::string> e(5, 2);
-    BOOST_CHECK(e.size() == 0);
-    e.Put(1, "test");
-    BOOST_CHECK(e.size() == 1);
-    e.Put(2, "bar");
-    BOOST_CHECK(e.size() == 2);
-    BOOST_CHECK(e.Get(1) != nullptr);
+    uint64_t                                               sNow = 123;
+    Cache::ExpirationAdapter<int, std::string, Cache::LRU> sCache(5 /* max size */, 2 /* deadline */);
+    BOOST_CHECK_EQUAL(sCache.Size(), 0);
+    sCache.Put(1, "test", sNow);
+    BOOST_CHECK_EQUAL(sCache.Size(), 1);
+    sCache.Put(2, "bar", sNow);
+    BOOST_CHECK_EQUAL(sCache.Size(), 2);
+    BOOST_CHECK(sCache.Get(1, sNow) != nullptr);
 
     for (int i = 0; i < 10; i++) {
-        e.Put(i, std::to_string(i));
+        sCache.Put(i, std::to_string(i), sNow);
     }
     for (int i = 0; i < 10; i++) {
         if (i < 5)
-            BOOST_CHECK(e.Get(i) == nullptr);
+            BOOST_CHECK(sCache.Get(i, sNow) == nullptr);
         else
-            BOOST_CHECK(e.Get(i) != nullptr);
+            BOOST_CHECK(sCache.Get(i, sNow) != nullptr);
     }
-    sleep(2);
-    BOOST_CHECK(e.Get(9) == nullptr);
+    BOOST_CHECK_EQUAL(sCache.Size(), 5);
+    sNow += 10;
+    BOOST_CHECK(sCache.Get(9, sNow) == nullptr);
+    BOOST_CHECK_EQUAL(sCache.Size(), 4);
 }
 BOOST_AUTO_TEST_SUITE_END()
 

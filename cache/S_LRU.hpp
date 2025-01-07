@@ -26,15 +26,6 @@ namespace Cache {
         Map          m_Index;
         const size_t m_MaxSize;
 
-        void Remove(const Key& key)
-        {
-            auto i = m_Index.find(key);
-            if (i->second->prot)
-                throw std::logic_error("S_LRU::Remove on protected list");
-            m_Normal.erase(i->second);
-            m_Index.erase(i);
-        }
-
         void Update(const typename Map::iterator& i)
         {
             if (i->second->prot) {
@@ -70,7 +61,8 @@ namespace Cache {
     public:
         explicit S_LRU(size_t aSize)
         : m_MaxSize(aSize)
-        {}
+        {
+        }
 
         const Value* Get(const Key& key)
         {
@@ -93,6 +85,21 @@ namespace Cache {
                 Shrink();
             }
         }
+
+        void Remove(const Key& key)
+        {
+            auto i = m_Index.find(key);
+            if (i->second->prot)
+                throw std::logic_error("S_LRU::Remove on protected list");
+            m_Normal.erase(i->second);
+            m_Index.erase(i);
+        }
+
+        size_t Size() const
+        {
+            return m_Index.size();
+        }
+
 #ifdef BOOST_TEST_MESSAGE
         template <class T>
         void debug(T&& t) const

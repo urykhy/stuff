@@ -68,6 +68,12 @@ namespace Cache {
             return sList.insert(sList.end(), std::move(aEntry));
         }
 
+        void Remove(typename List::iterator aIt)
+        {
+            auto& sOldList = m_Ring[aIt->bucket];
+            sOldList.erase(aIt);
+        }
+
 #ifdef BOOST_TEST_MESSAGE
         template <class T>
         void Debug(T&& t) const
@@ -130,6 +136,15 @@ namespace Cache {
                 m_Keys[aKey] = m_Age.Insert({aKey, aValue}, aCost);
                 Shrink();
             }
+        }
+
+        void Remove(const Key& aKey)
+        {
+            auto sIt = m_Keys.find(aKey);
+            if (sIt == m_Keys.end())
+                return;
+            m_Age.Remove(sIt->second);
+            m_Keys.erase(sIt);
         }
 
         size_t Size() const

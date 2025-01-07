@@ -17,13 +17,6 @@ namespace Cache {
         Map          m_Index;
         const size_t m_MaxSize;
 
-        void Remove(const Key& key)
-        {
-            auto i = m_Index.find(key);
-            m_Lru.erase(i->second);
-            m_Index.erase(i);
-        }
-
         void Update(const typename Map::iterator& i)
         {
             m_Lru.splice(m_Lru.begin(), m_Lru, i->second);
@@ -45,7 +38,8 @@ namespace Cache {
     public:
         explicit LRU(size_t aSize)
         : m_MaxSize(aSize)
-        {}
+        {
+        }
 
         const Value* Get(const Key& key)
         {
@@ -67,6 +61,18 @@ namespace Cache {
                 Insert(key, value);
                 Shrink();
             }
+        }
+
+        void Remove(const Key& key)
+        {
+            auto i = m_Index.find(key);
+            m_Lru.erase(i->second);
+            m_Index.erase(i);
+        }
+
+        size_t Size() const
+        {
+            return m_Index.size();
         }
     };
 } // namespace Cache

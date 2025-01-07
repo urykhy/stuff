@@ -93,13 +93,13 @@ namespace Threads::Coro {
     template <class Key, class Value, template <class, class> class Cache>
     class CacheAdapter
     {
-        struct Info
+        struct Entry
         {
             uint64_t created_at{0}; // ms
             bool     early_refresh{false};
             Value    value = {};
         };
-        Cache<Key, Info> m_Cache;
+        Cache<Key, Entry> m_Cache;
 
         struct WaitData
         {
@@ -192,7 +192,7 @@ namespace Threads::Coro {
                 co_return co_await Wait(aKey);
             }
             if (sPtr->created_at + m_Deadline * 0.9 <= aNow and !sPtr->early_refresh) { // almost expired
-                const_cast<Info*>(sPtr)->early_refresh = true;
+                const_cast<Entry*>(sPtr)->early_refresh = true;
                 co_await SpawnRefresh(aKey);
             }
             co_return sPtr->value;
@@ -200,9 +200,9 @@ namespace Threads::Coro {
 
         void Put(const Key& aKey, const Value& aValue, const uint64_t aNow)
         {
-            m_Cache.Put(aKey, Info{.created_at    = aNow,
-                                   .early_refresh = false,
-                                   .value         = aValue});
+            m_Cache.Put(aKey, Entry{.created_at    = aNow,
+                                    .early_refresh = false,
+                                    .value         = aValue});
         }
 
         // FIXME: cleanup possible stale entries in m_Waiters

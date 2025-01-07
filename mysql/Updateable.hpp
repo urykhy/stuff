@@ -6,6 +6,7 @@
 #include "Client.hpp"
 
 #include <cache/Expiration.hpp>
+#include <cache/LRU.hpp>
 #include <cbor/cbor.hpp>
 #include <file/Interface.hpp>
 
@@ -23,9 +24,15 @@ namespace MySQL {
         using Value = typename Policy::Container::mapped_type;
         using Iter  = typename Policy::Container::iterator;
 
-        static constexpr size_t      MISS_MAX_SIZE = 1000;
-        static constexpr time_t      MISS_TTL      = 10;
-        Cache::Expiration<Key, bool> m_MissMap;
+        static constexpr size_t MISS_MAX_SIZE = 1000;
+        static constexpr time_t MISS_TTL      = 10;
+
+        Cache::ExpirationAdapter<Key, bool, Cache::LRU> m_MissMap;
+
+        static uint64_t now()
+        {
+            return ::time(nullptr);
+        }
 
         void fallback(Iter& aIter, const Key& aKey, MySQL::Connection& aConnection)
         {
@@ -41,7 +48,7 @@ namespace MySQL {
                 bool sUnused;
                 std::tie(aIter, sUnused) = m_Data.emplace(std::move(sResponse));
             } else {
-                m_MissMap.Put(aKey, true);
+                m_MissMap.Put(aKey, true, now());
             }
         }
 
@@ -83,7 +90,7 @@ namespace MySQL {
         {
             Lock lk(m_Mutex);
             auto sIter = m_Data.find(aKey);
-            if (sIter == m_Data.end() and m_MissMap.Get(aKey) == nullptr) {
+            if (sIter == m_Data.end() and m_MissMap.Get(aKey, now()) == nullptr) {
                 fallback(sIter, aKey, aConnection);
             }
             if (sIter == m_Data.end())
