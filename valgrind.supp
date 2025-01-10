@@ -72,3 +72,11 @@
    ...
    fun:_ZN9benchmark10SystemInfo3GetEv
 }
+{
+   <foundationDB/Leaks>
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   obj:/usr/lib/libfdb_c.so
+   obj:/usr/lib/libfdb_c.so
+}
