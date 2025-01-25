@@ -1,4 +1,4 @@
-project('protobuf', 'cpp', version : '0.1')
+project('threads', 'cpp', version : '0.1')
 
 includes = include_directories('..')
 boost     = dependency('boost', modules : ['unit_test_framework', 'system', 'coroutine'])
