@@ -1,6 +1,8 @@
 #define BOOST_TEST_MODULE Suites
 #include <boost/test/unit_test.hpp>
 
+#include <fmt/chrono.h>
+#include <fmt/core.h>
 #include <stdlib.h>
 
 #include <chrono>
@@ -39,6 +41,13 @@
 #include <unsorted/Random.hpp>
 
 using namespace std::chrono_literals;
+
+auto sTimestamp = []() {
+    const auto sNow   = std::chrono::system_clock::now();
+    const auto sSince = sNow.time_since_epoch();
+    const auto sUs    = std::chrono::duration_cast<std::chrono::microseconds>(sSince).count() % 1'000'000;
+    return fmt::format("{:%Y-%m-%d %X}.{:06d}", sNow, sUs);
+};
 
 BOOST_AUTO_TEST_SUITE(pipeline)
 BOOST_AUTO_TEST_CASE(simple)
@@ -406,6 +415,91 @@ BOOST_AUTO_TEST_CASE(boost_timer2)
 
     asio::io_context sContext(1);
     asio::co_spawn(sContext, timer2(1s) || timer2(400ms), asio::detached);
+    sContext.run();
+}
+
+BOOST_AUTO_TEST_CASE(co_await_multiple)
+{
+    namespace asio = boost::asio;
+    using namespace std::chrono_literals;
+    using namespace asio::experimental::awaitable_operators;
+
+    auto f = []() -> boost::asio::awaitable<void> {
+        boost::asio::steady_timer sTimer(co_await boost::asio::this_coro::executor);
+        sTimer.expires_from_now(100ms);
+        BOOST_TEST_MESSAGE(sTimestamp() << " enter");
+        co_await sTimer.async_wait(asio::use_awaitable);
+        BOOST_TEST_MESSAGE(sTimestamp() << " leave");
+    };
+
+    asio::io_context sContext(1);
+    asio::co_spawn(
+        sContext, [&]() -> boost::asio::awaitable<void> {
+            co_await (f() && f() && f());
+        },
+        asio::detached);
+    sContext.run();
+}
+
+BOOST_AUTO_TEST_CASE(co_await_spawn_multiple)
+{
+    namespace asio = boost::asio;
+    using namespace std::chrono_literals;
+    using namespace asio::experimental::awaitable_operators;
+
+    auto f = []() -> boost::asio::awaitable<void> {
+        boost::asio::steady_timer sTimer(co_await boost::asio::this_coro::executor);
+        sTimer.expires_from_now(100ms);
+        BOOST_TEST_MESSAGE(sTimestamp() << " enter");
+        co_await sTimer.async_wait(asio::use_awaitable);
+        BOOST_TEST_MESSAGE(sTimestamp() << " leave");
+    };
+
+    asio::io_context sContext(1);
+    asio::co_spawn(
+        sContext, [&]() -> boost::asio::awaitable<void> {
+            co_await (asio::co_spawn(sContext, f, asio::use_awaitable) &&
+                      asio::co_spawn(sContext, f, asio::use_awaitable) &&
+                      asio::co_spawn(sContext, f, asio::use_awaitable));
+        },
+        asio::detached);
+    sContext.run();
+}
+
+BOOST_AUTO_TEST_CASE(MapReduce)
+{
+    namespace asio = boost::asio;
+    using namespace std::chrono_literals;
+
+    std::vector<std::string>
+        sInput{{"a"}, {"b"}, {"c"}, {"d"}, {"e"}};
+
+    asio::io_context sContext(1);
+    asio::co_spawn(
+        sContext, [&]() -> boost::asio::awaitable<void> {
+            auto sResult = co_await Threads::Coro::MapReduce<std::string>(
+                sInput,
+                [&](const auto& aData) -> asio::awaitable<std::string> {
+                    boost::asio::steady_timer sTimer(co_await boost::asio::this_coro::executor);
+                    sTimer.expires_from_now(100ms);
+                    BOOST_TEST_MESSAGE(sTimestamp() << " enter " << aData);
+                    co_await sTimer.async_wait(asio::use_awaitable);
+                    BOOST_TEST_MESSAGE(sTimestamp() << " leave " << aData);
+                    co_return aData;
+                },
+                [](auto& aResult, auto&& aTmp) -> asio::awaitable<void> {
+                    boost::asio::steady_timer sTimer(co_await boost::asio::this_coro::executor);
+                    sTimer.expires_from_now(10ms);
+                    BOOST_TEST_MESSAGE(sTimestamp() << " reduce " << aTmp);
+                    co_await sTimer.async_wait(asio::use_awaitable);
+                    aResult.append(aTmp);
+                    BOOST_TEST_MESSAGE(sTimestamp() << " reduced " << aTmp);
+                    co_return;
+                });
+            BOOST_TEST_MESSAGE(sTimestamp() << " result: " << sResult);
+            BOOST_CHECK_EQUAL(sResult, "abcde");
+        },
+        asio::detached);
     sContext.run();
 }
 

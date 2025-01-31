@@ -10,6 +10,7 @@
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
+#include <boost/asio/experimental/parallel_group.hpp>
 #include <boost/asio/io_service.hpp>
 
 #include <unsorted/Raii.hpp>
@@ -142,7 +143,7 @@ namespace Threads::Coro {
         {
             auto sExecutor = co_await boost::asio::this_coro::executor;
             auto sIt       = m_Waiters.find(aKey);
-            if (sIt == m_Waiters.end() or sIt->second.done) {
+            if (sIt == m_Waiters.end()) {
                 bool sAlready;
                 std::tie(sIt, sAlready) = m_Waiters.emplace(aKey, WaitData{});
                 boost::asio::co_spawn(
@@ -211,5 +212,56 @@ namespace Threads::Coro {
 
         // FIXME: cleanup possible stale entries in m_Waiters
     };
+
+    template <class Result, class D, class M, class R>
+    boost::asio::awaitable<Result> MapReduce(const D& aData, M aMapper, R aReducer, unsigned aMax = 4)
+    {
+        Result sResult;
+        Waiter sWaiter;
+        size_t sCounter = 0;
+        using MapResult = typename std::invoke_result_t<M, typename D::value_type>::value_type;
+        std::list<MapResult> sReduceQueue;
+
+        auto sReducer = [&]() -> boost::asio::awaitable<void> {
+            while (!sReduceQueue.empty()) {
+                co_await aReducer(sResult, sReduceQueue.front());
+                sCounter++;
+                sReduceQueue.pop_front();
+            }
+            if (sCounter == aData.size()) {
+                sWaiter.notify();
+            }
+        };
+        auto sIt      = aData.begin();
+        auto sHandler = [&]() -> boost::asio::awaitable<void> {
+            while (sIt != aData.end()) {
+                auto sLocalIt = sIt++;
+                auto sTmp     = co_await aMapper(*sLocalIt);
+                bool sSpawn   = sReduceQueue.empty();
+                sReduceQueue.push_back(std::move(sTmp));
+                if (sSpawn) {
+                    co_spawn(co_await boost::asio::this_coro::executor, sReducer, boost::asio::detached);
+                }
+            }
+        };
+
+        using Task = decltype(boost::asio::co_spawn(
+            co_await boost::asio::this_coro::executor,
+            sHandler,
+            boost::asio::deferred));
+        std::list<Task> sTasks;
+
+        for (unsigned i = 0; i < aMax; i++) {
+            sTasks.push_back(
+                boost::asio::co_spawn(
+                    co_await boost::asio::this_coro::executor,
+                    sHandler,
+                    boost::asio::deferred));
+        }
+        auto sGroup = boost::asio::experimental::make_parallel_group(std::move(sTasks));
+        co_await sGroup.async_wait(boost::asio::experimental::wait_for_all(), boost::asio::use_awaitable);
+        co_await sWaiter.wait(co_await boost::asio::this_coro::executor);
+        co_return sResult;
+    }
 
 } // namespace Threads::Coro
