@@ -1,6 +1,7 @@
 #pragma once
 
-#include "Kafka.hpp"
+#include "Consumer.hpp"
+#include "Producer.hpp"
 
 #include <unsorted/Raii.hpp>
 

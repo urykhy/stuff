@@ -1,6 +1,9 @@
 #define BOOST_TEST_MODULE Suites
 #include <boost/test/unit_test.hpp>
 
+#include <boost/asio.hpp>
+
+#include "Coro.hpp"
 #include "Transform.hpp"
 
 #include <threads/Group.hpp>
@@ -49,9 +52,9 @@ void tryMessages(Kafka::Consumer& aConsumer, int32_t aCount)
                                << ": partition: " << sMsg->partition()
                                << "; offset: " << sMsg->offset()
                                << "; data: " << Kafka::Help::value(sMsg));
-            aConsumer.sync();
         }
     }
+    aConsumer.sync();
 }
 
 BOOST_AUTO_TEST_SUITE(kafka)
@@ -107,6 +110,70 @@ BOOST_AUTO_TEST_CASE(basic)
         BOOST_TEST_CHECKPOINT("Test header " << i);
         BOOST_CHECK_EQUAL(sHeaders[i].first, sActual[i].first);
         BOOST_CHECK_EQUAL(sHeaders[i].second, sActual[i].second);
+    }
+}
+BOOST_AUTO_TEST_CASE(coro)
+{
+    const std::string              sKey   = "some-key-coro";
+    const std::string              sValue = "basic: " + std::to_string(::time(nullptr));
+    const Kafka::Producer::Headers sHeaders{{"header1", "value1"}, {"header2", "value2"}};
+
+    BOOST_TEST_MESSAGE("test with message: " << sValue);
+
+    {
+        Kafka::Coro::Meta sMeta{};
+        auto              sProducer = std::make_shared<Kafka::Coro::Producer>(
+            producerOptions("basic/producer", false), "t_source");
+        boost::asio::io_service sAsio;
+        boost::asio::co_spawn(
+            sAsio,
+            [sProducer, &sMeta, &sKey, &sValue, &sHeaders]() -> boost::asio::awaitable<void> {
+                co_await sProducer->start();
+                sMeta = co_await sProducer->push(RdKafka::Topic::PARTITION_UA, sKey, sValue, sHeaders);
+                sProducer->stop();
+            },
+            boost::asio::detached);
+        sAsio.run_for(1000ms);
+        BOOST_CHECK_EQUAL(sMeta.status, RD_KAFKA_MSG_STATUS_PERSISTED);
+        BOOST_CHECK_EQUAL(sMeta.error, RD_KAFKA_RESP_ERR_NO_ERROR);
+        BOOST_TEST_MESSAGE("data inserted to partition " << sMeta.partition << ", at offset " << sMeta.offset);
+    }
+    {
+        bool    sConsumed  = false;
+        bool    sCommited  = false;
+        int32_t sPartition = -1;
+        int64_t sOffset    = -1;
+        auto    sConsumer  = std::make_shared<Kafka::Coro::Consumer>(
+            consumerOptions("basic/consumer", "g_basic"), "t_source",
+            [&sConsumed, &sValue, &sPartition, &sOffset](const rd_kafka_message_t* aMsg) {
+                if (aMsg->err != RD_KAFKA_RESP_ERR_NO_ERROR)
+                    return;
+                if (Kafka::Help::value(aMsg) == sValue) {
+                    sConsumed  = true;
+                    sPartition = aMsg->partition;
+                    sOffset    = aMsg->offset;
+                }
+            });
+        boost::asio::io_service sAsio;
+        boost::asio::co_spawn(
+            sAsio,
+            [&, sConsumer]() -> boost::asio::awaitable<void> {
+                co_await sConsumer->start();
+                boost::asio::steady_timer sTimer(co_await boost::asio::this_coro::executor);
+                while (!sConsumed) {
+                    sTimer.expires_from_now(100ms);
+                    co_await sTimer.async_wait(boost::asio::use_awaitable);
+                }
+                auto sCode = co_await sConsumer->sync("t_source", sPartition, sOffset + 1);
+                BOOST_CHECK_EQUAL(sCode, RD_KAFKA_RESP_ERR_NO_ERROR);
+                sCommited = true;
+                sConsumer->stop();
+                sAsio.stop();
+            },
+            boost::asio::detached);
+        sAsio.run_for(6000ms);
+        BOOST_CHECK(sConsumed);
+        BOOST_CHECK(sCommited);
     }
 }
 BOOST_AUTO_TEST_CASE(transform)

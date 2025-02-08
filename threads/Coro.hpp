@@ -218,8 +218,9 @@ namespace Threads::Coro {
     {
         Result sResult;
         Waiter sWaiter;
-        size_t sCounter = 0;
-        using MapResult = typename std::invoke_result_t<M, typename D::value_type>::value_type;
+        size_t sCounter  = 0;
+        auto   sExecutor = co_await boost::asio::this_coro::executor;
+        using MapResult  = typename std::invoke_result_t<M, typename D::value_type>::value_type;
         std::list<MapResult> sReduceQueue;
 
         auto sReducer = [&]() -> boost::asio::awaitable<void> {
@@ -240,13 +241,13 @@ namespace Threads::Coro {
                 bool sSpawn   = sReduceQueue.empty();
                 sReduceQueue.push_back(std::move(sTmp));
                 if (sSpawn) {
-                    co_spawn(co_await boost::asio::this_coro::executor, sReducer, boost::asio::detached);
+                    co_spawn(sExecutor, sReducer, boost::asio::detached);
                 }
             }
         };
 
         using Task = decltype(boost::asio::co_spawn(
-            co_await boost::asio::this_coro::executor,
+            sExecutor,
             sHandler,
             boost::asio::deferred));
         std::list<Task> sTasks;
@@ -254,13 +255,13 @@ namespace Threads::Coro {
         for (unsigned i = 0; i < aMax; i++) {
             sTasks.push_back(
                 boost::asio::co_spawn(
-                    co_await boost::asio::this_coro::executor,
+                    sExecutor,
                     sHandler,
                     boost::asio::deferred));
         }
         auto sGroup = boost::asio::experimental::make_parallel_group(std::move(sTasks));
         co_await sGroup.async_wait(boost::asio::experimental::wait_for_all(), boost::asio::use_awaitable);
-        co_await sWaiter.wait(co_await boost::asio::this_coro::executor);
+        co_await sWaiter.wait(sExecutor);
         co_return sResult;
     }
 

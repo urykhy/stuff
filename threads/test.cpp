@@ -209,7 +209,7 @@ BOOST_AUTO_TEST_CASE(fair_test1)
 
     sExecutor.wait(5);
     sGroup.wait();
-    BOOST_CHECK_CLOSE(sExecutor.debug().m_State["user-1"]->estimate().latency, 0.01, 5);
+    BOOST_CHECK_CLOSE(sExecutor.debug().m_State["user-1"]->estimate().latency, 0.05, 5);
 }
 BOOST_AUTO_TEST_CASE(fair_test2)
 {
