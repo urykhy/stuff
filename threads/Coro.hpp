@@ -13,8 +13,6 @@
 #include <boost/asio/experimental/parallel_group.hpp>
 #include <boost/asio/io_service.hpp>
 
-#include <unsorted/Raii.hpp>
-
 namespace Threads::Coro {
 
     // copy paste from https://www.scs.stanford.edu/~dm/blog/c++-coroutines.html
@@ -95,6 +93,101 @@ namespace Threads::Coro {
         }
     };
 
+    template <class Key, class Value>
+    class KeyUpdater
+    {
+    public:
+        using ValueMs  = std::pair<Value, uint64_t>;
+        using Handler  = std::function<boost::asio::awaitable<ValueMs>(Key)>;
+        using Callback = std::function<void(const Key&, const Value&, uint64_t)>;
+
+    private:
+        struct WaitData
+        {
+            Key                  key{};
+            std::optional<Value> value{};
+            std::list<Waiter>    waiters{};
+        };
+        using WaitPtr = std::shared_ptr<WaitData>;
+        using Waiters = std::map<Key, WaitPtr>;
+        std::list<WaitPtr> m_List;
+        Waiters            m_Waiters;
+        Handler            m_Handler;
+        Callback           m_Callback;
+
+        boost::asio::awaitable<void> Coro()
+        {
+            while (!m_List.empty()) {
+                co_await Refresh(m_List.front());
+                m_List.pop_front();
+            }
+            co_return;
+        }
+
+        boost::asio::awaitable<void> Spawn(WaitPtr aPtr)
+        {
+            const bool sSpawn = m_List.empty();
+            m_List.push_back(aPtr);
+            if (sSpawn) {
+                boost::asio::co_spawn(
+                    co_await boost::asio::this_coro::executor,
+                    [this]() -> boost::asio::awaitable<void> {
+                        co_await Coro();
+                    },
+                    boost::asio::detached);
+            }
+        }
+
+        boost::asio::awaitable<void> Refresh(WaitPtr aPtr)
+        {
+            uint64_t sNow               = 0;
+            std::tie(aPtr->value, sNow) = co_await m_Handler(aPtr->key);
+            m_Callback(aPtr->key, *aPtr->value, sNow);
+            for (auto& x : aPtr->waiters) {
+                x.notify();
+            }
+            m_Waiters.erase(aPtr->key);
+            co_return;
+        };
+
+    public:
+        KeyUpdater(Handler&& aHandler, Callback&& aCallback)
+        : m_Handler(std::move(aHandler))
+        , m_Callback(std::move(aCallback))
+        {
+        }
+
+        boost::asio::awaitable<Value> Wait(const Key& aKey)
+        {
+            auto sExecutor = co_await boost::asio::this_coro::executor;
+            auto sPtr      = co_await Schedule(aKey);
+
+            // check if value already available
+            if (sPtr->value) {
+                co_return *sPtr->value;
+            }
+
+            // no value, must wait
+            sPtr->waiters.push_back({});
+            auto sWaiter = --sPtr->waiters.end();
+            co_await sWaiter->wait(sExecutor);
+
+            // got response and cleanup
+            sPtr->waiters.erase(sWaiter);
+            co_return *sPtr->value;
+        }
+
+        boost::asio::awaitable<WaitPtr> Schedule(const Key& aKey)
+        {
+            auto& sPtr = m_Waiters[aKey];
+            if (!sPtr) {
+                sPtr = std::make_shared<WaitData>(WaitData{.key = aKey});
+                co_await Spawn(sPtr);
+            }
+            co_return sPtr;
+        }
+    };
+
     template <class Key, class Value, template <class, class> class Cache>
     class CacheAdapter
     {
@@ -104,86 +197,18 @@ namespace Threads::Coro {
             bool     early_refresh{false};
             Value    value = {};
         };
-        Cache<Key, Entry> m_Cache;
-
-        struct WaitData
-        {
-            std::list<Waiter>    waiters{};
-            std::optional<Value> value{};
-            bool                 done{false};
-        };
-        using Waiters = std::map<Key, WaitData>;
-        Waiters m_Waiters;
-
-        const uint64_t m_Deadline; // ms
-        using RefreshT = std::function<boost::asio::awaitable<std::pair<Value, uint64_t>>(Key)>;
-        RefreshT m_Refresh;
-
-        void Cleanup(Waiters::iterator aIt)
-        {
-            if (aIt->second.done and aIt->second.waiters.empty()) {
-                m_Waiters.erase(aIt);
-            }
-        }
-
-        boost::asio::awaitable<void> Refresh(const Key& aKey, Waiters::iterator aIt)
-        {
-            uint64_t sNow                     = 0;
-            std::tie(aIt->second.value, sNow) = co_await m_Refresh(aKey);
-            Put(aKey, *aIt->second.value, sNow); // store new value
-            for (auto& x : aIt->second.waiters) {
-                x.notify();
-            }
-            aIt->second.done = true;
-            co_return;
-            // FIXME: check for exception
-        };
-
-        boost::asio::awaitable<typename Waiters::iterator> SpawnRefresh(const Key& aKey)
-        {
-            auto sExecutor = co_await boost::asio::this_coro::executor;
-            auto sIt       = m_Waiters.find(aKey);
-            if (sIt == m_Waiters.end()) {
-                bool sAlready;
-                std::tie(sIt, sAlready) = m_Waiters.emplace(aKey, WaitData{});
-                boost::asio::co_spawn(
-                    sExecutor,
-                    [this, aKey, sIt]() -> boost::asio::awaitable<void> {
-                        co_await Refresh(aKey, sIt);
-                    },
-                    boost::asio::detached);
-            }
-            co_return sIt;
-        }
-
-        boost::asio::awaitable<Value> Wait(const Key& aKey)
-        {
-            auto sExecutor = co_await boost::asio::this_coro::executor;
-            auto sIt       = co_await SpawnRefresh(aKey);
-
-            Util::Raii cleanup([this, sIt]() { Cleanup(sIt); });
-
-            // check if value already available
-            if (sIt->second.value) {
-                co_return *sIt->second.value;
-            }
-
-            // no value, must wait
-            sIt->second.waiters.push_back({});
-            auto sCurrent = --sIt->second.waiters.end();
-            co_await sCurrent->wait(sExecutor);
-
-            // got response and cleanup
-            auto sValue = *sIt->second.value;
-            sIt->second.waiters.erase(sCurrent);
-            co_return sValue;
-        }
+        Cache<Key, Entry>      m_Cache;
+        const uint64_t         m_Deadline; // ms
+        KeyUpdater<Key, Value> m_Updater;
 
     public:
-        CacheAdapter(size_t aMaxSize, uint64_t aDeadline, RefreshT&& aRefresh)
+        CacheAdapter(size_t aMaxSize, uint64_t aDeadline, KeyUpdater<Key, Value>::Handler&& aRefresh)
         : m_Cache(aMaxSize)
         , m_Deadline(aDeadline)
-        , m_Refresh(std::move(aRefresh))
+        , m_Updater(std::move(aRefresh),
+                    [this](const Key& aKey, const Value& aValue, const uint64_t aNow) {
+                        Put(aKey, aValue, aNow);
+                    })
         {
         }
 
@@ -191,14 +216,14 @@ namespace Threads::Coro {
         {
             auto sPtr = m_Cache.Get(aKey);
             if (sPtr == nullptr) { // no data
-                co_return co_await Wait(aKey);
+                co_return co_await m_Updater.Wait(aKey);
             }
             if (sPtr->created_at + m_Deadline <= aNow) { // expired
-                co_return co_await Wait(aKey);
+                co_return co_await m_Updater.Wait(aKey);
             }
             if (sPtr->created_at + m_Deadline * 0.9 <= aNow and !sPtr->early_refresh) { // almost expired
                 const_cast<Entry*>(sPtr)->early_refresh = true;
-                co_await SpawnRefresh(aKey);
+                co_await m_Updater.Schedule(aKey);
             }
             co_return sPtr->value;
         }
@@ -209,8 +234,6 @@ namespace Threads::Coro {
                                     .early_refresh = false,
                                     .value         = aValue});
         }
-
-        // FIXME: cleanup possible stale entries in m_Waiters
     };
 
     template <class Result, class D, class M, class R>
