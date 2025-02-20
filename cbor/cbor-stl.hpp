@@ -73,7 +73,9 @@ namespace cbor {
         if (len % sizeof(T) > 0)
             throw std::invalid_argument("read " + std::to_string(len) + " bytes to vector of " + std::to_string(sizeof(T)));
         data.resize(len / sizeof(T));
-        s.read(&data[0], len);
+        if (len > 0) {
+            s.read(&data[0], len);
+        }
     }
 
     template <class T>
