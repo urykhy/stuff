@@ -13,7 +13,7 @@ set -e
 . /lib/lsb/init-functions
 
 MKFS="mkfs.ext4 -O ^has_journal -m0 -b 4096"
-MOUNT="mount -o barrier=0,commit=300,relatime,nodev,discard"
+MOUNT="mount -o barrier=0,commit=0,relatime,nodev,discard"
 
 case "$1" in
   start)
@@ -24,11 +24,12 @@ case "$1" in
           swapon -p 100 /dev/zram0
       fi
       if [ -d /sys/block/zram1 ]; then
-          echo "Enable 4G zRAM /tmp ..."
-          zramctl --size 4G --algorithm zstd /dev/zram1
+          echo "Enable 8G zRAM /tmp/cache ..."
+          zramctl --size 8G --algorithm zstd /dev/zram1
           $MKFS /dev/zram1
-          $MOUNT /dev/zram1 /tmp
-          chmod 1777 /tmp
+          mkdir -p /tmp/cache
+          $MOUNT /dev/zram1 /tmp/cache
+          chmod 1777 /tmp/cache
       fi
     ;;
   stop)
