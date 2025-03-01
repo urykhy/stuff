@@ -1,0 +1,966 @@
+
+function docker-volumes
+{
+    docker ps -a --format '{{ .ID }}' | xargs -I {} docker inspect -f '{{ .Name }}{{ printf "\n" }}{{ range .Mounts }}{{ printf "\n\t" }}{{ .Type }} {{ if eq .Type "bind" }}{{ .Source }}{{ end }}{{ .Name }} => {{ .Destination }}{{ end }}{{ printf "\n" }}' {}
+}
+
+function docker-du
+{
+    echo "docker disk info :"
+    docker system df
+    echo "largest docker volumes :"
+    sudo bash -c 'du -shc /u01/docker/volumes/*' | sort -h | tail
+    echo 'largest images :'
+    docker images --format "{{.ID}}\t{{.Size}}\t{{.Repository}}:{{.Tag}}" | LANG=C sort -k 2 -h | tail
+}
+
+function docker-mem
+{
+    (for x in `find /sys/fs/cgroup/memory/docker/ -type d -printf '%f\n' | grep -v docker`; do
+		if [[ "$x" != "buildkit" ]] then
+			n=`docker inspect --format '{{range $net,$v := .NetworkSettings.Networks}}{{printf "%s" $net}}{{end}}' $x`
+			grep 'total_cache \|total_rss \|total_swap' /sys/fs/cgroup/memory/docker/$x/memory.stat \
+			| sed -e 's/total_//' \
+			| xargs echo "$n"
+		fi
+    done) \
+	| awk '{print $1,$3,$5,$7}' \
+	| clickhouse-local --input-format=CustomSeparated --format_custom_escaping_rule=CSV --format_custom_field_delimiter=' ' -S 'net String, cache UInt64, rss UInt64, swap UInt64' \
+	  -q "SELECT IF(net IN ('bridge','host'), 'other', net) AS project, formatReadableSize(sum(rss)) AS rss, formatReadableSize(sum(cache)) AS cache, formatReadableSize(sum(swap)) AS swap FROM table GROUP BY ALL ORDER BY 1 FORMAT PrettyCompactMonoBlock"
+}
+
+function docker-security-scanner
+{
+    if [ $# -ne 1 ]; then
+        echo "usage: docker-security-scanner <docker image>"
+        return
+    fi
+    trivy image -s HIGH --scanners vuln "$1"
+}
+
+function docker-watchtower
+{
+    docker run --rm \
+           --name watchtower \
+           -v /var/run/docker.sock:/var/run/docker.sock \
+           containrrr/watchtower --run-once --monitor-only --porcelain=v1 \
+           nextcloud nginx
+}
+
+function docker-upload
+{
+    if [ $# -ne 1 ]; then
+        echo "usage: docker-upload <docker image>"
+        return
+    fi
+    docker tag "$1" registry.docker:5000/"$1"
+    docker push registry.docker:5000/"$1"
+}
+
+function meson-clang()
+{
+    CC="ccache clang" CXX="ccache clang++" meson setup build-clang -Dcpp_args="${CXXFLAGS} -ftime-trace"
+}
+
+function meson-sanitize()
+{
+    if [ $# -ne 1 ]; then
+        echo "usage: meson-sanitize <sanitizer>"
+        echo "  sanitizers: address, thread, undefined, memory"
+        return
+    fi
+    CC="ccache clang" CXX="ccache clang++" meson setup build-sanitize -Dcpp_args="${CXXFLAGS} -g -O2 -fno-omit-frame-pointer -fno-sanitize-recover=all -fsanitize-memory-track-origins" -Db_sanitize="$1" -Db_lundef=false
+}
+
+function meson-coverage()
+{
+    CC="ccache clang" CXX="ccache clang++" meson setup build-coverage -Dcpp_args="${CXXFLAGS} -g" -Db_coverage=true
+    echo
+    echo "build, run tests"
+    echo "after that, use 'ninja coverage' to build reports"
+    echo "and 'python3 -m http.server -d meson-logs/coveragereport/ & sleep 1; chromium 127.0.0.1:8000' to view in browser"
+    echo "use fg and Ctrl+C to stop web server"
+}
+
+function meson-release()
+{
+    meson setup build-release --buildtype=release -Dcpp_args="${CXXFLAGS}" -Dcpp_link_args="${LDFLAGS}" -Dc_args="${CFLAGS}" -Dc_link_args="${LDFLAGS}"
+}
+
+function meson-debug-stl()
+{
+    meson setup build-debug-stl -Dcpp_args="${CXXFLAGS} -D_GLIBCXX_DEBUG -D_GLIBCXX_DEBUG_PEDANTIC" -Dcpp_link_args="${LDFLAGS}" -Dc_args="${CFLAGS}" -Dc_link_args="${LDFLAGS}"
+}
+
+function zipfile()
+{
+    for i in "$@"; do
+        zip -9 -r "$i.zip" "$i"
+    done
+}
+
+function makepass()
+{
+	tr -cd '[:alnum:]' < /dev/urandom | fold -w30 | head -n1;
+}
+
+function find_by_time()
+{
+	find . -type f -printf "%A@ %p\n" | sort -n
+}
+
+function TRUE-COLOR () { echo -ne "\[\033[38;2;$1;$2;$3m\]"; };
+function EXT-COLOR () { echo -ne "\[\033[38;5;$1m\]"; };
+function color-my-prompt {
+    if [ `id -u` == "0" ];
+    then
+            local __user_and_host="`EXT-COLOR 1`\u@\h"
+    else
+            local __user_and_host="`EXT-COLOR 135`\u@\h"
+    fi
+    local __date_time="`EXT-COLOR 227`[\A]"
+    local __cur_location="`EXT-COLOR 75`\w"
+    local __git_branch_color="`EXT-COLOR 248`"
+    local __git_branch='`git branch 2> /dev/null | grep -e ^* | sed -ne "s/^\* \(.*\)/(branch \1) /p"`'
+    local __namespace="`ip netns identify $BASHPID`"
+    if [ ! -z "$__namespace" ]; then
+        __namespace="(ns: $__namespace) "
+    fi
+    local __vrf="`ip vrf identify $BASHPID`"
+    if [ ! -z "$__vrf" ]; then
+        __vrf="(vrf: $__vrf) "
+    fi
+    local __prompt_tail="`EXT-COLOR 69`\\$"
+    local __last_color="\[\033[00m\]"
+    export PS1="$__date_time $__user_and_host:$__cur_location $__git_branch_color$__git_branch$__namespace$__vrf$__prompt_tail$__last_color "
+}
+
+function resize-png()
+{
+    for i in *.png; do echo "$i"; mogrify -resize 670x576\^ "$i"; done
+}
+
+# https://gist.github.com/jjarmoc/1299906
+# Returns the integer representation of an IP arg, passed in ascii dotted-decimal notation (x.x.x.x)
+function inet-aton
+{
+    IP=$1; IPNUM=0
+    for (( i=0 ; i<4 ; ++i )); do
+        ((IPNUM+=${IP%%.*}*$((256**$((3-${i}))))))
+        IP=${IP#*.}
+    done
+    echo $IPNUM
+}
+
+# Returns the dotted-decimal ascii form of an IP arg passed in integer format
+function inet-ntoa
+{
+    echo -n $(($(($(($((${1}/256))/256))/256))%256)).
+    echo -n $(($(($((${1}/256))/256))%256)).
+    echo -n $(($((${1}/256))%256)).
+    echo $((${1}%256))
+}
+
+# gpg symmetric
+function gpg-symm-encode
+{
+    if [ $# -ne 2 ]; then
+        echo "usage: gpg-symm-encode <password> <filename>"
+        return
+    fi
+    gpg -c --passphrase "$1" --batch --no-tty < "$2" > "$2.gpg"
+}
+
+function gpg-symm-decode
+{
+    if [ $# -ne 2 ]; then
+        echo "usage: gpg-symm-decode <password> <filename>"
+        return
+    fi
+    gpg -d --passphrase "$1" --batch --no-tty < "$2" > "${2%.gpg}"
+}
+
+function csv2json
+{
+    if [ $# -ne 1 ]; then
+        echo "usage: csv2json <filename.csv>"
+        return
+    fi
+    cat $1 | python3 -c 'import csv, json, sys; print(json.dumps([dict(r) for r in csv.DictReader(sys.stdin)]))'
+}
+
+function to-hex
+{
+    if [ $# -ne 1 ]; then
+        echo "usage: to-hex <dec number>"
+        return
+    fi
+    printf '%x\n' $1
+}
+function to-dec
+{
+    if [ $# -ne 1 ]; then
+        echo "usage: to-dec <hex number>"
+        return
+    fi
+    printf '%u\n' 0x$1
+}
+
+function to-bin
+{
+    if [ $# -ne 1 ]; then
+        echo "usage: to-bin <dec number>"
+        return
+    fi
+    echo "obase=2;$1" | bc
+}
+function from-bin
+{
+    if [ $# -ne 1 ]; then
+        echo "usage: from-bin <bin number>"
+        return
+    fi
+    echo $((2#$1))
+}
+
+function to-datetime
+{
+    if [ $# -ne 1 ]; then
+        echo "usage: to-datetime <unix timestamp>"
+        return
+    fi
+    date -d@$1 +'%+4Y%m%d%H%M%S'
+}
+
+function to-unixtime
+{
+    if [ $# -ne 1 ]; then
+        echo "usage: to-unixtime <yyyymmddhhmmss>"
+        return
+    fi
+    [[ "$1" =~ (....)(..)(..)(..)(..)(..) ]]
+    m=("${BASH_REMATCH[@]}")
+    date +%s -d "${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}:${m[6]}"
+}
+
+function to-bytes
+{
+    if [ $# -lt 1 ]; then
+        echo "usage: to-bytes <bytes>"
+        return
+    fi
+    numfmt --to=iec --suffix=B --round=nearest --padding=7 --format %10.1f "$@"
+}
+
+function pastebin
+{
+    if [ $# -ne 1 ]; then
+        echo "usage: pastebin <filename>"
+        return
+    fi
+    cat "$1" | curl -v -s -F "content=<-" http://dpaste.com/api/v2/
+}
+
+function csv2jira
+{
+    if [ $# -ne 1 ]; then
+        echo "usage: csv2jira <filename>"
+        return
+    fi
+    cat "$1" | dos2unix | python -c 'import csv, sys; [print("|", " | ".join(x), "|") for x in list(csv.reader(sys.stdin))]' | column -s\| -t -o\|
+}
+
+function url-encode
+{
+    if [ $# -ne 1 ]; then
+        echo "usage: url-encode <line>"
+        return
+    fi
+    printf %s "$1" | jq -Rr @uri
+}
+
+function rowcol
+{
+    awk '{ for (i=1; i<=NF; i++) RtoC[i]= (RtoC[i]!=""? RtoC[i] FS $i: $i) } END{ for (i in RtoC) print RtoC[i] }'
+}
+
+function tls-debug
+{
+    if [ $# -ne 1 ]; then
+        echo "usage: tls-debug host:port"
+        return
+    fi
+    openssl s_client -connect $1 -state -showcerts </dev/null
+}
+
+function tls-imap
+{
+    if [ $# -ne 3 ]; then
+        echo "usage: tls-debug host:port username password"
+        return
+    fi
+    (echo -e "a login $2 $3\n1 list \"\" *"; sleep 1) | openssl s_client -connect $1 -showcerts
+}
+
+
+# progress bar
+# example: for i in $(seq 0 100); do progress-bar $i 100; sleep 0.1; done
+# via https://github.com/fearside/ProgressBar/blob/master/progressbar.sh
+function progress-bar
+{
+	let _progress=(${1}*100/${2}*100)/100
+	let _done=(${_progress}*40)/100
+	let _left=40-$_done
+	_done=$(printf "%${_done}s")
+	_left=$(printf "%${_left}s")
+    printf "\rProgress : [${_done// /#}${_left// /-}] ${_progress}%%"
+}
+
+function netspace
+{
+    if [ $# -lt 1 ]; then
+        # folders in /etc/netns
+        echo "usage: netspace name"
+        echo -e "\tname one of:"
+        echo -e "\t\tcameron"
+        echo -e "\t\tprotonvpn"
+        echo -e "\t\tfornex"
+        echo -e "or use: netspace cameron firefox -P"
+        return
+    fi
+    NS="$1"
+    shift
+    CMD=""
+    if [ $# -gt 0 ]; then
+        CMD="-c $@"
+    fi
+    sudo network-namespace.sh $NS
+    #sudo ip netns exec $NS su $USER "$CMD"
+    sudo ip netns exec $NS bash -c "su $USER $CMD"
+}
+
+function show-open-files
+{
+    sudo lsof -nPs 2> /dev/null | grep -v 'No such file or directory' | awk '$5 == "REG" && $4 != "mem" && $4 != "DEL"' | sort -n -k 7,7 | uniq -f 8 | tail -n 25
+}
+
+function show-time
+{
+    chronyc -a -m tracking sourcestats
+}
+
+function show-weather
+{
+    curl http://wttr.in/
+}
+
+function show-nginx-cache
+{
+    pushd /u01/docker/volumes/nginx-cache/_data/
+    find -ctime -1 -type f | xargs -iN bash -c "head N | strings | grep '^KEY:'"
+    popd
+}
+
+function show-nginx-logs
+{
+    docker logs nginx --tail=25 -f
+}
+
+function show-wifi
+{
+    ethtool -S wlan1
+    ip a show dev wlan1
+    tc -s qdisc show dev wlan1
+    iw dev wlan1 info
+    iw dev wlan1 link
+}
+
+function show-mysql-query-log
+{
+    docker exec -it mysql-master tail -f -n 100 /var/lib/mysql/log
+}
+
+function show-mysql-replication
+{
+    echo 'mysql-master:'
+    docker exec -it mysql-master mysql -proot -e "SHOW MASTER STATUS\G" | grep "File\|Position\|Executed_Gtid_Set"
+    echo 'mysql-slave:'
+    docker exec -it mysql-slave mysql -proot -e "SHOW SLAVE STATUS\G" | grep "Slave_IO_State\|\WMaster_Log_File\|Read_Master_Log_Pos\|Slave_IO_Running\|Slave_SQL_Running\|Slave_SQL_Running_State\|Executed_Gtid_Set"
+    echo "semi sync status:"
+    docker exec -it mysql-slave mysql -proot -e "SHOW STATUS LIKE 'Rpl_semi_sync%'\G" | grep Value
+}
+
+function my-top
+{
+    ps-top --host=mysql-master --user=root --password=root
+}
+
+function my-export-csv
+{
+    if [ $# -ne 1 ]; then
+        echo "usage: my-export-csv 'query'"
+        echo "  print csv table to stdout, connection details to stderr"
+        return
+    fi
+
+    python -c '
+import os, sys, csv, pymysql.cursors
+(user, host, port, password) = (os.environ["MYSQL_USER"], os.environ["MYSQL_HOST"], int(os.environ["MYSQL_PORT"]), os.environ["MYSQL_PASS"])
+print (f"> connecting {user}:{password} to {host}:{port}", file=sys.stderr)
+c = pymysql.connect(host=host, port=port, user=user, password=password, cursorclass=pymysql.cursors.DictCursor)
+print (f"> {sys.argv[1]}", file=sys.stderr)
+r = c.cursor()
+r.execute(sys.argv[1])
+x = r.fetchone()
+w = csv.DictWriter(sys.stdout, x.keys())
+w.writeheader()
+while x:
+    w.writerow(x)
+    x = r.fetchone()
+' "$1"
+}
+
+function my-import-csv
+{
+    if [ $# -ne 2 ]; then
+        echo "usage: my-import-csv <file> <table>"
+        return
+    fi
+    echo "LOAD DATA LOCAL INFILE '$1' INTO TABLE $2 FIELDS TERMINATED BY ',' ENCLOSED BY '\"' LINES TERMINATED BY '\\n' IGNORE 1 ROWS;" | mysql -u$MYSQL_USER -p$MYSQL_PASS -h$MYSQL_HOST -P$MYSQL_PORT --local-infile=1 2>&1 | grep -v "Using a password on the command line interface can be insecure"
+}
+
+function show-cg-mem
+{
+    (for x in firefox chrome torrent; do
+        grep 'total_cache \|total_rss \|hierarchical_memory_limit \|total_swap' /sys/fs/cgroup/$x/memory.stat \
+        | sed -e 's/hierarchical_memory_limit/limit/' \
+        | sed -e 's/total_//' \
+        | numfmt --field 2 --to=iec --suffix=B --round=nearest --padding=7 --format %10.1f \
+        | xargs echo "$x "
+    done) \
+    | column -t -R 1,3,5,7,9
+}
+
+function show-cg-root
+{
+    grep 'total_cache \|total_rss \|hierarchical_memory_limit \|total_swap' /sys/fs/cgroup/$x/memory.stat \
+    | sed -e 's/hierarchical_memory_limit/limit/' \
+    | sed -e 's/total_//' \
+    | numfmt --field 2 --to=iec --suffix=B --round=nearest --padding=7 --format %10.1f \
+    | xargs \
+    | column -t -R 1,3,5,7,9
+}
+
+function show-tor
+{
+    echo -ne 'AUTHENTICATE "123"\r\nPROTOCOLINFO\r\nGETINFO orconn-status\r\nGETINFO stream-status\r\n' | nc -N 127.0.0.1 9054
+}
+
+function show-bind-version
+{
+    dig -t txt -c chaos VERSION.BIND
+}
+
+function show-mem
+{
+    grep --color=never -E '^(Dirty:|Writeback:|MemFree:|Cached:)' /proc/meminfo
+    cat /proc/net/sockstat | grep ^TCP: | awk '{printf "TCP: %19s kB\n", $11 * 4}'
+    cat /proc/net/sockstat | grep ^UDP: | awk '{printf "UDP: %19s kB\n", $5 * 4}'
+    echo
+    swapon
+    echo
+    zramctl
+    echo
+    df -h /tmp
+}
+
+function show-cache
+{
+    du -shc /tmp/cache/* 2>/dev/null
+}
+
+function show-skmem
+{
+    if [ $# -ne 1 ]; then
+        echo "usage: show-skmem <filename>"
+        echo "file can be produced by 'ss -itempn'"
+        return
+    fi
+
+    cat $1 | python -c '
+import sys
+from dataclasses import dataclass
+from tabulate import tabulate
+@dataclass
+class S:
+    rbuf: int
+    mem: int
+    cache: int
+    drop: int
+info = {}
+k = None
+for line in sys.stdin:
+    line = line.split()
+    if k is None and ":" in line[3] and ":" in line[4]:
+        k = line[3] + " -- " + line[4]
+    elif k is not None and len(line) > 0 and len(line[0]) > 0:
+        line  = line[0][len("skmem:("):-1].split(",")
+        if len(line) != 9:
+            continue
+        rmem  = int(line[0][1:]) # strip leading r
+        rbuf  = int(line[1][2:]) # strip leading rb
+        tmem  = int(line[2][1:]) # strip leading t
+        cache = int(line[4][1:]) # strip leading f, cache
+        wmem  = int(line[5][1:]) # strip leading w
+        drop  = int(line[8][1:]) # strip leading d, drops
+        info[k] = S(rbuf, rmem + tmem + wmem, cache, drop)
+        k = None
+def printi(name, key):
+    t = []
+    for k in sorted(info.keys(), key=key)[-5:]:
+        t.append([k, info[k]])
+    print(tabulate(t, headers=["peer", name]))
+printi("mem", lambda x: info[x].mem)
+printi("cache", lambda x: info[x].cache)
+printi("drops", lambda x: info[x].drop)
+'
+}
+
+function show-vpn
+{
+    for x in /run/openvpn/*.status; do
+        echo "***" $x
+        sudo cat $x
+    done
+    tc -s qdisc show dev fornex
+}
+
+function show-battery
+{
+    echo -n "G930 battery: "
+    headsetcontrol -bc
+    echo " %"
+}
+
+function show-temp
+{
+    sudo hddtemp /dev/sd?
+    echo
+
+    echo -n "CPU Temp "
+    T=`cat /sys/devices/platform/nct6775.656/hwmon/hwmon1/temp7_input | tr -d "\n"`
+    echo -n "$(($T / 1000)) °C  Fan "
+    cat /sys/devices/platform/nct6775.656/hwmon/hwmon1/fan2_input | tr -d "\n"
+    echo " RPM"
+
+    echo -n "CHA Temp "
+    T=`cat /sys/devices/platform/nct6775.656/hwmon/hwmon1/temp2_input | tr -d "\n"`
+    echo -n "$(($T / 1000)) °C  Fan "
+    cat /sys/devices/platform/nct6775.656/hwmon/hwmon1/fan1_input | tr -d "\n"
+    echo " RPM"
+
+    echo -n "GPU Temp "
+    T=`nvidia-smi --query-gpu=temperature.gpu --format=csv,noheader`
+    echo -n "$T °C  Fan "
+    T=`nvidia-smi --query-gpu=fan.speed --format=csv,noheader`
+    echo "$T"
+}
+
+function show-nvidia-clock
+{
+    nvidia-smi -q -d CLOCK
+}
+
+function show-nvidia-power
+{
+    nvidia-smi -q -d POWER
+}
+
+function max-nvidia-perf
+{
+    sudo nvidia-smi -pl 140
+    nvidia-settings -a [gpu:0]/GpuPowerMizerMode=1
+    nvidia-settings -a [gpu:0]/GPUGraphicsClockOffset[3]=200
+    nvidia-settings -a [gpu:0]/GPUMemoryTransferRateOffset[3]=200
+}
+
+function min-nvidia-perf
+{
+    sudo nvidia-smi -pl 60
+    nvidia-settings -a [gpu:0]/GpuPowerMizerMode=2
+    nvidia-settings -a [gpu:0]/GPUGraphicsClockOffset[3]=-200
+    nvidia-settings -a [gpu:0]/GPUMemoryTransferRateOffset[3]=-2000
+}
+
+function show-packet-steering
+{
+    cat /proc/net/softnet_stat | cut -d' ' -f 1,2,10,11,12,13 | column -t --table-columns 'processed,dropped,rps,flow-limit,backlog,cpu'
+}
+
+function show-ip-stat
+{
+    cat /proc/net/snmp | grep ^Ip: | column -t | rowcol | column -t | tail +2
+    cat /proc/net/netstat | grep ^IpExt | column -t | rowcol | column -t | tail +2
+}
+
+function show-tcp-stat
+{
+    cat /proc/net/snmp | grep ^Tcp: | column -t | rowcol | column -t | tail +2
+    cat /proc/net/netstat | grep ^TcpExt | column -t | rowcol | column -t | tail +2
+}
+
+function show-udp-stat
+{
+    cat /proc/net/snmp | grep ^Udp: | column -t | rowcol | column -t | tail +2
+}
+
+function show-net-perf
+{
+    if [ $# -ne 1 ]; then
+        echo "usage: show-net-perf <interface>"
+        return
+    fi
+    _interface=$1
+    echo "$_interface utilization"
+    _bytes_in_old=$(awk "/^ *${_interface}:/"' { print $2 }' /proc/net/dev)
+    _bytes_out_old=$(awk "/^ *${_interface}:/"' { print $10 }' /proc/net/dev)
+    sleep 5;
+    _bytes_in_new=$(awk "/^ *${_interface}:/"' { print $2 }' /proc/net/dev)
+    _bytes_out_new=$(awk "/^ *${_interface}:/"' { print $10 }' /proc/net/dev)
+    printf '%6s %s\n' "$(( ( _bytes_in_new - _bytes_in_old ) / 5 / 1024 ))" 'kB/sec in' \
+                      "$(( ( _bytes_out_new - _bytes_out_old ) / 5 / 1024 ))" 'kB/sec out'
+}
+
+function show-flatpak
+{
+    flatpak list --columns=ref,size --app
+    echo
+    echo "space used in home:"
+    pushd ~/.var/app
+    diskuse
+    popd
+}
+
+function vg-mem
+{
+    local SUPP=""
+    if [ -f valgrind.supp ]; then
+        SUPP="--suppressions=valgrind.supp"
+    else
+        if [ -f ../valgrind.supp ]; then
+            SUPP="--suppressions=../valgrind.supp"
+        else
+            if [ -f ../../valgrind.supp ]; then
+                SUPP="--suppressions=../../valgrind.supp"
+            fi
+        fi
+    fi
+    if [ -n "$SUPP" ]; then
+        echo "* with suppressions $SUPP"
+    fi
+    /usr/bin/valgrind --tool=memcheck -v --leak-check=yes --show-reachable=yes --trace-children=yes \
+        --error-limit=no --leak-resolution=high --run-libc-freeres=yes --track-origins=yes \
+        --num-callers=10 --time-stamp=yes "$SUPP" "$@"
+}
+
+function vg-heap
+{
+    rm xtmemory.kcg.* massif.out.*
+    valgrind --tool=massif -v --read-inline-info=yes --pages-as-heap=yes --xtree-memory=full "$@"
+    callgrind_annotate --auto=yes --inclusive=yes --sort=curB:100,curBk:100,totB:100,totBk:100,totFdB:100,totFdBk:10 xtmemory.kcg.*
+}
+
+function vg-call
+{
+    valgrind --tool=callgrind --instr-atstart=yes -v --dump-line=yes --collect-jumps=yes --dump-instr=yes "$@"
+}
+
+# system overall: flamegraph -a sleep 10
+function flamegraph
+{
+    perf record --call-graph dwarf "$@"
+    perf script --no-inline | stackcollapse-perf.pl | flamegraph.pl > /tmp/perf.svg
+    echo "spawn chromium to check results..."
+    chromium /tmp/perf.svg
+}
+
+function lvm-show
+{
+    pvs
+    vgs
+    lvs -o +lv_health_status,raid_sync_action,raid_mismatch_count,segtype
+}
+
+function lvm-check
+{
+    lvchange --syncaction check wd
+}
+
+function lvm-repair
+{
+    lvchange --syncaction repair wd
+}
+
+function ffmpeg-recode-video
+{
+    if [ $# -ne 1 ]; then
+        echo "usage: ffmpeg-recode-video <filename>"
+        return
+    fi
+    filename="${1%.*}"
+    extension="${1##*.}"
+    ffmpeg -i "$1" -y -c:v h264 -preset:v faster -vf scale=1280x720 -c:a libmp3lame -q:a 5 "$filename.recode.mkv"
+}
+
+function allure-test
+{
+    if [ $# -eq 0 ]; then
+        echo "usage: allure-test <test binary>"
+        return
+    fi
+    rm test.xml || true
+    "$@" -l all -f XML -k test.xml
+    if [ -f test.xml ]; then
+        ~/code/stuff/testing/boost-test-xml-2-allure.py test.xml
+        for x in ctest*.xml; do ~/code/docker/allure/upload.sh $x; done
+        rm test.xml ctest*.xml
+        sleep 1
+        x-www-browser http://web.allure.docker/
+    fi
+}
+
+function allure-clear
+{
+    curl -s http://web.allure/upload/ | sed -ne 's/.*href="\(.*\)".*/\1/p' | grep xml | while read a; do curl -X DELETE "http://web.allure/upload/$a"; done
+}
+
+function validate-yaml
+{
+    if [ $# -ne 1 ]; then
+        echo "usage: validate-yaml <filename>"
+        return
+    fi
+    cat "$1" | python -c 'import yaml,sys; yaml.safe_load(sys.stdin)'
+}
+
+function validate-xml
+{
+    if [ $# -ne 1 ]; then
+        echo "usage: validate-xml <filename>"
+        return
+    fi
+    cat "$1" | xmllint --format - > /dev/null
+}
+
+function fix-chown
+{
+    if [ $# -ne 1 ]; then
+        echo "usage: fix-chown <path>"
+        return
+    fi
+    chown ury: "$1" -R
+    find "$1" -type d -exec chmod 755 '{}' +
+    find "$1" -type f -exec chmod 644 '{}' +
+}
+
+# prepare: docker pull minlag/mermaid-cli:11.2.0
+function mermaid-render
+{
+    if [ $# -eq 0 ]; then
+        echo "usage: mermaid-render <parameters>"
+        echo -e "\t for example: mermaid-render -i sequence.mmd"
+        return
+    fi
+    docker run -u $UID --rm --workdir /data -v "$PWD":/data --entrypoint=/home/mermaidcli/node_modules/.bin/mmdc minlag/mermaid-cli:11.2.0 -p /puppeteer-config.json "$@"
+}
+
+function alsa-virtual-surround
+{
+    pacmd load-module module-virtual-surround-sink sink_name=G930_Virtual_5_1 sink_properties=device.description=G930_Virtual_5_1 hrir=~/devel/dolbi/atmos.wav sink_master=alsa_output.usb-Logitech_Logitech_G930_Headset-00.analog-stereo
+    #pacmd load-module module-virtual-surround-sink sink_name=G930_Virtual_5_1 sink_properties=device.description=G930_Virtual_5_1 hrir=~/devel/dolbi/realtek.wav sink_master=alsa_output.usb-Logitech_Logitech_G930_Headset-00.analog-stereo
+    pactl list sinks short
+}
+
+function show-alsa
+{
+    echo sources
+    #pactl list sources short
+    LANG=C pactl --format=json list sources 2>/dev/null | jq -cr '.[] | {index: .index, name: .name, desc: .properties."device.product.name", vendor: .properties."device.vendor.name"}' | jq -r '[.index, .vendor, .desc, .name] | @tsv'
+    echo sinks
+    #pactl list sinks short
+    LANG=C pactl --format=json list sinks 2>/dev/null | jq -cr '.[] | {index: .index, name: .name, desc: .properties."device.product.name", vendor: .properties."device.vendor.name"}' | jq -r '[.index, .vendor, .desc, .name] | @tsv'
+}
+
+function show-gpu
+{
+    echo "GLX info"
+    glxinfo | grep 'direct rendering\| string'
+    echo -e "\nOpenCL info"
+    clinfo | grep Version
+    echo -e "\nVulkan info"
+    vulkaninfo --summary | sed -ne '/GPU0:/,//p'
+    echo -e "\nNVIDIA info"
+    nvidia-smi
+}
+
+function show-yubikey
+{
+    ykman info
+    ykman piv info
+    opensc-tool --list-readers
+}
+
+function show-dnssec
+{
+    OK=`dig sigok.ippacket.stream | grep -c "flags: qr rd ra ad"`
+    FAIL=`dig sigfail.ippacket.stream | grep -c "SERVFAIL"`
+    if [[ "$OK" == "1" && "$FAIL" == "1" ]]; then
+        echo "DNSSEC perform well"
+    else
+        echo "DNSSEC broken"
+    fi
+}
+
+function show-etcd
+{
+    etcdctl get "" --prefix
+}
+
+function show-zk
+{
+    if [ $# -ne 1 ]; then
+        echo "usage: show-zk <hostname>"
+        return
+    fi
+    zeke -a "$1" -d /
+}
+
+function show-torrents
+{
+    for x in /home/ury/.local/share/data/qBittorrent/BT_backup/*.torrent; do
+        ctorrent -x $x 2>/dev/null | awk '/Directory:/ {a=substr($0,12,80)} /<1>/ {if (length(a)==0){a=substr($0,5,80)}} END{print a}'
+    done
+}
+
+function show-colors
+{
+    # apt-get install colortest
+    colortest-256
+}
+
+function to-imgur
+{
+    if [ $# -ne 1 ]; then
+        echo "usage: to-imgur <filename>"
+        return
+    fi
+    curl -v -X POST "https://api.imgur.com/3/upload" -F "image=@\"$1\"" | jq ".data.link" -r
+}
+
+function benchmark-disk
+{
+    fio --loops=1 --size=1G --filename="./fiomark.tmp" --stonewall --ioengine=libaio --direct=1 --output-format=json \
+        --name=seq_read  --bs=4k --iodepth=1 --numjobs=1 --rw=read  --runtime=10s\
+        --name=seq_write --bs=4k --iodepth=1 --numjobs=1 --rw=write --runtime=10s\
+        --name=seq_read_QD32  --bs=4k --iodepth=32 --numjobs=1 --rw=read  --runtime=10s\
+        --name=seq_write_QD32 --bs=4k --iodepth=32 --numjobs=1 --rw=write --runtime=10s\
+        --name=random_read  --bs=4k --iodepth=1 --numjobs=1 --rw=randread  --runtime=10s\
+        --name=random_write --bs=4k --iodepth=1 --numjobs=1 --rw=randwrite --runtime=10s\
+        --name=random_read_QD32  --bs=4k --iodepth=32 --numjobs=1 --rw=randread  --runtime=10s\
+        --name=random_write_QD32 --bs=4k --iodepth=32 --numjobs=1 --rw=randwrite --runtime=10s \
+    > fio.json
+    cat fio.json | jq -r '["test","iops","kb/s"], ["--","------","------"], (.jobs[] | select(.read.bw > 0) | [.jobname, (.read.iops|floor), .read.bw]), (.jobs[] | select(.write.bw > 0) | [.jobname, (.write.iops|floor), .write.bw]) | @tsv' | column -t
+}
+
+function benchmark-cpu
+{
+    # sysbench --test=cpu --cpu-max-prime=2000000 --num-threads=18 run
+    dd if=/dev/zero bs=1M count=1024 | md5sum
+}
+
+function benchmark-opengl
+{
+    __GL_SYNC_TO_VBLANK=0 glxgears
+}
+
+function run-qemu
+{
+    if [ $# -ne 1 ]; then
+        echo "usage: run-qemu <filename>|flash"
+        return
+    fi
+    if [ "$1" = "flash" ]; then
+        echo "will use sandisk flash"
+        NIC="-net nic,macaddr=52:62:33:44:55:12,model=virtio -net tap,ifname=vif-flash"
+        DRV="-drive if=virtio,cache=unsafe,file=/dev/disk/by-id/usb-SanDisk_Ultra_4C530001111022115555-0:0,media=cdrom,format=raw"
+    else
+        echo "will use file $1"
+        NIC="-net nic,macaddr=52:62:33:44:55:10,model=virtio -net tap,ifname=vif-iso"
+        DRV="-drive if=virtio,cache=unsafe,file=$1,media=cdrom,format=raw"
+    fi
+    sudo kvm -m 6G -smp cpus=4 $DRV $NIC -vga virtio
+}
+
+function show-biorithms
+{
+    clickhouse-local -mn -q "CREATE FUNCTION bio AS (age, period) -> round(sin(2*pi()*age/period)*100); \
+                    WITH toDate('$BIRTH_DAY') AS b, age('d', b, today())+0.5 AS age \
+                    SELECT number, \
+                           bio(age+number,23.688) AS physical,  \
+                           bio(age+number,28.426) AS emotional,  \
+                           bio(age+number,33.164) AS intellectual \
+                    FROM numbers(14) FORMAT CSVWithNames" \
+    | uplot lines -d, -w 80 -H -C
+}
+
+function click-query
+{
+    if [ $# -ne 1 ]; then
+        echo "usage: click-query <query>"
+        return
+    fi
+    python -c '
+import sys
+import requests
+r = requests.post(url="http://master.clickhouse:8123", params={"query": sys.argv[1]})
+print (r.text)
+' "$1"
+}
+
+function show-s3-config
+{
+    cat ~/.s3/config.json
+}
+
+function show-samba-users
+{
+    sudo pdbedit -L -v
+}
+
+function show-samba-shares
+{
+    smbclient -N -L elf -m NT1
+}
+
+function samba-connect
+{
+    if [ $# -ne 1 ]; then
+        echo "usage: samba-connect <service>"
+        return
+    fi
+    smbclient -N "\\\\elf\\$1"
+}
+
+function show-ssd-wearing
+{
+    echo "Already written to disks":
+    echo -n " Samsung EVO SSD:     "
+    curl -s localhost:9633/metrics | grep smartctl_device_attribute | grep Total_LBAs_Written | grep 'attribute_value_type="raw"' | awk '{print $2*512/1024/1024/1024/1024, "Tb"}'
+    echo -n " Intel ssd (windows): "
+    curl -s localhost:9633/metrics | grep smartctl_device_attribute | grep NAND_Writes_1GiB | grep 'attribute_value_type="raw"' | awk '{print $2/1024, "Tb"}'
+}
+
+function show-redis-monitor
+{
+    redis-cli -h redis.nextcloud MONITOR
+}
