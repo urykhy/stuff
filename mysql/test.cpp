@@ -4,8 +4,13 @@
 #include <cassert>
 #include <iostream>
 
+#include <boost/asio/co_spawn.hpp>
+#include <boost/asio/io_service.hpp>
+#include <boost/asio/use_future.hpp>
+
 #include "Cacheable.hpp"
 #include "Client.hpp"
+#include "Coro.hpp"
 #include "Format.hpp"
 #include "MessageQueue.hpp"
 #include "Mock.hpp"
@@ -39,13 +44,13 @@ BOOST_AUTO_TEST_CASE(simple)
     MySQL::Connection c(cfg);
     BOOST_CHECK_EQUAL(c.ping(), true); // connected
     std::list<Entry> sData;
-    Time::XMeter     m1;
+    Time::Meter      m1;
     c.Query("SELECT emp_no, salary, from_date, to_date FROM salaries LIMIT 100");
     c.Use([&sData](const MySQL::Row& aRow) {
         sData.push_back(Entry{aRow[0], aRow[1], aRow[2], aRow[3]});
     });
-    BOOST_TEST_MESSAGE("elapsed " << m1.duration().count() / 1000 / 1000.0 << " ms");
-    BOOST_TEST_MESSAGE("got " << sData.size() << " rows");
+    BOOST_CHECK_EQUAL(100, sData.size());
+    BOOST_TEST_MESSAGE("elapsed " << m1.get().to_double() << " s");
 
     // ensure program name set
     bool sAttr = false;
@@ -299,11 +304,11 @@ BOOST_AUTO_TEST_CASE(cacheable)
         .parse = [](const MySQL::Row& aRow) { return std::pair(aRow[0].as_string(), aRow[1].as_string()); }};
 
     // run query and cache
-    Time::XMeter sMeter;
-    auto         sResp = sCache(sQuery);
+    Time::Meter sMeter;
+    auto        sResp = sCache(sQuery);
     BOOST_CHECK_EQUAL(9, sResp.size());
     BOOST_CHECK_EQUAL("1303398", sResp.find("2002-07-02")->second);
-    BOOST_TEST_MESSAGE("elapsed " << sMeter.duration().count() / 1000 / 1000.0 << " ms");
+    BOOST_TEST_MESSAGE("elapsed " << sMeter.get().to_ms() << " ms");
 
     // ensure response cached
     auto [sMissing, sCached] = sCache.prepare(sQuery);
@@ -402,5 +407,40 @@ BOOST_AUTO_TEST_CASE(simple)
     sConsumer.update();
     sTasks = sConsumer.select();
     BOOST_CHECK(sTasks.empty());
+}
+BOOST_AUTO_TEST_SUITE_END()
+
+BOOST_AUTO_TEST_SUITE(Coro)
+BOOST_AUTO_TEST_CASE(simple)
+{
+    boost::asio::io_service sAsio;
+
+    auto sFuture = boost::asio::co_spawn(
+        sAsio,
+        [&]() -> boost::asio::awaitable<void> {
+            std::list<Entry>        sData;
+            MySQL::Coro::Connection sClient(cfg);
+            co_await sClient.Open();
+            Time::Meter sMeter;
+            co_await sClient.Query("SELECT emp_no, salary, from_date, to_date FROM salaries LIMIT 100");
+            co_await sClient.Use([&sData](const MySQL::Row& aRow) {
+                sData.push_back(Entry{aRow[0], aRow[1], aRow[2], aRow[3]});
+            });
+            BOOST_CHECK_EQUAL(100, sData.size());
+            BOOST_TEST_MESSAGE("elapsed " << sMeter.get().to_double() << " s");
+
+            //
+            try {
+                co_await sClient.Query("select 123 from");
+            } catch (const MySQL::Error& e) {
+                BOOST_TEST_MESSAGE("exception: " << e.what());
+                BOOST_CHECK_EQUAL(e.decode(), MySQL::Error::BAD_QUERY);
+            }
+        },
+        boost::asio::use_future);
+
+    sAsio.run_for(1000ms);
+    BOOST_REQUIRE_EQUAL(sFuture.wait_for(0ms) == std::future_status::ready, true);
+    sFuture.get();
 }
 BOOST_AUTO_TEST_SUITE_END()

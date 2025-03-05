@@ -13,9 +13,11 @@
 #include <mpl/Mpl.hpp>
 #include <parser/Atoi.hpp>
 #include <unsorted/Env.hpp>
+#include <unsorted/Log4cxx.hpp>
 #include <unsorted/Raii.hpp>
 
 namespace MySQL {
+    inline log4cxx::LoggerPtr sLogger = Logger::Get("sql");
 
     struct Config
     {
@@ -26,6 +28,7 @@ namespace MySQL {
         std::string database     = "";
         time_t      timeout      = 10;
         std::string program_name = "";
+        bool        store_result = true;
     };
 
     struct Error : public std::runtime_error
@@ -333,6 +336,7 @@ namespace MySQL {
             if (!m_Closed)
                 throw Error("connection already open");
 
+            INFO("connecting to " << m_Cfg.username << "@" << m_Cfg.host << ":" << m_Cfg.port << "/" << m_Cfg.database);
             int sReconnectTimeout = 1;
             mysql_init(&m_Handle);
             mysql_options(&m_Handle, MYSQL_OPT_CONNECT_TIMEOUT, &sReconnectTimeout);
@@ -387,6 +391,7 @@ namespace MySQL {
             if (m_Closed)
                 throw Error("attempt to use closed connection");
 
+            INFO("query " << aQuery);
             int rc = mysql_query(&m_Handle, aQuery.data());
             if (rc)
                 report("mysql_query");
@@ -394,13 +399,19 @@ namespace MySQL {
 
         void Use(UseCB aHandler) override
         {
-            // reads the entire result of a query to the client
-            // MYSQL_RES* sResult = mysql_store_result(&m_Handle);
+            MYSQL_RES* sResult = nullptr;
+            if (m_Cfg.store_result) {
+                // reads the entire result of a query to the client
+                sResult = mysql_store_result(&m_Handle);
+                if (sResult == NULL)
+                    report("mysql_store_result");
+            } else {
+                // initiates a result set retrieval but does not actually read the result set into the client
+                sResult = mysql_use_result(&m_Handle);
+                if (sResult == NULL)
+                    report("mysql_use_result");
+            }
 
-            // initiates a result set retrieval but does not actually read the result set into the client
-            MYSQL_RES* sResult = mysql_use_result(&m_Handle);
-            if (sResult == NULL)
-                report("mysql_use_result");
             Util::Raii sCleanup([sResult]() { mysql_free_result(sResult); });
 
             const unsigned                sFields = mysql_num_fields(sResult);
@@ -411,8 +422,12 @@ namespace MySQL {
             }
 
             MYSQL_ROW sRow;
-            while ((sRow = mysql_fetch_row(sResult)))
+            while ((sRow = mysql_fetch_row(sResult))) {
                 aHandler(Row(sRow, sFields, sMeta));
+            }
+            if (mysql_errno(&m_Handle)) {
+                report("mysql_fetch_row");
+            }
         }
     };
 } // namespace MySQL
