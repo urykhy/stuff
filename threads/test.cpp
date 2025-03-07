@@ -35,6 +35,7 @@
 #include "OrderedWorker.hpp"
 #include "Periodic.hpp" // for sleep
 #include "Pipeline.hpp"
+#include "Spinlock.hpp"
 #include "WaitGroup.hpp"
 
 #include <cache/LRU.hpp>
@@ -626,3 +627,12 @@ BOOST_AUTO_TEST_CASE(basic)
     BOOST_CHECK(sFuture.get() == 2);
 }
 BOOST_AUTO_TEST_SUITE_END()
+
+BOOST_AUTO_TEST_CASE(Atomic)
+{
+    using T   = std::map<std::string, std::string>;
+    using Ptr = Threads::AtomicSharedPtr<T>;
+    Ptr sPtr;
+    sPtr.Update([](auto x) { x->operator[]("foo") = "bar"; });
+    BOOST_CHECK_EQUAL(sPtr.Read()->operator[]("foo"), "bar");
+}

@@ -3,6 +3,7 @@
 #include <pthread.h>
 
 #include <atomic>
+#include <memory>
 #include <thread>
 
 namespace Threads {
@@ -50,4 +51,33 @@ namespace Threads {
         }
     };
 
+    template <class T>
+    class AtomicSharedPtr
+    {
+        using Ptr = std::shared_ptr<T>;
+        std::atomic<Ptr> m_Ptr;
+
+    public:
+        AtomicSharedPtr(Ptr aPtr = std::make_shared<T>())
+        : m_Ptr(aPtr)
+        {
+        }
+
+        Ptr Read() const
+        {
+            return m_Ptr.load();
+        }
+
+        template <class H>
+        void Update(H&& aHandler)
+        {
+            Ptr sCurrent;
+            Ptr sUpdate;
+            do {
+                sCurrent = m_Ptr.load();
+                sUpdate  = std::make_shared<T>(*sCurrent);
+                aHandler(sUpdate);
+            } while (!m_Ptr.compare_exchange_weak(sCurrent, sUpdate));
+        }
+    };
 } // namespace Threads
