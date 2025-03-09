@@ -1,0 +1,17 @@
+#!/bin/bash
+
+ADDR=$1; shift;
+SPACE0=$1; shift;
+SPACE1=$1; shift;
+NAME=$1; shift;
+
+echo "net space $NAME($ADDR) via $SPACE0/$SPACE1 will be removed"
+
+ALREADY=`ip netns | grep -c $NAME`
+if [ "$ALREADY" != "1" ]; then
+    echo "net space $NAME already removed"
+    exit 0
+fi
+
+ip netns del $NAME
+ip link del $SPACE0

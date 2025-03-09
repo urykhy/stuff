@@ -1,0 +1,41 @@
+#!/bin/bash
+
+ADDR=$1; shift;
+SPACE0=$1; shift;
+SPACE1=$1; shift;
+NAME=$1; shift;
+
+ALREADY=`ip netns | grep -c $NAME`
+if [ "$ALREADY" == "1" ]; then
+    echo "net space $NAME already exists"
+    exit 0
+fi
+
+echo "net space $NAME($ADDR) via $SPACE0/$SPACE1 will be created"
+
+ip netns add  $NAME
+ip netns exec $NAME ip addr add 127.0.0.1/8 dev lo
+ip netns exec $NAME ip link set lo up
+
+# space - это интерфейс для выхода из NS в мир
+ip link add $SPACE0 type veth peer name $SPACE1
+ip link set $SPACE0 up
+ip link set $SPACE1 netns $NAME up
+ip addr add $ADDR/24 dev $SPACE0
+ip netns exec $NAME ip addr add ${ADDR}0/24 dev $SPACE1
+ip netns exec $NAME ip route add default via $ADDR dev $SPACE1
+ip netns exec $NAME ip route add 10.103.0.0/16 via $ADDR dev $SPACE1
+
+mkdir -p /etc/netns/$NAME
+echo 'nameserver 10.103.10.3' > /etc/netns/$NAME/resolv.conf
+
+# firewall
+ip netns exec $NAME iptables -F
+ip netns exec $NAME iptables -A INPUT -m conntrack --ctstate established,related -j ACCEPT
+ip netns exec $NAME iptables -A INPUT -j REJECT
+ip netns exec $NAME iptables -A FORWARD -m conntrack --ctstate established,related -j ACCEPT
+ip netns exec $NAME iptables -A FORWARD -j REJECT
+
+ip netns exec $NAME ip6tables -F
+ip netns exec $NAME ip6tables -A INPUT -j REJECT
+ip netns exec $NAME ip6tables -A FORWARD -j REJECT

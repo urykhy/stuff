@@ -316,29 +316,6 @@ function progress-bar
     printf "\rProgress : [${_done// /#}${_left// /-}] ${_progress}%%"
 }
 
-function netspace
-{
-    if [ $# -lt 1 ]; then
-        # folders in /etc/netns
-        echo "usage: netspace name"
-        echo -e "\tname one of:"
-        echo -e "\t\tcameron"
-        echo -e "\t\tprotonvpn"
-        echo -e "\t\tfornex"
-        echo -e "or use: netspace cameron firefox -P"
-        return
-    fi
-    NS="$1"
-    shift
-    CMD=""
-    if [ $# -gt 0 ]; then
-        CMD="-c $@"
-    fi
-    sudo network-namespace.sh $NS
-    #sudo ip netns exec $NS su $USER "$CMD"
-    sudo ip netns exec $NS bash -c "su $USER $CMD"
-}
-
 function show-open-files
 {
     sudo lsof -nPs 2> /dev/null | grep -v 'No such file or directory' | awk '$5 == "REG" && $4 != "mem" && $4 != "DEL"' | sort -n -k 7,7 | uniq -f 8 | tail -n 25
