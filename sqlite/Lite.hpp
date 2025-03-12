@@ -19,6 +19,8 @@
 
 namespace Lite {
 
+    inline log4cxx::LoggerPtr sLogger = Logger::Get("sql");
+
     class DB;
 
     using Error = Exception::Error<DB>;
@@ -125,20 +127,19 @@ namespace Lite {
 
         DB(const std::string& aPath = ":memory:", int aFlags = SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE)
         {
+            INFO("connecting to " << aPath);
             Check(sqlite3_open_v2(aPath.c_str(), &m_Handle, aFlags, nullptr));
         }
 
         void Query(const std::string& aQuery, CB&& aCB)
         {
-            log4cxx::NDC ndc("lite");
-            DEBUG("query: " << aQuery);
+            INFO("query " << aQuery);
             Check(sqlite3_exec(m_Handle, aQuery.c_str(), Callback, &aCB, nullptr));
         }
 
         void Query(const std::string& aQuery)
         {
-            log4cxx::NDC ndc("lite");
-            DEBUG("query: " << aQuery);
+            INFO("query " << aQuery);
             Check(sqlite3_exec(m_Handle, aQuery.c_str(), Callback, nullptr, nullptr));
         }
 
