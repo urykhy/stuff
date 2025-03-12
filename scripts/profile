@@ -92,6 +92,12 @@ function meson-debug-stl()
     meson setup build-debug-stl -Dcpp_args="${CXXFLAGS} -D_GLIBCXX_DEBUG -D_GLIBCXX_DEBUG_PEDANTIC" -Dcpp_link_args="${LDFLAGS}" -Dc_args="${CFLAGS}" -Dc_link_args="${LDFLAGS}"
 }
 
+function meson-gprof()
+{
+    # not compatible with mold linker
+    meson setup build-gprof -Dcpp_args="${CXXFLAGS} -pg" -Dcpp_link_args="${LDFLAGS} -pg -fuse-ld=gold"
+}
+
 function zipfile()
 {
     for i in "$@"; do
