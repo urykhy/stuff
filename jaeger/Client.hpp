@@ -8,6 +8,8 @@
 #include <unsorted/Log4cxx.hpp>
 
 namespace Jaeger {
+    inline log4cxx::LoggerPtr sLogger = Logger::Get("jaeger");
+
     struct Client : boost::noncopyable
     {
         struct Params
@@ -23,6 +25,7 @@ namespace Jaeger {
     public:
         Client()
         {
+            INFO("using " << m_Params.url);
             auto& sHeaders           = m_Hint.headers;
             sHeaders["Content-Type"] = "application/x-protobuf";
         }
@@ -36,7 +39,7 @@ namespace Jaeger {
         }
     };
 
-    class Queue : boost::noncopyable
+    class Queue : public QueueFace
     {
         const std::string         m_Service;
         const std::string         m_Version;
@@ -44,17 +47,26 @@ namespace Jaeger {
         static constexpr int      SPAN_LIMIT  = 1000; // max traces in single batch
 
         std::mutex                                      m_Mutex;
-        opentelemetry::proto::trace::v1::TracesData     m_Traces;
-        opentelemetry::proto::trace::v1::ResourceSpans* m_Spans = nullptr;
+        trace::TracesData     m_Traces;
+        trace::ResourceSpans* m_Spans     = nullptr;
+        int                                             m_SpanCount = 0;
 
-        Client                                m_Client;
-        Threads::SafeQueueThread<std::string> m_Queue;
-        Threads::Group                        m_Group; // must be last, to be destroyed first
+        struct Info
+        {
+            std::string serialized = {};
+            int         count      = {};
+        };
+
+        Client                         m_Client;
+        Threads::SafeQueueThread<Info> m_Queue;
+        Threads::Group                 m_Group; // must be last, to be destroyed first
 
         void push_i()
         {
-            m_Queue.insert(m_Traces.SerializeAsString());
-            m_Spans = nullptr;
+            assert(m_Spans);
+            m_Queue.insert(Info{m_Traces.SerializeAsString(), m_SpanCount});
+            m_Spans     = nullptr;
+            m_SpanCount = 0;
             m_Traces.Clear();
         }
 
@@ -65,19 +77,19 @@ namespace Jaeger {
                 push_i();
         }
 
-        void process(const std::string& aMsg)
+        void process(const Info& aInfo)
         {
-            log4cxx::NDC ndc("jaeger");
             try {
-                auto sResult = m_Client.send(aMsg);
+                DEBUG("flush " << aInfo.count << " spans");
+                auto sResult = m_Client.send(aInfo.serialized);
                 if (sResult.status != 200)
-                    ERROR("notification: " << Exception::HttpError::format(sResult.body, sResult.status));
+                    ERROR(Exception::HttpError::format(sResult.body, sResult.status));
             } catch (const std::exception& aErr) {
-                ERROR("notification: " << aErr.what());
+                ERROR(aErr.what());
             }
         }
 
-        void set_tag(opentelemetry::proto::common::v1::KeyValue* aTag, const std::string& aKey, const std::string& aValue)
+        void set_tag(common::KeyValue* aTag, const std::string& aKey, const std::string& aValue)
         {
             aTag->set_key(aKey);
             aTag->mutable_value()->set_string_value(aValue);
@@ -87,12 +99,13 @@ namespace Jaeger {
         Queue(const std::string& aService, const std::string aVersion)
         : m_Service(aService)
         , m_Version(aVersion)
-        , m_Queue([this](const std::string& aMsg) { process(aMsg); },
+        , m_Queue([this](const Info& aInfo) { process(aInfo); },
                   {.retry  = true,
                    .linger = 2,
                    .idle   = [this]() { idle(); }})
         {
         }
+
         void start()
         {
             m_Group.at_stop([this]() {
@@ -102,26 +115,33 @@ namespace Jaeger {
             });
             m_Queue.start(m_Group);
         }
-        bool send(Trace& aMsg)
+
+        void send(trace::ScopeSpans& aMsg) noexcept override
         {
-            std::unique_lock sLock(m_Mutex);
+            const int sCount = aMsg.spans_size();
+            try {
+                std::unique_lock sLock(m_Mutex);
 
-            if (m_Queue.size() >= QUEUE_LIMIT)
-                return false;
+                if (m_Queue.size() >= QUEUE_LIMIT) {
+                    ERROR("fail to enqueue " << sCount << " spans: queue limit");
+                    return;
+                }
 
-            if (m_Spans == nullptr) {
-                m_Spans = m_Traces.add_resource_spans();
-                set_tag(m_Spans->mutable_resource()->add_attributes(), "service.name", m_Service);
-                set_tag(m_Spans->mutable_resource()->add_attributes(), "service.version", m_Version);
+                if (m_Spans == nullptr) {
+                    m_Spans = m_Traces.add_resource_spans();
+                    set_tag(m_Spans->mutable_resource()->add_attributes(), "service.name", m_Service);
+                    set_tag(m_Spans->mutable_resource()->add_attributes(), "service.version", m_Version);
+                }
+
+                auto sScope = m_Spans->add_scope_spans();
+                *sScope     = std::move(aMsg);
+                m_SpanCount += sCount;
+
+                if (m_SpanCount >= SPAN_LIMIT)
+                    push_i();
+            } catch (const std::exception& e) {
+                ERROR("fail to enqueue " << sCount << " spans: " << e.what());
             }
-
-            auto sScope = m_Spans->add_scope_spans();
-            *sScope     = std::move(aMsg.spans());
-
-            if (m_Spans->scope_spans_size() >= SPAN_LIMIT)
-                push_i();
-
-            return true;
         }
     };
 } // namespace Jaeger

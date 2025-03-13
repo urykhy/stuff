@@ -12,6 +12,8 @@ using namespace std::chrono_literals;
 #include <unsorted/Log4cxx.hpp>
 
 namespace Sentry {
+    inline log4cxx::LoggerPtr sLogger = Logger::Get("sentry");
+
     struct Client : boost::noncopyable
     {
         struct Params
@@ -30,6 +32,8 @@ namespace Sentry {
     public:
         Client()
         {
+            INFO("using " << m_Sentry.url);
+
             auto& sHeaders            = m_Hint.headers;
             sHeaders["Content-Type"]  = "application/json";
             sHeaders["X-Sentry-Auth"] = std::string("Sentry ") +
@@ -38,41 +42,42 @@ namespace Sentry {
                                         "sentry_client=" + m_Sentry.client + ", " +
                                         "sentry_version=7";
         }
-        Curl::Client::Result send(const Message& aMsg) { return send(aMsg.to_string()); }
-        Curl::Client::Result send(std::string_view aMsg)
+        Curl::Client::Result send(const Message& aMsg)
         {
+            const std::string     sBody = aMsg.to_string();
             Curl::Client::Request sRequest{
                 .method = Curl::Client::Method::POST,
                 .url    = m_Sentry.url,
-                .body   = aMsg};
+                .body   = sBody};
             return m_Client(m_Hint.wrap(std::move(sRequest)));
         }
     };
 
     class Queue : boost::noncopyable
     {
-        Client                                m_Client;
-        Threads::SafeQueueThread<std::string> m_Queue;
-        Threads::Group                        m_Group;
-        static thread_local bool              m_Disabled;
-        const unsigned                        m_Limit; // max notifications in queue
+        Client                            m_Client;
+        Threads::SafeQueueThread<Message> m_Queue;
+        Threads::Group                    m_Group;
+        static thread_local bool          m_Disabled;
+        const unsigned                    m_Limit; // max notifications in queue
 
-        void process(const std::string& aMsg)
+        void process(Message& aMsg)
         {
             m_Disabled = true;
-            log4cxx::NDC ndc("sentry");
             try {
+                DEBUG("flush '" << aMsg.get_message() << "'");
                 auto sResult = m_Client.send(aMsg);
-                if (sResult.status != 200)
-                    ERROR("notification: " << Exception::HttpError::format(sResult.body, sResult.status));
+                if (sResult.status != 200) {
+                    ERROR(Exception::HttpError::format(sResult.body, sResult.status));
+                }
             } catch (const std::exception& aErr) {
-                ERROR("notification: " << aErr.what());
+                ERROR(aErr.what());
             }
         }
 
     public:
         Queue(unsigned aLimit = 20)
-        : m_Queue([this](const std::string& aMsg) { process(aMsg); }, {.retry = true, .linger = 2})
+        : m_Queue([this](Message& aMsg) { process(aMsg); }, {.retry = true, .linger = 2})
         , m_Limit(aLimit)
         {
         }
@@ -80,12 +85,12 @@ namespace Sentry {
         {
             m_Queue.start(m_Group);
         }
-        bool send(const Message& aMsg)
+        void send(Message&& aMsg)
         {
             if (m_Queue.size() >= m_Limit)
-                return false;
-            m_Queue.insert(aMsg.to_string());
-            return true;
+                return;
+            m_Queue.insert(std::move(aMsg));
+            return;
         }
         bool is_disabled() const { return m_Disabled; }
     };

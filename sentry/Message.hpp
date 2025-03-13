@@ -16,7 +16,7 @@
 // https://docs.sentry.io/development/sdk-dev/event-payloads/
 
 namespace Sentry {
-    class Message : boost::noncopyable
+    class Message
     {
         Json::Value m_Root;
 
@@ -36,6 +36,11 @@ namespace Sentry {
 #undef STRINGIFY2
 #endif
         }
+
+        Message(const Message& a)            = delete;
+        Message& operator=(const Message& a) = delete;
+        Message(Message&& a)                 = default;
+        Message& operator=(Message&& a)      = default;
 
         // allowed: debug, info, warning, error, fatal
         Message& set_level(const std::string& v)
@@ -58,6 +63,10 @@ namespace Sentry {
         {
             m_Root["message"]["message"] = v;
             return *this;
+        }
+        std::string get_message()
+        {
+            return m_Root["message"]["message"].asString();
         }
         Message& set_module(const std::string& n, const std::string& v)
         {

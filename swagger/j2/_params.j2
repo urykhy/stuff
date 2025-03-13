@@ -22,7 +22,7 @@
         void __parse(const asio_http::Request& aRequest);
         bool __test_content_type(const asio_http::Request& aRequest) const;
         asio_http::ClientRequest __format() const;
-        {% if x_jaeger %}Jaeger::Span* __trace = nullptr;{% endif %}
+        {% if x_jaeger %}Jaeger::SpanPtr __trace = {};{% endif %}
         {% if x_discovery %}std::optional<uint64_t> __session;{% endif %}
     };
 

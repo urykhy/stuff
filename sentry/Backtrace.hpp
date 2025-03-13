@@ -31,6 +31,8 @@ namespace Sentry
             if ((uintptr_t)aTrace[i].addr == 0xffffffffffffffff)
                 continue;
             const auto sTrace = sResolver.resolve(aTrace[i]);
+            if (sTrace.source.filename.empty())
+                continue;
             Frame sFrame;
             std::stringstream sTmp;
             sTmp << std::hex << aTrace[i].addr;

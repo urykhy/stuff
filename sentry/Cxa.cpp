@@ -51,7 +51,7 @@ namespace Sentry
         sMsg.set_exception(Util::Demangle(sInfo->name()), sWhat);
         sMsg.set_trace(GetTrace(), 4);
         gPrepare(sMsg);
-        gQueue->send(sMsg);
+        gQueue->send(std::move(sMsg));
     }
 }
 

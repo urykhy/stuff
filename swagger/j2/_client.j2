@@ -98,11 +98,11 @@ public:
             asio_http::ClientRequest sRequest = aRequest.__format();
 
             {% if x_jaeger %}
-            std::unique_ptr<Jaeger::Span> sTraceCall;
+            Jaeger::SpanPtr sTraceCall;
             if (aRequest.__trace)
             {
-                sTraceCall = std::make_unique<Jaeger::Span>(aRequest.__trace->child("call {{ Aname }}/{{ name }}"));
-                sRequest.headers["traceparent"] = sTraceCall->extract().traceparent();
+                sTraceCall = Jaeger::start(aRequest.__trace, "call {{ Aname }}/{{ name }}");
+                sRequest.headers["traceparent"] = sTraceCall->traceparent();
             }
             {% endif %}
 

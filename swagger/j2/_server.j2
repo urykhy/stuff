@@ -23,12 +23,11 @@ class server
     std::mutex m_SentryLock;
     time_t m_SentryRateLimit = 0;
     time_t m_SentryLastCall = 0;
-    using SentryHandler = std::function<void(Sentry::Message& aMessage)>;
+    using SentryHandler = std::function<void(Sentry::Message&& aMessage)>;
     SentryHandler m_SentryHandler;
 {% endif %}
 {% if x_jaeger %}
-    using JaegerHandler = std::function<void(Jaeger::Trace& aTrace)>;
-    JaegerHandler m_JaegerHandler;
+    Jaeger::QueuePtr m_JaegerQueue;
 {% endif %}
 {% if x_queue %}
     Threads::QueueExecutor* m_Queue = nullptr;
@@ -47,7 +46,7 @@ public:
     void with_sentry(SentryHandler aHandler, time_t aRate = 60);
 {% endif %}
 {% if x_jaeger %}
-    void with_jaeger(JaegerHandler aHandler);
+    void with_jaeger(Jaeger::QueuePtr aQueue);
 {% endif %}
 {% if x_queue %}
     void with_queue(Threads::QueueExecutor& aQueue);
@@ -77,7 +76,7 @@ public:
     virtual {{ name }}_response_v
     {{ name }}_i(asio_http::asio::io_service& aService,
                  const {{ name }}_parameters& aRequest,
-                 asio_http::asio::yield_context yield {% if x_jaeger %}, std::optional<Jaeger::Span>& aTrace {% endif %});
+                 asio_http::asio::yield_context yield {% if x_jaeger %}, Jaeger::SpanPtr aSpan {% endif %});
     {%- if x_bearer %}
         virtual bool
         {{ name }}_auth(const Jwt::Claim& aClaim, const {{ name }}_parameters& aRequest);
@@ -104,9 +103,9 @@ private:
     }
 {% endif %}
 {% if x_jaeger %}
-    void server::with_jaeger(JaegerHandler aHandler)
+    void server::with_jaeger(Jaeger::QueuePtr aQueue)
     {
-        m_JaegerHandler = aHandler;
+        m_JaegerQueue = aQueue;
     }
 {% endif %}
 {% if x_queue %}
@@ -156,7 +155,7 @@ private:
     server::{{ name }}_response_v
     server::{{ name }}_i(asio_http::asio::io_service& aService,
                  const {{ name }}_parameters& aRequest,
-                 asio_http::asio::yield_context yield {% if x_jaeger %}, std::optional<Jaeger::Span>& aTrace {% endif %})
+                 asio_http::asio::yield_context yield {% if x_jaeger %}, Jaeger::SpanPtr aSpan {% endif %})
     {
         return {boost::beast::http::status::not_implemented};
     }
@@ -207,19 +206,11 @@ private:
         {% endif %}
 
         {% if x_jaeger %}
-            auto sTraceSpans = Jaeger::Helper::create(aRequest["traceparent"]);
-            auto sTrace = Jaeger::Helper::start(sTraceSpans, "swagger");
-            Jaeger::Helper::set_tag(sTrace, "swagger.api", "{{ doc['info']['title'] }}");
-            Jaeger::Helper::set_tag(sTrace, "swagger.version", "{{ doc['info']['version'] }}");
-            Jaeger::Helper::set_tag(sTrace, "swagger.method", "{{ name }}");
-            Util::Raii sSendTrace([&sTraceSpans, &sTrace, this]()
-            {
-                Jaeger::Helper::stop(sTrace);
-                if (sTraceSpans and m_JaegerHandler)
-                    m_JaegerHandler(*sTraceSpans);
-            });
-
-            auto sTraceParsing = Jaeger::Helper::start(sTrace, "parsing");
+            auto sTrace = Jaeger::start(aRequest["traceparent"], m_JaegerQueue, "swagger");
+            Jaeger::set_tag(sTrace, Jaeger::Tag{"swagger.api", "{{ doc['info']['title'] }}"});
+            Jaeger::set_tag(sTrace, Jaeger::Tag{"swagger.version", "{{ doc['info']['version'] }}"});
+            Jaeger::set_tag(sTrace, Jaeger::Tag{"swagger.method", "{{ name }}"});
+            auto sTraceParsing = Jaeger::start(sTrace, "parsing");
             if (sTraceParsing)
                 sTraceId = " [J:" + sTraceParsing->trace_id() + ']';
         {% endif %}
@@ -252,15 +243,21 @@ private:
                         sRequest.headers["{{ param.name }}"] = x;
                 {%- endfor %}
                 Sentry::Message sMessage("swagger");
-                if (sResponseStatus == http::status::unauthorized)
+                if (sResponseStatus == http::status::unauthorized) {
                     sMessage.set_request(sRequest).set_exception("unauthorized", e.what());
-                else
+                    sMessage.set_message("unauthorized");
+                } else if (sResponseStatus == http::status::bad_request) {
                     sMessage.set_request(sRequest).set_exception("bad request", e.what());
+                    sMessage.set_message("bad request");
+                } else {
+                    sMessage.set_request(sRequest).set_exception("internal server error", e.what());
+                    sMessage.set_message("internal server error");
+                }
                 sMessage.set_version("{{ doc['info']['title'] }}", "{{ doc['info']['version'] }}");
                 if (sPeer.has_value())
                     sMessage.set_user("", *sPeer);
                 m_SentryLastCall = time(nullptr);
-                m_SentryHandler(sMessage);
+                m_SentryHandler(std::move(sMessage));
             }
         };
         {% endif %}
@@ -272,31 +269,30 @@ private:
             if (!{{ name }}_auth(__auth_helper(aRequest), sParameters))
                 throw std::invalid_argument("authorization token rejected");
             {% endif %}
+            sResponseStatus = http::status::internal_server_error;
         }
         catch (const std::exception& e) {
             aResponse.result(sResponseStatus);
             aResponse.set("X-From-Swagger", "1");
             aResponse.body() = e.what();
-            {% if x_jaeger %} Jaeger::Helper::set_error(sTraceParsing, e.what()); {% endif %}
-            {% if x_sentry %}
-                sNotifySentry(e);
-            {% endif %}
+            {% if x_jaeger %} Jaeger::set_error(sTraceParsing, e.what()); {% endif %}
+            {% if x_sentry %} sNotifySentry(e); {% endif %}
             return;
         }
         {% if x_jaeger %}
-            Jaeger::Helper::stop(sTraceParsing);
+            Jaeger::stop(sTraceParsing);
         {% endif %}
 
         {% if x_queue %}
             {% if x_jaeger %}
-            auto sTraceQueue = Jaeger::Helper::start(sTrace, "queue");
+            auto sTraceQueue = Jaeger::start(sTrace, "queue");
             {% endif %}
             auto sInit = [&](auto handler) mutable {
             auto sHolder = std::make_shared<decltype(handler)>(std::move(handler));
             auto sTask = [&, sHolder](){
-            {% if x_jaeger %} Jaeger::Helper::stop(sTraceQueue); {% endif %}
+            {% if x_jaeger %} Jaeger::stop(sTraceQueue); {% endif %}
         {% endif %}
-        {% if x_jaeger %} auto sTracePerform = Jaeger::Helper::start(sTrace, "perform"); {% endif %}
+        {% if x_jaeger %} auto sTracePerform = Jaeger::start(sTrace, "perform"); {% endif %}
         try {
             auto sResponse = {{ name }}_i(aService, sParameters, yield {% if x_jaeger %}, sTracePerform{% endif %});
             std::visit([&](auto&& arg) {
@@ -313,9 +309,10 @@ private:
             aResponse.result(http::status::internal_server_error);
             aResponse.set("X-From-Swagger", "1");
             aResponse.body() = e.what();
-            {% if x_jaeger %} Jaeger::Helper::set_error(sTracePerform, e.what()); {% endif %}
+            {% if x_jaeger %} Jaeger::set_error(sTracePerform, e.what()); {% endif %}
+            {% if x_sentry %} sNotifySentry(e); {% endif %}
         }
-        {% if x_jaeger %} Jaeger::Helper::stop(sTracePerform); {% endif %}
+        {% if x_jaeger %} Jaeger::stop(sTracePerform); {% endif %}
         {% if x_queue %}
                 boost::system::error_code ec;
                 (*sHolder)(ec);

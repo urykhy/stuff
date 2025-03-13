@@ -11,6 +11,7 @@ Sentry::Trace foo() { return bar(); }
 BOOST_AUTO_TEST_SUITE(Sentry)
 BOOST_AUTO_TEST_CASE(simple)
 {
+    Sentry::Client sClient;
     Sentry::Message::Breadcrumb sWork;
     sWork.category="test";
     sWork.message="test started";
@@ -34,6 +35,7 @@ BOOST_AUTO_TEST_CASE(simple)
        set_module("glibc", gnu_get_libc_version()).
        set_tag("demo","yes").
        set_extra("filename","foobar").
+       set_extra("jaeger", "http://query.jaeger.docker:16686/trace/9343dfc087f83bcae09b0b4433f34989").
        set_exception("Sentry::Error","some message").
        set_trace(foo()).
        log_work(sWork).
@@ -42,6 +44,7 @@ BOOST_AUTO_TEST_CASE(simple)
        set_version("test.cpp","0.1");
 
     BOOST_TEST_MESSAGE(sM.to_string());
+    sClient.send(sM);
 }
 BOOST_AUTO_TEST_CASE(client)
 {

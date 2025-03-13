@@ -17,9 +17,9 @@ namespace Jaeger {
 
     struct Params
     {
-        int64_t traceIdHigh = 0;
-        int64_t traceIdLow  = 0;
-        int64_t parentId    = 0;
+        uint64_t traceIdHigh = 0;
+        uint64_t traceIdLow  = 0;
+        uint64_t parentId    = 0;
 
         std::string traceparent() const // for HTTP headers
         {
@@ -34,8 +34,8 @@ namespace Jaeger {
         {
             std::string sTmp;
             sTmp.reserve(16);
-            const int64_t sHigh = htobe64(traceIdHigh);
-            const int64_t sLow  = htobe64(traceIdLow);
+            const uint64_t sHigh = htobe64(traceIdHigh);
+            const uint64_t sLow  = htobe64(traceIdLow);
             sTmp.append(reinterpret_cast<const char*>(&sHigh), sizeof(sHigh));
             sTmp.append(reinterpret_cast<const char*>(&sLow), sizeof(sLow));
             return sTmp;
@@ -54,11 +54,11 @@ namespace Jaeger {
                             throw std::invalid_argument("Jaeger::Params: version not supported");
                         break;
                     case 2: // trace id
-                        sNew.traceIdHigh = be64toh(Parser::from_hex<int64_t>(aParam.substr(0, 16)));
-                        sNew.traceIdLow  = be64toh(Parser::from_hex<int64_t>(aParam.substr(16)));
+                        sNew.traceIdHigh = be64toh(Parser::from_hex<uint64_t>(aParam.substr(0, 16)));
+                        sNew.traceIdLow  = be64toh(Parser::from_hex<uint64_t>(aParam.substr(16)));
                         break;
                     case 3: // parent id
-                        sNew.parentId = be64toh(Parser::from_hex<int64_t>(aParam));
+                        sNew.parentId = be64toh(Parser::from_hex<uint64_t>(aParam));
                         break;
                     case 4: // flags not used
                         break;
@@ -76,13 +76,16 @@ namespace Jaeger {
         }
     };
 
+    namespace common = opentelemetry::proto::common::v1;
+    namespace trace  = opentelemetry::proto::trace::v1;
+
     struct Tag
     {
         std::string name;
 
         std::variant<std::string, const char*, double, bool, int64_t> value;
 
-        void convert(opentelemetry::proto::common::v1::KeyValue* aTag) const
+        void convert(common::KeyValue* aTag) const
         {
             aTag->set_key(name);
             auto sValue = aTag->mutable_value();
@@ -97,68 +100,99 @@ namespace Jaeger {
         }
     };
 
-    class Span;
-
-    struct Trace : boost::noncopyable
+    class QueueFace : boost::noncopyable
     {
-        friend class Span;
+    public:
+        virtual void send(trace::ScopeSpans& aMsg) noexcept = 0;
+        virtual ~QueueFace(){};
+    };
+    using QueuePtr = std::shared_ptr<QueueFace>;
 
-    private:
-        const Params m_Params;
-
-        opentelemetry::proto::trace::v1::ScopeSpans m_Scope;
+    class Store : boost::noncopyable
+    {
+        const Params      m_Params;
+        QueuePtr          m_Queue;
+        std::mutex        m_Mutex;
+        trace::ScopeSpans m_Spans;
 
     public:
-        Trace(const Params& aParams)
+        Store(const Params& aParams, QueuePtr aQueue)
         : m_Params(aParams)
+        , m_Queue(aQueue)
         {
         }
 
-        std::string trace_id() const
+        const Params& params() const
         {
-            return Format::to_hex(m_Params.binary_trace_id());
+            return m_Params;
         }
 
-        auto& spans()
+        trace::Span* create_span()
         {
-            return m_Scope;
+            std::unique_lock sLock(m_Mutex);
+            return m_Spans.add_spans();
+        }
+
+        ~Store()
+        {
+            m_Queue->send(m_Spans);
         }
     };
+    using StorePtr = std::shared_ptr<Store>;
 
     class Span : boost::noncopyable
     {
         const int m_XCount;
-        Trace&    m_Trace;
+        StorePtr  m_Store;
 
-        opentelemetry::proto::trace::v1::Span* m_Span = nullptr;
+        trace::Span* m_Span = nullptr;
 
-        int64_t m_SpanId = Util::random8();
-        bool    m_Alive  = true;
+        const uint64_t m_SpanId = Util::random8();
+        bool           m_Alive  = true;
 
-        static std::string to_binary(int64_t aVal)
+        static StorePtr make_trace(const Params& aParams, QueuePtr aQueue)
         {
-            int64_t sVal = htobe64(aVal);
+            return std::make_shared<Store>(aParams, aQueue);
+        }
+
+        static std::string to_binary(uint64_t aVal)
+        {
+            uint64_t sVal = htobe64(aVal);
             return std::string(reinterpret_cast<const char*>(&sVal), sizeof(sVal));
         }
 
-    public:
-        Span(Trace& aTrace, const std::string& aName, int64_t aParentSpanId = 0)
-        : m_XCount(std::uncaught_exceptions())
-        , m_Trace(aTrace)
+        void init(const std::string& aName, uint64_t aParentSpanId)
         {
-            m_Span = m_Trace.m_Scope.add_spans();
+            m_Span = m_Store->create_span();
             m_Span->set_name(aName);
-            m_Span->set_trace_id(m_Trace.m_Params.binary_trace_id());
+            m_Span->set_trace_id(m_Store->params().binary_trace_id());
             m_Span->set_span_id(to_binary(m_SpanId));
-            m_Span->set_parent_span_id(to_binary(
-                aParentSpanId == 0 ? m_Trace.m_Params.parentId
-                                   : aParentSpanId));
+            if (aParentSpanId or m_Store->params().parentId) {
+                m_Span->set_parent_span_id(to_binary(
+                    aParentSpanId == 0 ? m_Store->params().parentId
+                                       : aParentSpanId));
+            }
             m_Span->set_start_time_unix_nano(Time::get_time().to_ns());
+        }
+
+    public:
+        Span(const Params& aParams, QueuePtr aQueue, const std::string& aName, uint64_t aParentSpanId = 0)
+        : m_XCount(std::uncaught_exceptions())
+        , m_Store(make_trace(aParams, aQueue))
+        {
+            init(aName, aParentSpanId);
+        }
+
+        Span(StorePtr aStore, const std::string& aName, uint64_t aParentSpanId = 0)
+        : m_XCount(std::uncaught_exceptions())
+        , m_Store(aStore)
+        {
+            init(aName, aParentSpanId);
         }
 
         Span(Span&& aOld)
         : m_XCount(aOld.m_XCount)
-        , m_Trace(aOld.m_Trace)
+        , m_Store(aOld.m_Store)
         , m_Span(std::move(aOld.m_Span))
         , m_SpanId(aOld.m_SpanId)
         , m_Alive(aOld.m_Alive)
@@ -168,25 +202,26 @@ namespace Jaeger {
 
         ~Span()
         {
-            try {
-                close();
-            } catch (...) {
-            };
+            close();
         }
 
-        void close()
+        void close() noexcept
         {
-            if (m_Alive) {
-                if (m_XCount != std::uncaught_exceptions())
-                    set_error();
-                m_Span->set_end_time_unix_nano(Time::get_time().to_ns());
+            try {
+                if (m_Alive) {
+                    if (m_XCount != std::uncaught_exceptions())
+                        set_error();
+                    m_Span->set_end_time_unix_nano(Time::get_time().to_ns());
+                    m_Alive = false;
+                }
+            } catch (...) {
                 m_Alive = false;
             }
         }
 
-        Span child(const std::string& aName)
+        Span child(const std::string& aName) const
         {
-            return Span(m_Trace, aName, m_SpanId);
+            return Span(m_Store, aName, m_SpanId);
         }
 
         void set_tag(const Tag& aTag)
@@ -198,7 +233,7 @@ namespace Jaeger {
         {
             auto sStatus = m_Span->mutable_status();
             sStatus->set_message(aMessage != nullptr ? aMessage : "error");
-            sStatus->set_code(opentelemetry::proto::trace::v1::Status::STATUS_CODE_ERROR);
+            sStatus->set_code(trace::Status::STATUS_CODE_ERROR);
         }
 
         template <class... T>
@@ -215,12 +250,11 @@ namespace Jaeger {
             return Format::to_hex(m_Span->trace_id());
         }
 
-        Params extract() const
+        std::string traceparent() const
         {
-            return {
-                m_Trace.m_Params.traceIdHigh,
-                m_Trace.m_Params.traceIdLow,
-                m_SpanId};
+            return Params{m_Store->params().traceIdHigh, m_Store->params().traceIdLow, m_SpanId}.traceparent();
         }
     };
+    using SpanPtr = std::shared_ptr<Span>;
+
 } // namespace Jaeger

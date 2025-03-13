@@ -233,28 +233,28 @@ struct TutorialServer : api::tutorial_1_0::server
     get_parameters_i(asio_http::asio::io_service&     aService,
                      const get_parameters_parameters& aRequest,
                      asio_http::asio::yield_context   yield,
-                     std::optional<Jaeger::Span>&     aTrace)
+                     Jaeger::SpanPtr                  aSpan)
     {
         {
-            auto __span = Jaeger::Helper::start(aTrace, "prepare");
+            auto __span = Jaeger::start(aSpan, "prepare");
             std::this_thread::sleep_for(100ms);
         }
         {
-            auto __span = Jaeger::Helper::start(aTrace, "fetch");
+            auto __span = Jaeger::start(aSpan, "fetch");
             std::this_thread::sleep_for(200ms);
         }
         {
-            auto __span = Jaeger::Helper::start(aTrace, "merge");
+            auto __span = Jaeger::start(aSpan, "merge");
             std::this_thread::sleep_for(100ms);
         }
         {
-            auto __span = Jaeger::Helper::start(aTrace, "write");
+            auto __span = Jaeger::start(aSpan, "write");
             {
-                auto __span1 = Jaeger::Helper::start(__span, "mysql");
+                auto __span1 = Jaeger::start(__span, "mysql");
                 std::this_thread::sleep_for(300ms);
             }
             {
-                auto __span1 = Jaeger::Helper::start(__span, "s3");
+                auto __span1 = Jaeger::start(__span, "s3");
                 std::this_thread::sleep_for(300ms);
             }
         }
@@ -477,7 +477,7 @@ BOOST_FIXTURE_TEST_CASE(sentry, WithServer)
     sQueue.start();
 
     TutorialServer sTutorialServer;
-    sTutorialServer.with_sentry([&sQueue](Sentry::Message& aMessage) { sQueue.send(aMessage); }, 1);
+    sTutorialServer.with_sentry([&sQueue](Sentry::Message&& aMessage) { sQueue.send(std::move(aMessage)); }, 1);
     sTutorialServer.configure(m_Router);
     Util::Raii sCleanup([this]() { m_Group.wait(); });
 
@@ -524,28 +524,25 @@ BOOST_FIXTURE_TEST_CASE(queue, WithServer)
 }
 BOOST_FIXTURE_TEST_CASE(jaeger, WithServer)
 {
-    Jaeger::Queue sQueue("swagger.cpp", "0.1");
-    sQueue.start();
+    auto sQueue = std::make_shared<Jaeger::Queue>("swagger.cpp", "0.1");
+    sQueue->start();
 
     Threads::QueueExecutor sTaskQueue;
     sTaskQueue.start(m_Group, 4); // spawn 4 threads
 
     TutorialServer sTutorialServer;
     sTutorialServer.with_queue(sTaskQueue);
-    sTutorialServer.with_jaeger([&sQueue](Jaeger::Trace& aTrace) { sQueue.send(aTrace); });
+    sTutorialServer.with_jaeger(sQueue);
     sTutorialServer.configure(m_Router);
     Util::Raii sCleanup([this]() { m_Group.wait(); });
 
     api::tutorial_1_0::client sClient(m_HttpClient, "127.0.0.1:3000");
 
-    Jaeger::Trace sTrace(Jaeger::Params::uuid());
     {
-        Jaeger::Span sTraceSpan(sTrace, "make test");
-
-        auto sR = sClient.get_parameters({.id = "test-id", .string_required = "abcdefg", .__trace = &sTraceSpan});
+        auto sSpan = Jaeger::start(Jaeger::Params::uuid(), sQueue, "make test");
+        auto sR    = sClient.get_parameters({.id = "test-id", .string_required = "abcdefg", .__trace = sSpan});
         BOOST_TEST_MESSAGE("request: " << sR.body);
     }
-    sQueue.send(sTrace);
 }
 BOOST_FIXTURE_TEST_CASE(redirect, WithServer)
 {
