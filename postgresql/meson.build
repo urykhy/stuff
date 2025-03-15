@@ -1,6 +1,6 @@
-project('pq', 'cpp', version : '0.1')
+project('postgresql', 'cpp', version : '0.1')
 
-includes = include_directories('..')
+includes  = include_directories('..')
 boost     = dependency('boost', modules : ['unit_test_framework', 'system', 'coroutine'])
 threads   = dependency('threads')
 fmt       = dependency('fmt')
