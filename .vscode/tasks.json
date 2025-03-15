@@ -78,7 +78,7 @@
           ]
         }
       },
-      "command": "source .envrc && for x in */meson.build; do echo $x; done | awk -F/ '{print $1}' | grep -v http_parser | parallel -I% 'pushd % && meson setup --wipe build && pushd build && ninja -j1'",
+      "command": "source .envrc && for x in */meson.build; do echo $x; done | awk -F/ '{print $1}' | grep -v http_parser | parallel -j6 -I% 'pushd % && pushd build && ninja -j1'",
       "problemMatcher": []
     },
     {

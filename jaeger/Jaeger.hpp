@@ -176,14 +176,14 @@ namespace Jaeger {
         }
 
     public:
-        Span(const Params& aParams, QueuePtr aQueue, const std::string& aName, uint64_t aParentSpanId = 0)
+        Span(const Params& aParams, QueuePtr aQueue, const std::string& aName)
         : m_XCount(std::uncaught_exceptions())
         , m_Store(make_trace(aParams, aQueue))
         {
-            init(aName, aParentSpanId);
+            init(aName, 0);
         }
 
-        Span(StorePtr aStore, const std::string& aName, uint64_t aParentSpanId = 0)
+        Span(StorePtr aStore, const std::string& aName, uint64_t aParentSpanId)
         : m_XCount(std::uncaught_exceptions())
         , m_Store(aStore)
         {
