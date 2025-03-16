@@ -52,8 +52,9 @@ namespace Kafka::Coro {
             boost::asio::steady_timer sTimer(sExecutor);
             while (!m_Stop) {
                 sTimer.expires_from_now(100ms);
+                char sBuffer[1];
                 co_await (
-                    sRead.async_read_some(boost::asio::null_buffers(), boost::asio::use_awaitable) ||
+                    sRead.async_read_some(boost::asio::buffer(sBuffer), boost::asio::use_awaitable) ||
                     sTimer.async_wait(boost::asio::use_awaitable));
                 while (!m_Stop) {
                     Event sEvent{aQueue->consume(), rd_kafka_event_destroy};

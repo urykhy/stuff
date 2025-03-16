@@ -6,11 +6,12 @@ vars:
     t_destination
     py_test1
     py_test2
+    t_benchmark
   groups: |
     g_basic
     g_transform
     g_rebalance
-  topic_options: --partitions 3 --replication-factor 3 -c retention.ms=86400000 -c retention.bytes=10485760 -c segment.ms=10000 -c message.timestamp.type=LogAppendTime
+  topic_options: --partitions 3 --replication-factor 1 -c retention.ms=10000 -c retention.bytes=10485760 -c segment.ms=10000 -c message.timestamp.type=LogAppendTime
 
 tasks:
   kafkactl:install:
