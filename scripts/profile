@@ -667,6 +667,21 @@ function flamegraph
     chromium /tmp/perf.svg
 }
 
+# flame-grafana protobuf ./b2.out --benchmark_min_time=1
+function flame-grafana
+{
+    if [ $# -lt 2 ]; then
+        echo "usage: flame-grafana <name> <cmdline>"
+        return
+    fi
+    rm tmp.prof*
+    name=$1; shift
+    t1=`date +%s`
+    LD_PRELOAD="/usr/lib/x86_64-linux-gnu/libprofiler.so" CPUPROFILE=tmp.prof "$@"
+    t2=`date +%s`
+    pprof -raw tmp.prof* | stackcollapse-go.pl | curl -X POST --data-binary "@-" "pyroscope.grafana:4040/ingest?name=${name}&from=${t1}&until=${t2}&format=folded"
+}
+
 function lvm-show
 {
     pvs
