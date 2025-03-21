@@ -68,6 +68,20 @@
       "problemMatcher": []
     },
     {
+      "label": "configure all meson projects",
+      "type": "shell",
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "shell": {
+          "args": [
+            "-i"
+          ]
+        }
+      },
+      "command": "source .envrc && for x in */meson.build; do echo $x; done | awk -F/ '{print $1}' | grep -v http_parser | parallel -j6 -I% 'pushd % && meson setup --wipe build'",
+      "problemMatcher": []
+    },
+    {
       "label": "build all meson projects",
       "type": "shell",
       "options": {
