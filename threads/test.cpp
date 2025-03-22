@@ -441,6 +441,32 @@ BOOST_AUTO_TEST_CASE(boost_cancel_by_timer)
     BOOST_CHECK_EQUAL(sFlag, true);
 }
 
+BOOST_AUTO_TEST_CASE(boost_cancel_with_exception)
+{
+    namespace asio = boost::asio;
+    using namespace std::chrono_literals;
+    using namespace asio::experimental::awaitable_operators;
+
+    bool             sFlag = false;
+    asio::io_context sContext(1);
+
+    auto f = [&]() -> boost::asio::awaitable<void> {
+        try {
+            //co_await boost::asio::this_coro::throw_if_cancelled(true);
+            while (true) {
+                co_await timer2(30ms);
+            }
+        } catch (const std::exception& e) {
+            sFlag = true;
+            BOOST_TEST_MESSAGE("catch: " << e.what());
+        }
+    };
+
+    asio::co_spawn(sContext, (f() || timer2(100ms)), asio::detached);
+    sContext.run_for(200ms);
+    BOOST_CHECK_EQUAL(sFlag, true);
+}
+
 BOOST_AUTO_TEST_CASE(co_await_multiple)
 {
     namespace asio = boost::asio;
