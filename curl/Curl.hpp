@@ -12,6 +12,11 @@
 #include <../unsorted/Raii.hpp>
 #include <string/String.hpp>
 
+#if __has_include(<fmt/core.h>)
+#include <fmt/core.h>
+#include <fmt/format.h>
+#endif
+
 namespace Curl {
     struct Multi;
     struct Client
@@ -252,7 +257,7 @@ namespace Curl {
             return sTime > 0 ? sTime : 0;
         }
 
-        //Result& query(const std::string& aUrl, bool aOwnBuffer = false)
+        // Result& query(const std::string& aUrl, bool aOwnBuffer = false)
         Result& query(const Request& aRequest)
         {
             setopt(CURLOPT_URL, aRequest.url.c_str());
@@ -272,7 +277,7 @@ namespace Curl {
             setopt(CURLOPT_FOLLOWLOCATION, 1);
             setopt(CURLOPT_TIMEOUT_MS, aRequest.timeout_ms);
             setopt(CURLOPT_CONNECTTIMEOUT_MS, aRequest.connect_ms);
-            //setopt(CURLOPT_BUFFERSIZE, 1024*1024);
+            // setopt(CURLOPT_BUFFERSIZE, 1024*1024);
 
             // user agent
             if (!aRequest.user_agent.empty())
@@ -347,3 +352,24 @@ namespace Curl {
 
     }; // namespace Curl
 } // namespace Curl
+
+#if __has_include(<fmt/core.h>)
+namespace fmt {
+    template <>
+    struct formatter<Curl::Client::Method> : formatter<std::string>
+    {
+        format_context::iterator format(Curl::Client::Method aMethod, format_context& aCtx) const
+        {
+            std::string sStr;
+            switch (aMethod) {
+            case Curl::Client::Method::GET: sStr = "GET"; break;
+            case Curl::Client::Method::HEAD: sStr = "HEAD"; break;
+            case Curl::Client::Method::POST: sStr = "POST"; break;
+            case Curl::Client::Method::PUT: sStr = "PUT"; break;
+            case Curl::Client::Method::DELETE: sStr = "DELETE"; break;
+            }
+            return formatter<std::string>::format(sStr, aCtx);
+        }
+    };
+} // namespace fmt
+#endif

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <fmt/core.h>
+#include <fmt/format.h>
 
 #include <string>
 
@@ -16,9 +17,12 @@
 #include <string/String.hpp>
 #include <time/Time.hpp>
 #include <unsorted/Env.hpp>
+#include <unsorted/Log4cxx.hpp>
 #include <unsorted/Raii.hpp>
 
 namespace S3 {
+    inline log4cxx::LoggerPtr sLogger = Logger::Get("s3");
+
     struct Params
     {
         std::string host       = Util::getEnv("S3_HOST");
@@ -123,13 +127,19 @@ namespace S3 {
 
             sRequest.headers["x-amz-content-sha256"] = sContentHash;
             sRequest.headers["x-amz-date"]           = sDateTime;
-            if (aMethod == Curl::Client::Method::PUT or aMethod == Curl::Client::Method::POST)
+            // no x-amz-meta-sha256 for part uploads
+            if ((aMethod == Curl::Client::Method::PUT or aMethod == Curl::Client::Method::POST) and !aQuery.starts_with("partNumber="))
                 sRequest.headers["x-amz-meta-sha256"] = sContentHash;
             if (aMethod == Curl::Client::Method::POST and aQuery == "uploads=") // create multipart upload
                 sRequest.headers["x-amz-checksum-algorithm"] = "SHA256";
             if (aMethod == Curl::Client::Method::PUT and aQuery.starts_with("partNumber=")) // upload part
                 sRequest.headers["x-amz-checksum-sha256"] = Format::Base64(Parser::from_hex(sContentHash));
             sRequest.headers["Authorization"] = authorization(aMethod, sRequest.headers, aName, aQuery, sContentHash, sDateTime);
+
+            DEBUG(fmt::format("{} {}?{}{}", sRequest.method, aName, aQuery, [&]() {
+                auto sIt = sRequest.headers.find("x-amz-meta-sha256");
+                return sIt == sRequest.headers.end() ? "" : (" sha256:" + sIt->second);
+            }()));
 
             return m_Params.curl.wrap(std::move(sRequest));
         }
@@ -234,6 +244,7 @@ namespace S3 {
         : m_Params(aParams)
         , m_Zone(Time::load("UTC"))
         {
+            INFO("using " << m_Params.host << "/" << m_Params.bucket);
         }
 
         using Error = Exception::HttpError;
@@ -256,6 +267,7 @@ namespace S3 {
             if (auto sIt = sResult.headers.find("x-amz-meta-sha256"); sIt != sResult.headers.end() and aPart == 0) {
                 if (SSLxx::DigestStr(EVP_sha256(), sResult.body) != sIt->second)
                     throw std::runtime_error("Checksum mismatch");
+                DEBUG(aName << ": validated sha256:" << sIt->second);
             }
             return sResult.body;
         }
