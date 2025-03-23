@@ -53,8 +53,13 @@ function docker-upload
         echo "usage: docker-upload <docker image>"
         return
     fi
-    docker tag "$1" registry.docker:5000/"$1"
-    docker push registry.docker:5000/"$1"
+    docker tag "$1" registry.web.docker:5000/"$1"
+    docker push registry.web.docker:5000/"$1"
+}
+
+function docker-list-registry
+{
+    curl -s registry.web:5000/v2/_catalog | jq
 }
 
 function meson-clang()
