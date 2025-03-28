@@ -1,0 +1,5 @@
+Name: glaze
+Description: Fast json library
+URL: https://github.com/stephenberry/glaze
+Version: v5.0.2-fafa42a3
+Cflags: -I/u03/git/_c/glaze/include

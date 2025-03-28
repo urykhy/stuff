@@ -1,10 +1,22 @@
-#include <benchmark/benchmark.h>
+#define RAPIDJSON_HAS_STDSTRING 1
 
+#include <benchmark/benchmark.h>
+#include <fmt/ranges.h>
+#include <rapidjson/document.h>
+#include <simdjson.h>
+
+#include <iostream>
 #include <vector>
 
 #include "Json.hpp"
 
 #include <cbor/cbor.hpp>
+#include <nlohmann/json.hpp>
+#include <rapidjson/error/en.h>
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wfloat-equal"
+#include <glaze/glaze.hpp>
+#pragma GCC diagnostic pop
 
 struct Tmp
 {
@@ -31,6 +43,67 @@ struct Tmp
     }
 };
 
+static_assert(glz::reflectable<Tmp>);
+
+void from_json(const nlohmann::json& aJson, Tmp& aTmp)
+{
+    if (auto sIt = aJson.find("base"); sIt != aJson.end())
+        sIt->get_to(aTmp.base);
+    if (auto sIt = aJson.find("index"); sIt != aJson.end())
+        sIt->get_to(aTmp.index);
+}
+
+void from_json(const simdjson::dom::object& aJson, Tmp& aTmp)
+{
+    if (auto sIt = aJson["base"]; !sIt.error())
+        aTmp.base = sIt.get_string().value();
+    if (auto sIt = aJson["index"]; !sIt.error())
+        aTmp.index = sIt.get_uint64();
+}
+
+void from_json(simdjson::ondemand::object aJson, Tmp& aTmp)
+{
+    for (auto sField : aJson) {
+        auto sKey   = sField.key().value();
+        auto sValue = sField.value();
+        if (sKey == "base") {
+            sValue.get_string(aTmp.base);
+        } else if (sKey == "index") {
+            aTmp.index = sValue.get_uint64();
+        }
+    }
+}
+
+void from_json(const rapidjson::GenericValue<rapidjson::UTF8<>>& aJson, Tmp& aTmp)
+{
+    if (auto sIt = aJson.FindMember("base"); sIt != aJson.MemberEnd())
+        aTmp.base = sIt->value.GetString();
+    if (auto sIt = aJson.FindMember("index"); sIt != aJson.MemberEnd())
+        aTmp.index = sIt->value.GetUint64();
+}
+
+void from_json(const glz::json_t& aJson, Tmp& aTmp)
+{
+    const auto& sObject = aJson.get_object();
+    if (auto sIt = sObject.find("base"); sIt != sObject.end())
+        aTmp.base = sIt->second.get<std::string>();
+    if (auto sIt = sObject.find("index"); sIt != sObject.end())
+        aTmp.index = sIt->second.get<double>();
+}
+
+namespace fmt {
+    template <>
+    struct formatter<Tmp> : formatter<std::string>
+    {
+        format_context::iterator format(const Tmp& aTmp, format_context& aCtx) const
+        {
+            std::stringstream sStr;
+            sStr << "(base: " << aTmp.base << "; index: " << aTmp.index << ")";
+            return formatter<std::string>::format(sStr.str(), aCtx);
+        }
+    };
+} // namespace fmt
+
 const std::string gJsonStr = R"([{"base": "string1", "index": 123},{"base": "string2"}, {"base": "string3", "index": 125}])";
 
 const std::string gCborStr = []() {
@@ -53,6 +126,120 @@ static void BM_Json(benchmark::State& state)
     }
 }
 BENCHMARK(BM_Json);
+
+static void BM_Nlohmann(benchmark::State& state)
+{
+    std::vector<Tmp> sTmp;
+    for (auto _ : state) {
+        nlohmann::json sJson = nlohmann::json::parse(gJsonStr);
+        sJson.get_to(sTmp);
+        // std::cout << fmt::format("parsed: {}", fmt::join(sTmp, ", ")) << std::endl;
+        sTmp.clear();
+    }
+}
+BENCHMARK(BM_Nlohmann);
+
+static void BM_Simd(benchmark::State& state)
+{
+    using namespace simdjson;
+
+    const simdjson::padded_string sPadded = gJsonStr;
+    std::vector<Tmp>              sTmp;
+    dom::parser                   sParser;
+    for (auto _ : state) {
+        dom::element sDoc = sParser.parse(sPadded);
+        if (sDoc.is_array()) {
+            for (const auto& x : sDoc) {
+                if (x.is_object()) {
+                    sTmp.emplace_back(Tmp());
+                    from_json(x.get_object(), sTmp.back());
+                }
+            }
+        }
+        // std::cout << fmt::format("parsed: {}", fmt::join(sTmp, ", ")) << std::endl;
+        sTmp.clear();
+    }
+}
+BENCHMARK(BM_Simd);
+
+static void BM_SimdOnDemand(benchmark::State& state)
+{
+    using namespace simdjson;
+
+    const simdjson::padded_string sPadded = gJsonStr;
+    std::vector<Tmp>              sTmp;
+    ondemand::parser              sParser;
+    for (auto _ : state) {
+        auto sDoc = sParser.iterate(sPadded);
+        for (auto x : sDoc) {
+            sTmp.emplace_back(Tmp());
+            from_json(x.value().get_object(), sTmp.back());
+        }
+        // std::cout << fmt::format("parsed: {}", fmt::join(sTmp, ", ")) << std::endl;
+        sTmp.clear();
+    }
+}
+BENCHMARK(BM_SimdOnDemand);
+
+static void BM_Rapid(benchmark::State& state)
+{
+    using namespace rapidjson;
+
+    std::vector<Tmp> sTmp;
+    Document         sDoc;
+    for (auto _ : state) {
+        if (sDoc.Parse(gJsonStr).HasParseError()) {
+            break;
+        }
+        if (sDoc.IsArray()) {
+            for (unsigned i = 0; i < sDoc.Size(); i++) {
+                const auto& sItem = sDoc[i];
+                if (sItem.IsObject()) {
+                    sTmp.emplace_back(Tmp());
+                    from_json(sItem, sTmp.back());
+                }
+            }
+        }
+        // std::cout << fmt::format("parsed: {}", fmt::join(sTmp, ", ")) << std::endl;
+        sTmp.clear();
+    }
+}
+BENCHMARK(BM_Rapid);
+
+static void BM_Glaze(benchmark::State& state)
+{
+    std::vector<Tmp> sTmp;
+    glz::json_t      sJson;
+    for (auto _ : state) {
+        if (glz::read_json(sJson, gJsonStr)) {
+            break;
+        }
+        if (sJson.is_array()) {
+            for (const auto& x : sJson.get_array()) {
+                if (x.is_object()) {
+                    sTmp.emplace_back(Tmp());
+                    from_json(x, sTmp.back());
+                }
+            }
+        }
+        // std::cout << fmt::format("parsed: {}", fmt::join(sTmp, ", ")) << std::endl;
+        sTmp.clear();
+    }
+}
+BENCHMARK(BM_Glaze);
+
+static void BM_GlazeRef(benchmark::State& state)
+{
+    std::vector<Tmp> sTmp;
+    for (auto _ : state) {
+        if (glz::read_json(sTmp, gJsonStr)) {
+            break;
+        }
+        // std::cout << fmt::format("parsed: {}", fmt::join(sTmp, ", ")) << std::endl;
+        sTmp.clear();
+    }
+}
+BENCHMARK(BM_GlazeRef);
 
 static void BM_Cbor(benchmark::State& state)
 {
