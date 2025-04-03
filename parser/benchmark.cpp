@@ -44,6 +44,8 @@ struct Tmp
 };
 
 static_assert(glz::reflectable<Tmp>);
+static_assert(glz::write_supported<glz::BEVE, Tmp>);
+static_assert(glz::read_supported<glz::BEVE, Tmp>);
 
 void from_json(const nlohmann::json& aJson, Tmp& aTmp)
 {
@@ -240,6 +242,30 @@ static void BM_GlazeRef(benchmark::State& state)
     }
 }
 BENCHMARK(BM_GlazeRef);
+
+static void BM_GlazeBinary(benchmark::State& state)
+{
+    // prepare
+    glz::json_t sJson;
+    if (glz::read_json(sJson, gJsonStr)) {
+        return;
+    }
+    std::string sBeve;
+    if (glz::write_beve(sJson, sBeve)) {
+        return;
+    }
+
+    std::vector<Tmp> sTmp;
+    for (auto _ : state) {
+        // read_beve to sTmp - not working
+        if (glz::read_beve(sJson, sBeve)) {
+            break;
+        }
+        // std::cout << fmt::format("parsed: {}", fmt::join(sTmp, ", ")) << std::endl;
+        sTmp.clear();
+    }
+}
+BENCHMARK(BM_GlazeBinary);
 
 static void BM_Cbor(benchmark::State& state)
 {
