@@ -40,6 +40,7 @@ namespace AsioHttp {
         {
             bs::error_code  sError;
             bb::flat_buffer sBuffer;
+            sBuffer.reserve(1024*64);
 
             auto sCheckError = [&](const char* aMsg) {
                 if (sError)

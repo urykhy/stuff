@@ -152,7 +152,7 @@ namespace Kafka::Coro {
         {
             CommitResponse sResponse;
             m_Consumer.sync(m_Queue, &sResponse, aTopic, aPartition, aOffset);
-            co_await sResponse.waiter.wait(co_await boost::asio::this_coro::executor);
+            co_await sResponse.waiter.wait();
             co_return sResponse.error;
         }
     };
@@ -222,7 +222,7 @@ namespace Kafka::Coro {
         {
             Response sResponse;
             m_Producer.push(aPartition, aKey, aValue, aHeaders, &sResponse /* opaque */, false /* no poll */);
-            co_await sResponse.waiter.wait(co_await boost::asio::this_coro::executor);
+            co_await sResponse.waiter.wait();
             co_return sResponse.meta;
         }
     };

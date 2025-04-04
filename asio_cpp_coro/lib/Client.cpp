@@ -76,6 +76,7 @@ namespace AsioHttp {
             sCheckError("send http request: ");
 
             bb::flat_buffer sBuffer;
+            sBuffer.reserve(1024*64);
             BeastResponse   sResponse;
             co_await http::async_read(sStream, sBuffer, sResponse, ba::redirect_error(ba::use_awaitable, sError));
             sCheckError("read http response: ");
@@ -162,6 +163,7 @@ namespace AsioHttp {
             sCheckError("send http request: ");
 
             bb::flat_buffer sBuffer;
+            sBuffer.reserve(1024*64);
             BeastResponse   sResponse;
             co_await http::async_read(*sStream, sBuffer, sResponse, ba::redirect_error(ba::use_awaitable, sError));
             sCheckError("read http response: ");

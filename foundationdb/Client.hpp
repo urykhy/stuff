@@ -121,7 +121,7 @@ namespace FDB {
         {
             Threads::Coro::Waiter sWaiter;
             Check(fdb_future_set_callback(m_Future, &Future::callback, &sWaiter), "future set callback");
-            co_await sWaiter.wait(co_await boost::asio::this_coro::executor);
+            co_await sWaiter.wait();
             Check(fdb_future_get_error(m_Future), "future get error");
         }
 

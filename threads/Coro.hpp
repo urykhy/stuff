@@ -6,6 +6,7 @@
 #include <functional>
 #include <list>
 #include <map>
+#include <mutex>
 #include <optional>
 
 #include <boost/asio/co_spawn.hpp>
@@ -51,6 +52,7 @@ namespace Threads::Coro {
             WAITING,
             READY
         };
+        std::mutex                      m_Mutex;
         State                           m_State;
         std::move_only_function<void()> m_Handler;
 
@@ -60,12 +62,14 @@ namespace Threads::Coro {
         {
         }
 
-        boost::asio::awaitable<void> wait(boost::asio::any_io_executor executor)
+        boost::asio::awaitable<void> wait()
         {
-            auto initiate = [this, executor]<typename Handler>(Handler&& handler) mutable {
-                m_Handler = [executor, handler = std::forward<Handler>(handler)]() mutable {
-                    boost::asio::post(executor, std::move(handler));
+            auto sExecutor = co_await boost::asio::this_coro::executor;
+            auto sInitiate = [this, sExecutor]<typename Handler>(Handler&& aHandler) mutable {
+                m_Handler = [sExecutor, aHandler = std::forward<Handler>(aHandler)]() mutable {
+                    boost::asio::post(sExecutor, std::move(aHandler));
                 };
+                std::unique_lock sLock(m_Mutex);
                 switch (m_State) {
                 case State::IDLE:
                     m_State = State::WAITING;
@@ -73,19 +77,22 @@ namespace Threads::Coro {
                 case State::WAITING:
                     break;
                 case State::READY:
+                    sLock.unlock();
                     m_Handler();
                 }
             };
-            return boost::asio::async_initiate<decltype(boost::asio::use_awaitable), void()>(initiate, boost::asio::use_awaitable);
+            co_return co_await boost::asio::async_initiate<decltype(boost::asio::use_awaitable), void()>(sInitiate, boost::asio::use_awaitable);
         }
 
         void notify()
         {
+            std::unique_lock sLock(m_Mutex);
             switch (m_State) {
             case State::IDLE:
                 m_State = State::READY;
                 break;
             case State::WAITING:
+                sLock.unlock();
                 m_Handler();
                 break;
             case State::READY:

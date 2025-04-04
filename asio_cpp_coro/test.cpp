@@ -3,8 +3,8 @@
 
 #include <chrono>
 
-#include "API.hpp"
-#include "Asio.hpp"
+#include "lib/API.hpp"
+#include "lib/Asio.hpp"
 
 using namespace std::chrono_literals;
 using namespace AsioHttp;

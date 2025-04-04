@@ -667,7 +667,7 @@ function vg-call
 # system overall: flamegraph -a sleep 10
 function flamegraph
 {
-    perf record --call-graph dwarf "$@"
+    perf record --call-graph lbr --all-user "$@"
     perf script --no-inline | stackcollapse-perf.pl | flamegraph.pl > /tmp/perf.svg
     echo "spawn chromium to check results..."
     chromium /tmp/perf.svg
