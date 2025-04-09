@@ -10,7 +10,7 @@
 #include <time/Meter.hpp>
 
 namespace Benchmark {
-    template <class I, class F, class H>
+    template <class I, class H, class F>
     inline void Coro(benchmark::State& state, unsigned aCount, I aInit, H aHandler, F aFini)
     {
         boost::asio::io_service sAsio;
@@ -35,14 +35,14 @@ namespace Benchmark {
         for (unsigned i = 0; i < aCount; i++) {
             boost::asio::co_spawn(
                 sAsio,
-                [&]() -> boost::asio::awaitable<void> {
+                [&, aSerial = i]() -> boost::asio::awaitable<void> {
                     sRunning++;
                     if (sRunning == 1) {
                         co_await aInit();
                     }
                     while (!sExit) {
                         Time::Meter sMeter;
-                        co_await aHandler();
+                        co_await aHandler(aSerial);
                         sLatency.tick(sMeter.get().to_ms());
                         sCount++;
                     }

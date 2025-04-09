@@ -14,7 +14,7 @@ static void BM_Produce(benchmark::State& state)
         [&]() -> boost::asio::awaitable<void> {
             co_await sProducer->start();
         },
-        [&]() -> boost::asio::awaitable<void> {
+        [&](auto) -> boost::asio::awaitable<void> {
             co_await sProducer->push(RdKafka::Topic::PARTITION_UA, {}, "bench-value");
         },
         [&]() -> boost::asio::awaitable<void> {

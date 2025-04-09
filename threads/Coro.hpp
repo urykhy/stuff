@@ -167,7 +167,6 @@ namespace Threads::Coro {
 
         boost::asio::awaitable<Value> Wait(const Key& aKey)
         {
-            auto sExecutor = co_await boost::asio::this_coro::executor;
             auto sPtr      = co_await Schedule(aKey);
 
             // check if value already available
@@ -176,9 +175,9 @@ namespace Threads::Coro {
             }
 
             // no value, must wait
-            sPtr->waiters.push_back({});
+            sPtr->waiters.emplace_back();
             auto sWaiter = --sPtr->waiters.end();
-            co_await sWaiter->wait(sExecutor);
+            co_await sWaiter->wait();
 
             // got response and cleanup
             sPtr->waiters.erase(sWaiter);
@@ -292,7 +291,7 @@ namespace Threads::Coro {
         }
         auto sGroup = boost::asio::experimental::make_parallel_group(std::move(sTasks));
         co_await sGroup.async_wait(boost::asio::experimental::wait_for_all(), boost::asio::use_awaitable);
-        co_await sWaiter.wait(sExecutor);
+        co_await sWaiter.wait();
         co_return sResult;
     }
 

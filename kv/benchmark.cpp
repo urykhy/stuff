@@ -32,7 +32,7 @@ static void BM_Get(benchmark::State& state)
             auto        sResponse = co_await sClient->Call(sRequest);
             co_return;
         },
-        [&]() -> boost::asio::awaitable<void> {
+        [&](auto) -> boost::asio::awaitable<void> {
             KV::Request sRequest{.key = "foo"};
             auto        sResponse = co_await sClient->Call(sRequest);
             co_return;
