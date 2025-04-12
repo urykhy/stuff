@@ -968,3 +968,8 @@ function show-redis-monitor
 {
     redis-cli -h redis.nextcloud MONITOR
 }
+
+function show-rtprio
+{
+    ps -eo user,pid,tid,class,rtprio,ni,pri,psr,pcpu,stat,wchan:14,comm --sort=-rtprio | awk '{if ($5 != "-") print}'
+}
