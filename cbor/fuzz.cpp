@@ -30,8 +30,8 @@ void test(const cbor::binary& aInput)
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size)
 {
-    static bool  sInit = init();
-    cbor::binary sInput(reinterpret_cast<const char*>(data), size);
+    [[maybe_unused]] static bool sInit = init();
+    cbor::binary                 sInput(reinterpret_cast<const char*>(data), size);
 
     test<bool>(sInput);
     test<float>(sInput);

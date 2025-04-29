@@ -49,7 +49,7 @@ BOOST_AUTO_TEST_CASE(ioc)
     r.Put(j);
 
     BOOST_CHECK(10 == r.Get<int>());
-    BOOST_CHECK(abs(20 - r.Get<double>()) < 0.001);
+    BOOST_CHECK(std::abs(20 - r.Get<double>()) < 0.001);
 }
 BOOST_AUTO_TEST_SUITE(request_queue)
 BOOST_AUTO_TEST_CASE(timeout_on_get)

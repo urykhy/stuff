@@ -50,7 +50,7 @@ BOOST_DATA_TEST_CASE(flush, sExt)
     const std::string sData = "1234567890";
     const std::string sName = "__test_flush." + sample;
 
-    File::write(sName, [&sData](File::IWriter* aWriter) {
+    File::write(sName, [](File::IWriter* aWriter) {
         aWriter->write("123", 3);
         aWriter->flush();
         aWriter->write("456", 3);

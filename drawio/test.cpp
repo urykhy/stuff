@@ -15,27 +15,27 @@ public:
         BOOST_TEST_MESSAGE("download " << aName);
         m_Name = aName;
     }
-    virtual void Parse()
+    void Parse() override
     {
         BOOST_TEST_MESSAGE("parse " << m_Name);
     }
-    virtual void Group()
+    void Group() override
     {
         BOOST_TEST_MESSAGE("group " << m_Name);
     }
-    virtual void Upload()
+    void Upload() override
     {
         BOOST_TEST_MESSAGE("upload to s3 " << m_Name);
     }
-    virtual void Statistics()
+    void Statistics() override
     {
         BOOST_TEST_MESSAGE("update mysql stats " << m_Name);
     }
-    virtual void Finalize()
+    void Finalize() override
     {
         BOOST_TEST_MESSAGE("finalize " << m_Name);
     }
-    virtual void Reset()
+    void Reset() override
     {
         BOOST_TEST_MESSAGE("reset after " << m_Name);
         m_Name.clear();

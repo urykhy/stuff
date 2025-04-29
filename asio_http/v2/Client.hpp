@@ -252,7 +252,6 @@ namespace asio_http::v2 {
         asio::io_service&    m_Service;
         Strand               m_Strand;
         asio::deadline_timer m_Timer;
-        const Params         m_Params;
 
         struct RQ
         {
@@ -271,11 +270,10 @@ namespace asio_http::v2 {
         std::map<Addr, DataPtr> m_Data;
 
     public:
-        Manager(asio::io_service& aService, const Params& aParams)
+        Manager(asio::io_service& aService)
         : m_Service(aService)
         , m_Strand(aService.get_executor())
         , m_Timer(m_Strand)
-        , m_Params(aParams)
         {
         }
 
@@ -371,7 +369,7 @@ namespace asio_http::v2 {
         std::shared_ptr<Client>
         makeClient(asio::io_service& aService)
     {
-        auto sClient = std::make_shared<Manager>(aService, asio_http::v2::Params{});
+        auto sClient = std::make_shared<Manager>(aService);
         sClient->start_cleaner();
         return sClient;
     }

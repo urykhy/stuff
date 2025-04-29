@@ -365,7 +365,7 @@ namespace S3 {
                 reportError(sResult);
 
             try {
-                Util::Raii sCleanZonePtr([this]() { m_ZonePtr = nullptr; });
+                Util::Raii sCleanZonePtr([]() { m_ZonePtr = nullptr; });
                 m_ZonePtr = &m_Zone;
 
                 auto sXML = parseXML(sResult);

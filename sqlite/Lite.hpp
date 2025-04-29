@@ -73,7 +73,8 @@ namespace Lite {
         void Use(T&& aHandler)
         {
             Util::Raii  sCleanup([this]() { Reset(); });
-            const char* sValues[m_Columns] = {};
+            std::vector<const char*> sValues;
+            sValues.resize(m_Columns);
 
             do {
                 int sCode = sqlite3_step(m_Statement);
@@ -86,7 +87,7 @@ namespace Lite {
                         if (SQLITE_ROW != sCode)
                             Check(sCode); // ensure no OOM occured
                     }
-                    aHandler(m_Columns, (char const* const*)&sValues, (char const* const*)&m_Names[0]);
+                    aHandler(m_Columns, (char const* const*)sValues.data(), (char const* const*)&m_Names[0]);
                 } else {
                     Check(sCode);
                 }

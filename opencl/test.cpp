@@ -10,7 +10,6 @@
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 #pragma GCC diagnostic ignored "-Wignored-qualifiers"
-#pragma GCC diagnostic ignored "-Wclass-memaccess"
 #include <boost/compute.hpp>
 #pragma GCC diagnostic pop
 

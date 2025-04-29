@@ -25,7 +25,7 @@ static void sleep_load()
 
 static void spin_load()
 {
-    static double  s = 0;
+    [[maybe_unused]] static double  s = 0;
     Time::Deadline sDeadline(1.0);
     while (!sDeadline.expired())
         s += std::pow(M_E, M_PI);

@@ -117,7 +117,7 @@ namespace MySQL::Coro {
 
                 MYSQL_ROW sRow;
                 while (true) {
-                    co_await Do([&, this]() { return mysql_fetch_row_nonblocking(sResult, &sRow); },
+                    co_await Do([&]() { return mysql_fetch_row_nonblocking(sResult, &sRow); },
                                 "mysql_fetch_row_nonblocking");
                     if (sRow == nullptr) {
                         if (mysql_errno(&m_Handle)) {
@@ -132,7 +132,7 @@ namespace MySQL::Coro {
             }
 
             if (sResult != nullptr) {
-                co_await Do([&, this]() { return mysql_free_result_nonblocking(sResult); },
+                co_await Do([&]() { return mysql_free_result_nonblocking(sResult); },
                             "mysql_free_result_nonblocking");
             }
 

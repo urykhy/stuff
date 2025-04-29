@@ -85,7 +85,7 @@ BOOST_AUTO_TEST_CASE(alive)
         aResponse.set(asio_http::Headers::ContentType, "text/html");
         aResponse.body() = std::to_string(sSerial);
     });
-    sRouter->insert("/slow", [&sSerial](asio_http::asio::io_service&, const asio_http::Request& aRequest, asio_http::Response& aResponse, asio_http::asio::yield_context yield) {
+    sRouter->insert("/slow", [](asio_http::asio::io_service&, const asio_http::Request& aRequest, asio_http::Response& aResponse, asio_http::asio::yield_context yield) {
         sleep(1);
         aResponse.result(http::status::ok);
     });

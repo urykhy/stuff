@@ -62,7 +62,7 @@ namespace Curl {
         sQueue.start(sGroup, aCount);
 
         while (!sQueue.idle()) {
-            sleep(0.01);
+            Threads::sleep(0.01);
             sError.raise();
         }
     }

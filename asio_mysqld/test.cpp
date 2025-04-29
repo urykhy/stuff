@@ -18,7 +18,6 @@ BOOST_AUTO_TEST_CASE(simple)
                                   const std::string& aQuery) override
         {
             BOOST_TEST_MESSAGE("got query: " << aQuery);
-            beast::error_code ec;
             std::string       sBuffer;
 
             if (aQuery == "select @@version_comment limit 1") {

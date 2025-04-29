@@ -4,14 +4,17 @@
 #include <cmath>
 #include <functional>
 #include <memory>
+#include <random>
+
+#include <boost/align/aligned_allocator.hpp>
 
 #include "Search.hpp"
 #include "Wide.hpp"
 
 // sum numbers
 
-const std::vector<float> sSumData = []() {
-    std::vector<float> v;
+const std::vector<float, boost::alignment::aligned_allocator<float, 256>> sSumData = []() {
+    std::vector<float, boost::alignment::aligned_allocator<float, 256>> v;
     v.resize(1024 * 1024);
     return v;
 }();
@@ -58,8 +61,11 @@ const auto sMake = [](unsigned aCount) {
 };
 
 const auto sShuffle = [](const Util::alignedVector<uint32_t>& aData) {
+    std::random_device sDevice;
+    std::mt19937       sGen(sDevice());
+
     Util::alignedVector<uint32_t> sData = aData;
-    std::random_shuffle(sData.begin(), sData.end());
+    std::shuffle(sData.begin(), sData.end(), sGen);
     return sData;
 };
 

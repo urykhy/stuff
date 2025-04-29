@@ -66,19 +66,19 @@ namespace MySQL {
                 std::visit(Mpl::overloaded{
                                [this](const Rows& aRows) {
                                    if (!aRows.rows.empty()) {
-                                       When(Method(m_Mock, Use)).Do([this, &aRows](auto&& aHandler) mutable {
+                                       When(Method(m_Mock, Use)).Do([&aRows](auto&& aHandler) mutable {
                                            for (auto& x : aRows.rows)
                                                aHandler(MySQL::Row((MYSQL_ROW)x.data(), x.size(), aRows.meta));
                                        });
                                        m_VerifyUse = true;
                                    } else if (m_SQL[m_Serial].query.compare(0, 6, "SELECT") == 0) {
-                                       When(Method(m_Mock, Use)).Do([this](auto&& aHandler) {
+                                       When(Method(m_Mock, Use)).Do([](auto&& aHandler) {
                                            BOOST_TEST_MESSAGE("MOCK: no results");
                                        });
                                        m_VerifyUse = true;
                                    }
                                },
-                               [this](const Error& aError) {
+                               [](const Error& aError) {
                                    throw aError;
                                }},
                            m_SQL[m_Serial].result);

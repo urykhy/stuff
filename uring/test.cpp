@@ -56,7 +56,7 @@ BOOST_AUTO_TEST_CASE(simple)
     socklen_t sPeerLen = sizeof(sPeer);
 
     Threads::WaitGroup sWait(1);
-    sRing.connect(sClient.get_fd(), std::make_shared<CB>([&sWait, &sClient](int aKind, int32_t aRes) {
+    sRing.connect(sClient.get_fd(), std::make_shared<CB>([&sWait](int aKind, int32_t aRes) {
                       std::string sComment;
                       if (aRes < 0)
                           sComment = ", error: " + std::to_string(aRes);

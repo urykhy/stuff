@@ -27,7 +27,7 @@ namespace MySQL
             if (sCounter >= P::max_size())
             {
                 sBuf << ' ' << P::finalize();
-                sList.push_back(std::move(sBuf.str()));
+                sList.push_back(sBuf.str());
                 sBuf.str("");
                 sCounter = 0;
             }
@@ -36,7 +36,7 @@ namespace MySQL
         if (sCounter)
         {
             sBuf << ' ' << P::finalize();
-            sList.push_back(std::move(sBuf.str()));
+            sList.push_back(sBuf.str());
         }
 
         return sList;

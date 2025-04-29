@@ -19,13 +19,17 @@
 #include <format/Hex.hpp>
 #include <jaeger/Client.hpp>
 #include <jwt/JWT.hpp>
-#include <mock/fakeit.hpp>
 #include <prometheus/API.hpp>
 #include <resource/Get.hpp>
 #include <resource/Server.hpp>
 #include <sd/Balancer.hpp>
 #include <sd/NotifyWeight.hpp>
 #include <sentry/Client.hpp>
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-function-type-mismatch"
+#include <mock/fakeit.hpp>
+#pragma GCC diagnostic pop
 
 DECLARE_RESOURCE(swagger_ui_tar, "swagger_ui.tar")
 
@@ -386,7 +390,7 @@ BOOST_FIXTURE_TEST_CASE(simple_mock, WithServer)
 {
     using namespace fakeit;
     Mock<api::common_1_0::server> sMock;
-    When(Method(sMock, get_enum_i)).Do([](asio_http::asio::io_service&, auto, auto) {
+    When(Method(sMock, get_enum_i)).Do([](asio_http::asio::io_service&, auto, auto) -> api::common_1_0::server::get_enum_response_v {
         api::common_1_0::get_enum_response_200 sResult;
         sResult.body.push_back("bar");
         sResult.body.push_back("foo");

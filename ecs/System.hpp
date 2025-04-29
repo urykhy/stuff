@@ -8,7 +8,7 @@ namespace ECS {
     class Entity;
 
     template <class... V>
-    class TmpEntity;
+    struct TmpEntity;
 
     template <class... V>
     class System : protected Store<V...>

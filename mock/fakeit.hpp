@@ -2,7 +2,7 @@
 /*
  *  FakeIt - A Simplified C++ Mocking Framework
  *  Copyright (c) Eran Pe'er 2013
- *  Generated: 2024-03-13 21:18:47.206582
+ *  Generated: 2024-10-06 20:50:22.200164
  *  Distributed under the MIT License. Please refer to the LICENSE file at:
  *  https://github.com/eranpeer/FakeIt
  */
@@ -7928,7 +7928,7 @@ namespace fakeit {
             template<typename current_arg, typename ... valuelist, typename ... arglist>
             static void
             Assign(ArgumentsTuple<valuelist...> arg_vals, current_arg &&p, arglist&&... args) {
-                ParamWalker<N - 1>::template Assign(arg_vals, std::forward<arglist>(args)...);
+                ParamWalker<N - 1>::Assign(arg_vals, std::forward<arglist>(args)...);
                 GetArg(std::forward<current_arg>(p)) = std::get<sizeof...(valuelist) - N>(arg_vals);
             }
         };
