@@ -59,6 +59,7 @@ namespace AsioHttp {
         virtual void addHandler(const std::string& aPrefix, Handler aHandler) = 0;
 
         virtual ba::awaitable<void> run() = 0;
+        virtual void stop() = 0;
 
         virtual ~IServer() = default;
     };

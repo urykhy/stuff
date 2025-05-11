@@ -57,8 +57,10 @@ namespace AsioHttp {
             auto       sInternal = convert(std::move(aRequest), sParsed.path);
 
             auto sCheckError = [&](const char* aMsg) {
-                if (sError)
+                if (sError) {
+                    WARN("Client: fail to " << aMsg << ": "<< sError.message());
                     throw std::runtime_error(aMsg + sError.message());
+                }
             };
 
             DEBUG("new connection " << &sStream << " to " << sParsed.host << ":" << sParsed.port);

@@ -2,13 +2,18 @@
 
 #include "API.hpp"
 #include "Asio.hpp"
+#include <unsorted/Log4cxx.hpp>
 
 namespace AsioHttp {
+
+    static log4cxx::LoggerPtr sLogger = Logger::Get("http");
 
     class BasicServer : public std::enable_shared_from_this<BasicServer>, public IServer
     {
         const ServerParams                         m_Params;
         std::list<std::pair<std::string, Handler>> m_Handlers;
+        std::shared_ptr<tcp::acceptor>             m_Acceptor;
+        std::atomic_bool                           m_Stop{false};
 
         ba::awaitable<BeastResponse> handle(BeastRequest&& aRequest)
         {
@@ -40,11 +45,13 @@ namespace AsioHttp {
         {
             bs::error_code  sError;
             bb::flat_buffer sBuffer;
-            sBuffer.reserve(1024*64);
+            sBuffer.reserve(1024 * 64);
 
             auto sCheckError = [&](const char* aMsg) {
-                if (sError)
+                if (sError and sError != bb::http::error::end_of_stream) {
+                    WARN("Server: fail to " << aMsg << sError.message());
                     throw std::runtime_error(aMsg + sError.message());
+                }
             };
 
             aStream.socket().set_option(tcp::no_delay(true));
@@ -87,20 +94,22 @@ namespace AsioHttp {
             bs::error_code sError;
             auto           sExecutor = co_await this_coro::executor;
 
-            auto const    sAddress  = ba::ip::make_address("0.0.0.0");
-            auto const    sEndpoint = tcp::endpoint(sAddress, m_Params.port);
-            tcp::acceptor sAcceptor(sExecutor);
-            sAcceptor.open(sEndpoint.protocol());
-            sAcceptor.set_option(ba::socket_base::reuse_address(true));
-            sAcceptor.bind(sEndpoint, sError);
+            auto const sAddress  = ba::ip::make_address("0.0.0.0");
+            auto const sEndpoint = tcp::endpoint(sAddress, m_Params.port);
+            m_Acceptor           = std::make_shared<tcp::acceptor>(sExecutor);
+            m_Acceptor->open(sEndpoint.protocol());
+            m_Acceptor->set_option(ba::socket_base::reuse_address(true));
+            m_Acceptor->bind(sEndpoint, sError);
             if (sError) {
+                WARN("Server: fail to bind: " << sError.message());
                 throw std::runtime_error("Server: fail to bind: " + sError.message());
             }
-            sAcceptor.listen();
+            m_Acceptor->listen();
 
-            while (true) {
-                auto sSocket = co_await sAcceptor.async_accept(ba::redirect_error(ba::use_awaitable, sError));
+            while (!m_Stop) {
+                auto sSocket = co_await m_Acceptor->async_accept(ba::redirect_error(ba::use_awaitable, sError));
                 if (sError) {
+                    WARN("Server: fail to accept: " << sError.message());
                     throw std::runtime_error("Server: fail to accept: " + sError.message());
                 }
                 ba::co_spawn(
@@ -110,6 +119,15 @@ namespace AsioHttp {
                     ba::detached);
             }
         }
+
+        void stop() override
+        {
+            m_Stop = true;
+            if (m_Acceptor) {
+                m_Acceptor->cancel();
+            }
+        }
+
         virtual ~BasicServer() = default;
     };
 
