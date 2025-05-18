@@ -973,3 +973,16 @@ function show-rtprio
 {
     ps -eo user,pid,tid,class,rtprio,ni,pri,psr,pcpu,stat,wchan:14,comm --sort=-rtprio | awk '{if ($5 != "-") print}'
 }
+
+function show-cgroup-version
+{
+    V=`stat -fc %T /sys/fs/cgroup/`
+    if [ "$V" = "tmpfs" ]; then
+        echo "v1"
+    elif [ "$V" = "cgroup2fs" ]; then
+        echo "v2"
+    else
+        echo "unknown"
+    fi
+}
+
