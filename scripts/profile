@@ -16,18 +16,17 @@ function docker-du
 
 function docker-mem
 {
-    (for x in `find /sys/fs/cgroup/memory/docker/ -type d -printf '%f\n' | grep -v docker`; do
+    (for x in `find /sys/fs/cgroup/docker/ -type d -printf '%f\n' | grep -v docker`; do
 		if [[ "$x" != "buildkit" ]] then
             n=`docker container ls --no-trunc --format 'table {{.ID}} {{.Label "com.docker.compose.project"}}' | grep "^$x" | awk '{print $2}'`
             if [[ "x$n" == "x" ]]; then n="other"; fi
-			grep 'total_cache \|total_rss \|total_swap' /sys/fs/cgroup/memory/docker/$x/memory.stat \
-			| sed -e 's/total_//' \
+			grep '^anon \|^file \|^kernel ' /sys/fs/cgroup/docker/$x/memory.stat \
 			| xargs echo "$n"
 		fi
     done) \
 	| awk '{print $1,$3,$5,$7}' \
-	| clickhouse-local --input-format=CustomSeparated --format_custom_escaping_rule=CSV --format_custom_field_delimiter=' ' -S 'project String, cache UInt64, rss UInt64, swap UInt64' \
-	  -q "SELECT project, formatReadableSize(sum(rss)) AS rss, formatReadableSize(sum(cache)) AS cache, formatReadableSize(sum(swap)) AS swap FROM table GROUP BY ALL ORDER BY 1 FORMAT PrettyCompactMonoBlock"
+	| clickhouse-local --input-format=CustomSeparated --format_custom_escaping_rule=CSV --format_custom_field_delimiter=' ' -S 'project String, anon UInt64, file UInt64, kernel UInt64' \
+	  -q "SELECT project, formatReadableSize(sum(anon)) AS anon, formatReadableSize(sum(file)) AS file, formatReadableSize(sum(kernel)) AS kernel FROM table GROUP BY ALL ORDER BY 1 FORMAT PrettyCompactMonoBlock"
 }
 
 function docker-security-scanner
