@@ -21,8 +21,8 @@
 
 #include <container/Pool.hpp>
 #include <format/List.hpp>
+#include <threads/Group.hpp>
 #include <time/Meter.hpp>
-#include <time/Time.hpp>
 
 using namespace std::chrono_literals;
 
@@ -377,6 +377,49 @@ BOOST_AUTO_TEST_CASE(mock)
         sCount++;
     }
     BOOST_CHECK_EQUAL(sCount, 1);
+}
+
+BOOST_AUTO_TEST_CASE(massive, *boost::unit_test::disabled())
+{
+    MySQL::TaskQueue::Config sQueueCfg;
+    MySQL::Config            sCfg    = MySQL::Config{.database = "test"};
+    const int                TASKS   = 5000;
+    const int                THREADS = 10;
+
+    {
+        MySQL::Connection sConnection(sCfg);
+        sConnection.Query("TRUNCATE TABLE task_queue");
+        Time::Meter sMeter;
+        sConnection.Query("BEGIN");
+        for (int i = 0; i < TASKS; i++) {
+            sConnection.Query("INSERT INTO task_queue(task) VALUES ('massive-" + std::to_string(i) + "')");
+        }
+        sConnection.Query("COMMIT");
+        BOOST_TEST_MESSAGE("generated in " << sMeter.get().to_double() << " s");
+    }
+
+    // in threads
+    {
+        std::atomic<int> sHandled{0};
+        Time::Meter      sMeter;
+        Threads::Group   sGroup;
+        sGroup.start(
+            [&]() {
+                MySQL::Connection         sConnection(sCfg);
+                MySQL::TaskQueue::Manager sQueue(sQueueCfg, &sConnection);
+                while (true) {
+                    auto sTask = sQueue.get("test-worker");
+                    if (!sTask)
+                        break;
+                    sQueue.done(sTask->id, true);
+                    sHandled++;
+                }
+            },
+            THREADS);
+        sGroup.wait();
+        BOOST_TEST_MESSAGE("processed in " << sMeter.get().to_double() << " s; rps: " << TASKS / sMeter.get().to_double());
+        BOOST_CHECK_EQUAL(sHandled.load(), TASKS);
+    }
 }
 BOOST_AUTO_TEST_SUITE_END()
 
