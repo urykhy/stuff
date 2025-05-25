@@ -60,6 +60,9 @@ namespace AsioHttp {
                 aStream.expires_after(std::chrono::milliseconds(m_Params.idle_timeout));
                 BeastRequest sRequest;
                 co_await http::async_read(aStream, sBuffer, sRequest, ba::redirect_error(ba::use_awaitable, sError));
+                if (sError == bb::http::error::end_of_stream) { // connection closed
+                    break;
+                }
                 sCheckError("read http request: ");
 
                 BeastResponse sResponse = co_await handle(std::move(sRequest));
