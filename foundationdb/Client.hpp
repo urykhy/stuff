@@ -106,9 +106,16 @@ namespace FDB {
         }
 
     public:
+        Future(Future&& aOld)
+        : m_Future(aOld.m_Future)
+        {
+            aOld.m_Future = nullptr;
+        }
+
         ~Future()
         {
-            fdb_future_destroy(m_Future);
+            if (m_Future)
+                fdb_future_destroy(m_Future);
         }
 
         void Wait()
