@@ -3,6 +3,7 @@
 #define FDB_API_VERSION 730
 #include <fmt/core.h>
 #include <foundationdb/fdb_c.h>
+#include <sys/prctl.h>
 
 #include <iostream>
 #include <optional>
@@ -15,6 +16,9 @@
 #include <threads/Coro.hpp>
 
 namespace FDB {
+
+    // from bindings/c/foundationdb/fdb_c_internal.h
+    extern "C" FDBFuture* fdb_database_create_shared_state(FDBDatabase* db);
 
     class Error : public std::runtime_error
     {
@@ -49,6 +53,7 @@ namespace FDB {
                 Check(fdb_setup_network(), "setup network");
 
                 m_Thread = std::thread([]() {
+                    prctl(PR_SET_NAME, "fdb-network");
                     if (auto sError = fdb_run_network(); sError) {
                         std::cerr << "FDB::run network error: " << fdb_get_error(sError) << std::endl;
                     }
@@ -77,12 +82,10 @@ namespace FDB {
     {
         friend class Transaction;
         FDBDatabase* m_DB{nullptr};
+        const bool   m_UseGrvCache;
 
     public:
-        Client()
-        {
-            Check(fdb_create_database(nullptr, &m_DB), "create database");
-        }
+        Client(bool aUseGrvCache = false);
 
         ~Client()
         {
@@ -92,7 +95,6 @@ namespace FDB {
 
     class Future : public boost::noncopyable
     {
-        friend class Transaction;
         FDBFuture* m_Future;
 
         static void callback(FDBFuture*, void* aWaiter)
@@ -100,16 +102,23 @@ namespace FDB {
             ((Threads::Coro::Waiter*)aWaiter)->notify();
         }
 
-        Future(FDBFuture* aFuture)
+    public:
+        Future(FDBFuture* aFuture = nullptr)
         : m_Future(aFuture)
         {
         }
 
-    public:
         Future(Future&& aOld)
         : m_Future(aOld.m_Future)
         {
             aOld.m_Future = nullptr;
+        }
+
+        Future& operator=(Future&& aOld)
+        {
+            m_Future      = aOld.m_Future;
+            aOld.m_Future = nullptr;
+            return *this;
         }
 
         ~Future()
@@ -145,6 +154,15 @@ namespace FDB {
         }
     };
 
+    inline Client::Client(bool aUseGrvCache)
+    : m_UseGrvCache(aUseGrvCache)
+    {
+        Check(fdb_create_database(nullptr, &m_DB), "create database");
+        if (m_UseGrvCache) {
+            Future sFuture(fdb_database_create_shared_state(m_DB));
+        }
+    }
+
     class Transaction : public boost::noncopyable
     {
         FDBTransaction* m_Transaction{nullptr};
@@ -156,6 +174,9 @@ namespace FDB {
             if (aTimeoutMs > 0) {
                 Check(fdb_transaction_set_option(m_Transaction, FDB_TR_OPTION_TIMEOUT, (uint8_t*)&aTimeoutMs, sizeof(aTimeoutMs)), "set transaction timeout");
             }
+            if (aClient.m_UseGrvCache) {
+                Check(fdb_transaction_set_option(m_Transaction, FDB_TR_OPTION_USE_GRV_CACHE, nullptr, 0), "use grv cache");
+            }
         }
 
         ~Transaction()
@@ -163,9 +184,14 @@ namespace FDB {
             fdb_transaction_destroy(m_Transaction);
         }
 
-        Future Get(std::string_view aKey)
+        Future GetVersionTimestamp()
         {
-            return fdb_transaction_get(m_Transaction, (uint8_t*)aKey.data(), aKey.size(), true /* snapshot*/);
+            return fdb_transaction_get_versionstamp(m_Transaction);
+        }
+
+        Future Get(std::string_view aKey, bool aSnapshot = false)
+        {
+            return fdb_transaction_get(m_Transaction, (uint8_t*)aKey.data(), aKey.size(), aSnapshot);
         }
 
         void Set(std::string_view aKey, std::string_view aValue)

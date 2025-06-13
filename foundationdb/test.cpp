@@ -6,6 +6,7 @@
 #include <boost/asio/use_future.hpp>
 
 #include "Client.hpp"
+#include "Overlap.hpp"
 
 using namespace std::chrono_literals;
 
@@ -43,7 +44,38 @@ BOOST_AUTO_TEST_CASE(basic)
         sTxn.Erase("foo");
         BOOST_CHECK_NO_THROW(sTxn.Commit());
     }
+
+    // 2 transactions, update same value
+    {
+        FDB::Transaction sTxn1(sClient);
+        auto             sFuture1 = sTxn1.Get("foo1");
+        sFuture1.Wait();
+        sTxn1.Set("foo1", "bar");
+
+        FDB::Transaction sTxn2(sClient);
+        auto             sFuture2 = sTxn2.Get("foo1");
+        sFuture2.Wait();
+        sTxn2.Set("foo1", "bar");
+
+        BOOST_CHECK_NO_THROW(sTxn1.Commit());
+        BOOST_CHECK_EXCEPTION(sTxn2.Commit(), std::runtime_error, [](auto e) {
+            return e.what() == std::string("future get error: Transaction not committed due to conflict with another transaction (1020)");
+        });
+    }
 }
+
+BOOST_AUTO_TEST_CASE(overlap)
+{
+    FDB::Client sClient;
+    FDB::Overlap sTxn(sClient);
+    for (int i = 0; i < 10; i++) {
+        auto sFuture = sTxn.Get("foo1");
+        sFuture.Wait();
+        BOOST_TEST_MESSAGE(*sFuture.Get());
+        sleep(1);
+    }
+}
+
 BOOST_AUTO_TEST_CASE(async)
 {
     boost::asio::io_service sAsio;
