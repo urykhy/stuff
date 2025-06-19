@@ -985,3 +985,11 @@ function show-cgroup-version
     fi
 }
 
+function mass-download
+{
+    if [ $# -ne 1 ]; then
+        echo "usage: mass-download <filename>"
+        return
+    fi
+    cat $1 | xargs -P10 -I N bash -c 'while ! curl -s -C - -O "N" ; do echo "retry in 1s ..."; sleep 1; done'
+}
