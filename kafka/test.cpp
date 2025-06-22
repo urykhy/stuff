@@ -4,6 +4,7 @@
 #include <boost/asio.hpp>
 
 #include "Coro.hpp"
+#include "Factory.hpp"
 #include "Transform.hpp"
 
 #include <threads/Group.hpp>
@@ -121,9 +122,8 @@ BOOST_AUTO_TEST_CASE(coro)
     BOOST_TEST_MESSAGE("test with message: " << sValue);
 
     {
-        Kafka::Coro::Meta sMeta{};
-        auto              sProducer = std::make_shared<Kafka::Coro::Producer>(
-            producerOptions("basic/producer", false), "t_source");
+        Kafka::Coro::Meta       sMeta{};
+        auto                    sProducer = Kafka::Factory::MakeProducer("basic/producer", "test_source");
         boost::asio::io_service sAsio;
         boost::asio::co_spawn(
             sAsio,
@@ -143,17 +143,18 @@ BOOST_AUTO_TEST_CASE(coro)
         bool    sCommited  = false;
         int32_t sPartition = -1;
         int64_t sOffset    = -1;
-        auto    sConsumer  = std::make_shared<Kafka::Coro::Consumer>(
-            consumerOptions("basic/consumer", "g_basic"), "t_source",
-            [&sConsumed, &sValue, &sPartition, &sOffset](const rd_kafka_message_t* aMsg) {
-                if (aMsg->err != RD_KAFKA_RESP_ERR_NO_ERROR)
-                    return;
-                if (Kafka::Help::value(aMsg) == sValue) {
-                    sConsumed  = true;
-                    sPartition = aMsg->partition;
-                    sOffset    = aMsg->offset;
-                }
-            });
+
+        auto sConsumer =
+            Kafka::Factory::MakeConsumer("basic/consumer", "g_basic",
+                                         [&sConsumed, &sValue, &sPartition, &sOffset](const rd_kafka_message_t* aMsg) {
+                                             if (aMsg->err != RD_KAFKA_RESP_ERR_NO_ERROR)
+                                                 return;
+                                             if (Kafka::Help::value(aMsg) == sValue) {
+                                                 sConsumed  = true;
+                                                 sPartition = aMsg->partition;
+                                                 sOffset    = aMsg->offset;
+                                             }
+                                         });
         boost::asio::io_service sAsio;
         boost::asio::co_spawn(
             sAsio,

@@ -107,7 +107,7 @@ namespace Kafka::Coro {
                               << "topic: " << rd_kafka_topic_name(sMessage->rkt)
                               << ", partition: " << sMessage->partition
                               << ", offset: " << sMessage->offset
-                              << ", key:" << Help::key(sMessage));
+                              << ", key: " << Help::key(sMessage));
                     } else {
                         DEBUG("got error: " << rd_kafka_err2name(sMessage->err));
                     }
@@ -184,6 +184,14 @@ namespace Kafka::Coro {
                         sResponse->meta.error     = sMessage->err;
                         sResponse->meta.offset    = sMessage->offset;
                         sResponse->meta.partition = sMessage->partition;
+                        DEBUG("produced message: "
+                              << "topic: " << rd_kafka_topic_name(sMessage->rkt)
+                              << ", partition: " << sMessage->partition
+                              << ", offset: " << sMessage->offset
+                              << ", key: " << Help::key(sMessage)
+                              << ", error: " << sMessage->err
+                              << ", " << (sResponse->meta.status == RD_KAFKA_MSG_STATUS_PERSISTED ? "persisted" : sResponse->meta.status == RD_KAFKA_MSG_STATUS_POSSIBLY_PERSISTED ? "possibly persisted"
+                                                                                                                                                                                   : "not persisted"));
                         sResponse->waiter.notify();
                     }
                 }
