@@ -1,7 +1,16 @@
 
 function docker-volumes
 {
-    docker ps -a --format '{{ .ID }}' | xargs -I {} docker inspect -f '{{ .Name }}{{ printf "\n" }}{{ range .Mounts }}{{ printf "\n\t" }}{{ .Type }} {{ if eq .Type "bind" }}{{ .Source }}{{ end }}{{ .Name }} => {{ .Destination }}{{ end }}{{ printf "\n" }}' {}
+docker ps -a --format '{{ .ID }}' | \
+ xargs -I {} docker inspect -f '{{ json .Name }}{{printf "\t"}}{{ json .Mounts }}' {} | \
+ clickhouse-local -mnq "
+    WITH extractAll(Mounts, '\"Name\":\"[^\"]+\"') as VNamesArray,
+         arrayStringConcat(VNamesArray, '') as VNames
+  SELECT replaceAll(replaceAll(Name, '\"/', ''), '\"', '') as N,
+         replaceRegexpAll(VNames, '\"Name\":\"([^\"]+)\"', '\1 ') as Volumes
+    FROM file(stdin, TSV, 'Name String, Mounts String')
+   ORDER BY N
+  FORMAT PrettyCompact"
 }
 
 function docker-du
