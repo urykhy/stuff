@@ -11,5 +11,5 @@ test('basic', a, args : ['-l', 'all'])
 
 # meson test --benchmark -v
 b  = executable('b.out',  'benchmark.cpp', dependencies : [boost, fdb, fmt, benchmark], include_directories : includes)
-benchmark('get', b, timeout : 90,
-          args : ['--benchmark_min_time=1','--benchmark_color=true', '--benchmark_counters_tabular=true', '--benchmark_repetitions=3', '--benchmark_display_aggregates_only=true'])
+benchmark('get', b, timeout : 300,
+          args : ['--benchmark_min_time=10','--benchmark_color=true'])

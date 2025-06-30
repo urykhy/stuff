@@ -184,9 +184,16 @@ namespace FDB {
             fdb_transaction_destroy(m_Transaction);
         }
 
-        Future GetVersionTimestamp()
+        int64_t GetVersionTimestamp()
         {
-            return fdb_transaction_get_versionstamp(m_Transaction);
+            int64_t sVersion = 0;
+            Check(fdb_transaction_get_committed_version(m_Transaction, &sVersion), "get_committed_version");
+            return sVersion;
+        }
+
+        void SetVersionTimestamp(uint64_t aVersion)
+        {
+            fdb_transaction_set_read_version(m_Transaction, aVersion);
         }
 
         Future Get(std::string_view aKey, bool aSnapshot = false)

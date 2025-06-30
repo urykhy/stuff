@@ -1,57 +1,70 @@
+#include <boost/asio/co_spawn.hpp>
+#include <boost/asio/detached.hpp>
+#include <boost/asio/steady_timer.hpp>
+
 #include "Client.hpp"
 
 #include <time/Meter.hpp>
 
 namespace FDB {
+
+    // export VersionTimestamp
     class Overlap : public boost::noncopyable
     {
-        Client&        m_Client;
-        const uint64_t m_TimeoutMs = 5000;
-        int            m_Current   = 0;
-
-        using Ptr = std::unique_ptr<Transaction>;
         struct Info
         {
-            Ptr         transaction;
-            Time::Meter meter;
-            Future      future;
-            bool        busy = false;
+            Client*              client{nullptr};
+            std::atomic_bool     running{true};
+            std::atomic_uint64_t version{0};
         };
-        Info     m_Info[2];
-        unsigned m_Reads = 0;
+        std::shared_ptr<Info> m_Info;
 
-        static constexpr double   LAG          = 0.5;
-        static constexpr double   MAX_DURATION = 4;
-        static constexpr unsigned MAX_READS    = 100000;
+        static constexpr int LAG_MS = 500;
 
     public:
         Overlap(Client& aClient)
-        : m_Client(aClient)
         {
-            m_Info[0].transaction = std::make_unique<Transaction>(m_Client, m_TimeoutMs);
-            m_Info[0].busy        = true;
+            m_Info         = std::make_shared<Info>();
+            m_Info->client = &aClient;
         }
 
-        Future Get(std::string_view aKey)
+        boost::asio::awaitable<void> Start()
         {
-            auto& sCurrent = m_Info[m_Current];
-            if ((sCurrent.meter.get().to_double() > MAX_DURATION - LAG or m_Reads > MAX_READS / 2) and !m_Info[!m_Current].busy) {
-                auto& sNext       = m_Info[!m_Current];
-                sNext.transaction = std::make_unique<Transaction>(m_Client, m_TimeoutMs);
-                sNext.future      = std::move(sNext.transaction->GetVersionTimestamp());
-                sNext.meter.reset();
-                sNext.busy = true;
-            }
+            boost::asio::co_spawn(
+                co_await boost::asio::this_coro::executor,
+                [sInfo = m_Info]() mutable -> boost::asio::awaitable<void> {
+                    boost::asio::steady_timer sTimer(co_await boost::asio::this_coro::executor);
+                    while (sInfo->running) {
+                        try {
+                            Transaction sTxn(*sInfo->client);
+                            sTxn.Set("__tmp", "overlap"); // set some key, required for GetVersionTimestamp
+                            co_await sTxn.CoCommit();
+                            const int64_t sVersion = sTxn.GetVersionTimestamp();
+                            if (sInfo->version > 0) {
+                                sTimer.expires_from_now(std::chrono::milliseconds(LAG_MS));
+                                co_await sTimer.async_wait(boost::asio::use_awaitable);
+                            }
+                            sInfo->version = sVersion;
+                        } catch (const std::exception& e) {
+                            // BOOST_TEST_MESSAGE("Overlap: " << e.what());
+                            sInfo->version = 0;
+                        }
+                        sTimer.expires_from_now(std::chrono::milliseconds(LAG_MS));
+                        co_await sTimer.async_wait(boost::asio::use_awaitable);
+                    }
+                },
+                boost::asio::detached);
+            co_return;
+        }
 
-            if (sCurrent.meter.get().to_double() > MAX_DURATION or m_Reads > MAX_READS) {
-                sCurrent.busy = false; // delay m_Transactions[m_Current].reset();
-                sCurrent.meter.reset();
-                m_Current = !m_Current;
-                m_Reads   = 0;
-            }
+        void Stop()
+        {
+            m_Info->running = false;
+        }
 
-            m_Reads++;
-            return m_Info[m_Current].transaction->Get(aKey, true /* snapshot */);
+        uint64_t GetVersionTimestamp()
+        {
+            return m_Info->version;
         }
     };
 } // namespace FDB
