@@ -33,9 +33,9 @@ namespace Lite {
 
     class Statement : public boost::noncopyable
     {
-        sqlite3*                 m_Handle   = nullptr;
+        sqlite3*                 m_Handle    = nullptr;
         sqlite3_stmt*            m_Statement = nullptr;
-        unsigned                 m_Columns  = 0;
+        unsigned                 m_Columns   = 0;
         std::vector<const char*> m_Names;
 
         friend class DB;
@@ -61,6 +61,8 @@ namespace Lite {
                         Check(sqlite3_bind_int64(m_Statement, sIndex, aValue));
                     } else if constexpr (std::is_same_v<X, std::string_view>) {
                         Check(sqlite3_bind_text(m_Statement, sIndex, aValue.data(), aValue.size(), SQLITE_STATIC));
+                    } else if constexpr (std::is_same_v<X, std::string>) {
+                        Check(sqlite3_bind_text(m_Statement, sIndex, aValue.data(), aValue.size(), SQLITE_STATIC));
                     } else {
                         throw std::invalid_argument("assign: not supported type");
                     }
@@ -72,7 +74,7 @@ namespace Lite {
         template <class T>
         void Use(T&& aHandler)
         {
-            Util::Raii  sCleanup([this]() { Reset(); });
+            Util::Raii               sCleanup([this]() { Reset(); });
             std::vector<const char*> sValues;
             sValues.resize(m_Columns);
 

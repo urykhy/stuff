@@ -73,8 +73,8 @@ static void BM_GetSet(benchmark::State& state)
     FDB::Client             sClient(sGRV);
     FDB::Overlap            sOverlap(sClient);
 
-    constexpr int     PADDING_LENGHT = 1500;
-    const std::string sPadding(PADDING_LENGHT, 'x');
+    constexpr int     PADDING_LENGTH = 1500;
+    const std::string sPadding(PADDING_LENGTH, 'x');
 
     constexpr int KEYS_COUNT = 1000000;
     auto          sWriteOp   = [&]() -> boost::asio::awaitable<void> {
@@ -94,8 +94,8 @@ static void BM_GetSet(benchmark::State& state)
             sVal = "0";
         } else {
             std::string_view sTmp = *sResult;
-            if (sTmp.size() > PADDING_LENGHT) {
-                sTmp.remove_suffix(PADDING_LENGHT);
+            if (sTmp.size() > PADDING_LENGTH) {
+                sTmp.remove_suffix(PADDING_LENGTH);
             }
             sVal = std::to_string(Parser::Atoi<unsigned>(sTmp) + 1);
         }
@@ -191,7 +191,7 @@ static void BM_GetSet(benchmark::State& state)
     sAsio.run();
     const double sELA = sMeter.get().to_double();
 
-    constexpr std::array<double, 4> sProb{0.5, 0.99, 1.0};
+    constexpr std::array<double, 3> sProb{0.5, 0.99, 1.0};
     {
         auto sResult                  = sReadLatency.quantile(sProb);
         state.counters["r:lat(0.50)"] = sResult[0];
