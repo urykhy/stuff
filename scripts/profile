@@ -872,14 +872,18 @@ function to-imgur
 function benchmark-disk
 {
     fio --loops=1 --size=1G --filename="./fiomark.tmp" --stonewall --ioengine=libaio --direct=1 --output-format=json \
-        --name=seq_read  --bs=4k --iodepth=1 --numjobs=1 --rw=read  --runtime=10s\
-        --name=seq_write --bs=4k --iodepth=1 --numjobs=1 --rw=write --runtime=10s\
-        --name=seq_read_QD32  --bs=4k --iodepth=32 --numjobs=1 --rw=read  --runtime=10s\
-        --name=seq_write_QD32 --bs=4k --iodepth=32 --numjobs=1 --rw=write --runtime=10s\
-        --name=random_read  --bs=4k --iodepth=1 --numjobs=1 --rw=randread  --runtime=10s\
-        --name=random_write --bs=4k --iodepth=1 --numjobs=1 --rw=randwrite --runtime=10s\
-        --name=random_read_QD32  --bs=4k --iodepth=32 --numjobs=1 --rw=randread  --runtime=10s\
-        --name=random_write_QD32 --bs=4k --iodepth=32 --numjobs=1 --rw=randwrite --runtime=10s \
+        --name=seq_read         --bs=4k --iodepth=1 --numjobs=1 --rw=read  --runtime=10s \
+        --name=seq_write        --bs=4k --iodepth=1 --numjobs=1 --rw=write --runtime=10s \
+        --name=seq_write_S      --bs=4k --iodepth=1 --numjobs=1 --rw=write --runtime=10s --fsync=1 \
+        --name=seq_read_QD32    --bs=4k --iodepth=32 --numjobs=1 --rw=read  --runtime=10s \
+        --name=seq_write_QD32   --bs=4k --iodepth=32 --numjobs=1 --rw=write --runtime=10s \
+        --name=seq_write_QD32S  --bs=4k --iodepth=32 --numjobs=1 --rw=write --runtime=10s --fsync=1 \
+        --name=random_read      --bs=4k --iodepth=1 --numjobs=1 --rw=randread  --runtime=10s \
+        --name=random_write     --bs=4k --iodepth=1 --numjobs=1 --rw=randwrite --runtime=10s \
+        --name=random_write_S   --bs=4k --iodepth=1 --numjobs=1 --rw=randwrite --runtime=10s --fsync=1 \
+        --name=random_read_QD32 --bs=4k --iodepth=32 --numjobs=1 --rw=randread  --runtime=10s \
+        --name=random_write_QD32  --bs=4k --iodepth=32 --numjobs=1 --rw=randwrite --runtime=10s \
+        --name=random_write_QD32S --bs=4k --iodepth=32 --numjobs=1 --rw=randwrite --runtime=10s --fsync=1 \
     > fio.json
     cat fio.json | jq -r '["test","iops","kb/s"], ["--","------","------"], (.jobs[] | select(.read.bw > 0) | [.jobname, (.read.iops|floor), .read.bw]), (.jobs[] | select(.write.bw > 0) | [.jobname, (.write.iops|floor), .write.bw]) | @tsv' | column -t
 }
