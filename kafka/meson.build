@@ -8,8 +8,10 @@ kafka     = dependency('rdkafka')
 log4cxx   = dependency('liblog4cxx')
 benchmark = dependency('benchmark', required : true)
 json      = dependency('jsoncpp')
+avro      = dependency('avro-cpp')
+serdes    = dependency('serdes')
 
-a = executable('a.out', 'test.cpp', dependencies : [boost, threads, kafkapp, kafka, log4cxx, json], include_directories : includes)
+a = executable('a.out', 'test.cpp', dependencies : [boost, threads, kafkapp, kafka, log4cxx, json, avro, serdes], include_directories : includes)
 test('basic', a, args : ['-l', 'all'])
 
 # meson test --benchmark -v

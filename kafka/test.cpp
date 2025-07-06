@@ -5,6 +5,7 @@
 
 #include "Coro.hpp"
 #include "Factory.hpp"
+#include "Registry.hpp"
 #include "Transform.hpp"
 
 #include <threads/Group.hpp>
@@ -176,6 +177,32 @@ BOOST_AUTO_TEST_CASE(coro)
         BOOST_CHECK(sConsumed);
         BOOST_CHECK(sCommited);
     }
+}
+BOOST_AUTO_TEST_CASE(serdes)
+{
+    const std::string sDef  = R"(
+    {
+        "type": "record",
+        "name": "cpx",
+        "version": 1,
+        "fields" : [
+            {"name": "name", "type": "string"},
+            {"name": "type", "type": "int"}
+        ]
+    }
+    )";
+    const std::string sName = "test_serdes_5";
+    Kafka::Registry   sRegistry;
+
+    auto sCurrent = sRegistry.GetOrCreate(sName, sDef);
+    BOOST_TEST_MESSAGE("using schema: " << sCurrent->definition());
+
+    const std::string sJson = R"({"name":"foo","type":123})";
+    auto              sAvro = sRegistry.Encode(sJson, sCurrent.get());
+    std::string_view  sAvroView(&sAvro[0], sAvro.size());
+    std::string       sActual = sRegistry.Decode(sAvroView);
+    BOOST_TEST_MESSAGE("actual message: " << sActual);
+    BOOST_CHECK_EQUAL(sJson, sActual);
 }
 BOOST_AUTO_TEST_CASE(transform)
 {

@@ -1,0 +1,5 @@
+Name: Avro-cpp
+Description: library
+Version: 1.12.0
+Libs: -L/home/ury/tmp/avrocpp/lib -lavrocpp
+Cflags: -I/home/ury/tmp/avrocpp/include

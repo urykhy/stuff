@@ -1,0 +1,8 @@
+libdir=/home/ury/tmp/serdes/lib
+includedir=/home/ury/tmp/serdes/include
+
+Name: libserdes
+Description: Confluent Schema-Registry C/C++ client library
+Version: v8.0.0-rc250530060959
+Cflags: -I${includedir}
+Libs: -L${libdir} -Wl,--no-as-needed -lserdes++ -lserdes -Wl,--as-needed
