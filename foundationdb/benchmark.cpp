@@ -64,20 +64,29 @@ BENCHMARK(BM_Set)->UseRealTime()->Arg(1)->Arg(100)->Arg(500)->Unit(benchmark::kM
 
 static void BM_GetSet(benchmark::State& state)
 {
-    using namespace std::chrono_literals;
-
-    boost::asio::io_service sAsio;
-    std::atomic_bool        sExit{false};
-    const bool              sOverlapMode = state.range(0);
-    const bool              sGRV         = state.range(1);
-    FDB::Client             sClient(sGRV);
-    FDB::Overlap            sOverlap(sClient);
+    const bool   sOverlapMode = state.range(0);
+    const bool   sGRV         = state.range(1);
+    FDB::Client  sClient(sGRV);
+    FDB::Overlap sOverlap(sClient);
 
     constexpr int     PADDING_LENGTH = 1500;
     const std::string sPadding(PADDING_LENGTH, 'x');
+    constexpr int     KEYS_COUNT = 1000000;
 
-    constexpr int KEYS_COUNT = 1000000;
-    auto          sWriteOp   = [&]() -> boost::asio::awaitable<void> {
+    auto sReadOp = [&]() -> boost::asio::awaitable<void> {
+        const std::string sKey = "tmp-" + std::to_string(Util::randomInt(KEYS_COUNT));
+        FDB::Transaction  sTxn(sClient);
+        if (sOverlapMode) {
+            if (auto sVersion = sOverlap.GetVersionTimestamp(); sVersion > 0) {
+                sTxn.SetVersionTimestamp(sVersion);
+            }
+        }
+        auto sFuture = sTxn.Get(sKey);
+        co_await sFuture.CoWait();
+        sFuture.Get();
+    };
+
+    auto sWriteOp = [&]() -> boost::asio::awaitable<void> {
         const std::string sKey = "tmp-" + std::to_string(Util::randomInt(KEYS_COUNT));
         FDB::Transaction  sTxn(sClient);
 
@@ -103,109 +112,26 @@ static void BM_GetSet(benchmark::State& state)
         co_await sTxn.CoCommit();
     };
 
-    auto sReadOp = [&]() -> boost::asio::awaitable<void> {
-        const std::string sKey = "tmp-" + std::to_string(Util::randomInt(KEYS_COUNT));
-        FDB::Transaction  sTxn(sClient);
+    auto sInit = [&]() -> boost::asio::awaitable<void> {
         if (sOverlapMode) {
-            if (auto sVersion = sOverlap.GetVersionTimestamp(); sVersion > 0) {
-                sTxn.SetVersionTimestamp(sVersion);
-            }
+            co_await sOverlap.Start();
         }
-        auto sFuture = sTxn.Get(sKey);
-        co_await sFuture.CoWait();
-        sFuture.Get();
     };
 
-    constexpr unsigned     COUNT         = 20;   // num of coroutines
-    constexpr unsigned     MAX_READ_RPS  = 1000; // rps per coro
-    constexpr unsigned     MAX_WRITE_RPS = 1000; // rps per coro
-    unsigned               sReadCount    = 0;
-    unsigned               sReadError    = 0;
-    Prometheus::Histogramm sReadLatency;
+    auto sFini = [&]() -> boost::asio::awaitable<void> {
+        if (sOverlapMode) {
+            sOverlap.Stop();
+        }
+        co_return;
+    };
 
-    for (unsigned i = 0; i < COUNT; i++) {
-        boost::asio::co_spawn(
-            sAsio,
-            [&]() -> boost::asio::awaitable<void> {
-                Benchmark::RateLimit sLimit(MAX_READ_RPS);
-                while (!sExit) {
-                    try {
-                        co_await sLimit([&]() -> boost::asio::awaitable<void> {
-                            Time::Meter sMeter;
-                            co_await sReadOp();
-                            sReadLatency.tick(sMeter.get().to_ms());
-                            sReadCount++;
-                        });
-                    } catch (...) {
-                        sReadError++;
-                    };
-                }
-            },
-            boost::asio::detached);
-    }
+    const Benchmark::GetSetConfig sBenchConfig{
+        .COUNT         = 20,   // num of coroutines
+        .MAX_READ_RPS  = 1000, // rps per coro
+        .MAX_WRITE_RPS = 1000, // rps per coro
+    };
 
-    unsigned               sWriteCount = 0;
-    unsigned               sWriteError = 0;
-    Prometheus::Histogramm sWriteLatency;
-    for (unsigned i = 0; i < COUNT; i++) {
-        boost::asio::co_spawn(
-            sAsio,
-            [&]() -> boost::asio::awaitable<void> {
-                Benchmark::RateLimit sLimit(MAX_WRITE_RPS);
-                while (!sExit) {
-                    try {
-                        co_await sLimit([&]() -> boost::asio::awaitable<void> {
-                            Time::Meter sMeter;
-                            co_await sWriteOp();
-                            sWriteLatency.tick(sMeter.get().to_ms());
-                            sWriteCount++;
-                        });
-                    } catch (...) {
-                        sWriteError++;
-                    };
-                }
-            },
-            boost::asio::detached);
-    }
-
-    boost::asio::co_spawn(
-        sAsio,
-        [&]() -> boost::asio::awaitable<void> {
-            using namespace std::chrono_literals;
-            boost::asio::steady_timer sTimer(sAsio);
-            if (sOverlapMode) {
-                co_await sOverlap.Start();
-            }
-            for (auto _ : state) {
-                sTimer.expires_from_now(1ms);
-                co_await sTimer.async_wait(boost::asio::use_awaitable);
-            }
-            if (sOverlapMode) {
-                sOverlap.Stop();
-            }
-            sExit = true;
-        },
-        boost::asio::detached);
-
-    Time::Meter sMeter;
-    sAsio.run();
-    const double sELA = sMeter.get().to_double();
-
-    constexpr std::array<double, 3> sProb{0.5, 0.99, 1.0};
-    {
-        auto sResult                  = sReadLatency.quantile(sProb);
-        state.counters["r:lat(0.50)"] = sResult[0];
-        state.counters["r:lat(0.99)"] = sResult[1];
-        state.counters["r:lat(1.00)"] = sResult[2];
-        state.counters["r:rps"]       = sReadCount / sELA;
-        state.counters["r:err"]       = sReadError / sELA;
-        sResult                       = sWriteLatency.quantile(sProb);
-        state.counters["w:lat(0.50)"] = sResult[0];
-        state.counters["w:lat(0.99)"] = sResult[1];
-        state.counters["w:lat(1.00)"] = sResult[2];
-        state.counters["w:rps"]       = sWriteCount / sELA;
-        state.counters["w:err"]       = sWriteError / sELA;
-    }
+    Benchmark::GetSet(state, sBenchConfig, sInit, sReadOp, sWriteOp, sFini);
 }
 BENCHMARK(BM_GetSet)->UseRealTime()->Args({0, 0})->Args({0, 1})->Args({1, 0})->Unit(benchmark::kMillisecond);
 

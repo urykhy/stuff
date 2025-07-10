@@ -3,7 +3,12 @@
 #include <chrono>
 #include <string>
 
+#include <boost/asio/awaitable.hpp>
+#include <boost/core/noncopyable.hpp>
+
+#include <sw/redis++/async_redis++.h>
 #include <sw/redis++/redis++.h>
+#include <threads/Coro.hpp>
 #include <unsorted/Env.hpp>
 
 namespace Cache::Redis {
@@ -61,4 +66,40 @@ namespace Cache::Redis {
             m_Redis.pexpire(m_Config.prefix + aKey, m_Config.ttl);
         }
     };
+
+    class Coro : public boost::noncopyable
+    {
+        const Config          m_Config;
+        sw::redis::AsyncRedis m_Redis;
+
+    public:
+        Coro(const Config& aConfig)
+        : m_Config(aConfig)
+        , m_Redis(aConfig.options)
+        {
+        }
+        boost::asio::awaitable<sw::redis::OptionalString> Get(const std::string& aKey)
+        {
+            Threads::Coro::Waiter     sWaiter;
+            sw::redis::OptionalString sResult;
+            m_Redis.get(aKey, [&](auto&& aFuture) {
+                sResult = aFuture.get();
+                sWaiter.notify();
+            });
+            co_await sWaiter.wait();
+            co_return sResult;
+        }
+        boost::asio::awaitable<bool> Set(const std::string& aKey, const std::string& aValue)
+        {
+            Threads::Coro::Waiter sWaiter;
+            bool                  sResult = false;
+            m_Redis.set(aKey, aValue, m_Config.ttl, [&](auto&& aFuture) {
+                sResult = aFuture.get();
+                sWaiter.notify();
+            });
+            co_await sWaiter.wait();
+            co_return sResult;
+        }
+    };
+
 } // namespace Cache::Redis

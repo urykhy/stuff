@@ -16,6 +16,10 @@
 #include <time/Meter.hpp>
 #include <unsorted/Random.hpp>
 
+// redis + asio
+#include <boost/asio/use_future.hpp>
+using namespace std::chrono_literals;
+
 BOOST_AUTO_TEST_SUITE(Cache)
 BOOST_AUTO_TEST_CASE(lru)
 {
@@ -157,5 +161,22 @@ BOOST_AUTO_TEST_CASE(basic)
     sRedis.set("basic", "value");
     auto sResult = sRedis.get("basic");
     BOOST_CHECK_EQUAL(*sResult, "value");
+}
+BOOST_AUTO_TEST_CASE(coro)
+{
+    boost::asio::io_service sAsio;
+    Cache::Redis::Config    sConfig;
+    Cache::Redis::Coro      sRedis(sConfig);
+
+    auto sFuture = boost::asio::co_spawn(
+        sAsio,
+        [&]() mutable -> boost::asio::awaitable<void> {
+            co_await sRedis.Set("basic", "value1");
+            auto sResult = co_await sRedis.Get("basic");
+            BOOST_CHECK_EQUAL(*sResult, "value1");
+        },
+        boost::asio::use_future);
+    sAsio.run_for(500ms);
+    sFuture.get();
 }
 BOOST_AUTO_TEST_SUITE_END()

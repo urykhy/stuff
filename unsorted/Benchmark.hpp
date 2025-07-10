@@ -117,4 +117,109 @@ namespace Benchmark {
         }
     };
 
+    struct GetSetConfig
+    {
+        unsigned COUNT         = 20;   // num of coroutines
+        unsigned MAX_READ_RPS  = 1000; // rps per coro
+        unsigned MAX_WRITE_RPS = 1000; // rps per coro
+    };
+
+    template <class I, class R, class W, class F>
+    inline void GetSet(benchmark::State& state, const GetSetConfig& aConfig, I aInit, R aReadOp, W aWriteOp, F aFini)
+    {
+        using namespace std::chrono_literals;
+
+        boost::asio::io_service sAsio;
+        std::atomic_bool        sExit{false};
+        unsigned                sReadCount = 0;
+        unsigned                sReadError = 0;
+        Prometheus::Histogramm  sReadLatency;
+
+        // INIT
+        boost::asio::co_spawn(
+            sAsio,
+            [&]() -> boost::asio::awaitable<void> { co_await aInit(); },
+            boost::asio::detached);
+        sAsio.run_one();
+
+        for (unsigned i = 0; i < aConfig.COUNT; i++) {
+            boost::asio::co_spawn(
+                sAsio,
+                [&]() -> boost::asio::awaitable<void> {
+                    Benchmark::RateLimit sLimit(aConfig.MAX_READ_RPS);
+                    while (!sExit) {
+                        try {
+                            co_await sLimit([&]() -> boost::asio::awaitable<void> {
+                                Time::Meter sMeter;
+                                co_await aReadOp();
+                                sReadLatency.tick(sMeter.get().to_ms());
+                                sReadCount++;
+                            });
+                        } catch (...) {
+                            sReadError++;
+                        };
+                    }
+                },
+                boost::asio::detached);
+        }
+
+        unsigned               sWriteCount = 0;
+        unsigned               sWriteError = 0;
+        Prometheus::Histogramm sWriteLatency;
+        for (unsigned i = 0; i < aConfig.COUNT; i++) {
+            boost::asio::co_spawn(
+                sAsio,
+                [&]() -> boost::asio::awaitable<void> {
+                    Benchmark::RateLimit sLimit(aConfig.MAX_WRITE_RPS);
+                    while (!sExit) {
+                        try {
+                            co_await sLimit([&]() -> boost::asio::awaitable<void> {
+                                Time::Meter sMeter;
+                                co_await aWriteOp();
+                                sWriteLatency.tick(sMeter.get().to_ms());
+                                sWriteCount++;
+                            });
+                        } catch (...) {
+                            sWriteError++;
+                        };
+                    }
+                },
+                boost::asio::detached);
+        }
+
+        boost::asio::co_spawn(
+            sAsio,
+            [&]() -> boost::asio::awaitable<void> {
+                using namespace std::chrono_literals;
+                boost::asio::steady_timer sTimer(sAsio);
+                for (auto _ : state) {
+                    sTimer.expires_from_now(1ms);
+                    co_await sTimer.async_wait(boost::asio::use_awaitable);
+                }
+                sExit = true;
+                co_await aFini();
+            },
+            boost::asio::detached);
+
+        Time::Meter sMeter;
+        sAsio.run();
+        const double sELA = sMeter.get().to_double();
+
+        constexpr std::array<double, 3> sProb{0.5, 0.99, 1.0};
+        {
+            auto sResult                  = sReadLatency.quantile(sProb);
+            state.counters["r:lat(0.50)"] = sResult[0];
+            state.counters["r:lat(0.99)"] = sResult[1];
+            state.counters["r:lat(1.00)"] = sResult[2];
+            state.counters["r:rps"]       = sReadCount / sELA;
+            state.counters["r:err"]       = sReadError / sELA;
+            sResult                       = sWriteLatency.quantile(sProb);
+            state.counters["w:lat(0.50)"] = sResult[0];
+            state.counters["w:lat(0.99)"] = sResult[1];
+            state.counters["w:lat(1.00)"] = sResult[2];
+            state.counters["w:rps"]       = sWriteCount / sELA;
+            state.counters["w:err"]       = sWriteError / sELA;
+        }
+    }
+
 } // namespace Benchmark
