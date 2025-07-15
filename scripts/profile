@@ -919,7 +919,7 @@ function run-qemu
 
 function show-biorithms
 {
-    clickhouse-local -mn -q "CREATE FUNCTION bio AS (age, period) -> round(sin(2*pi()*age/period)*100); \
+    clickhouse-local -mn -q "CREATE OR REPLACE FUNCTION bio AS (age, period) -> round(sin(2*pi()*age/period)*100); \
                     WITH toDate('$BIRTH_DAY') AS b, age('d', b, today())+0.5 AS age \
                     SELECT number, \
                            bio(age+number,23.688) AS physical,  \
