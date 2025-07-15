@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package play;
+
+service PlayService {
+    rpc Ping(PingRequest) returns (PingResponse) {}
+}
+
+message PingRequest {
+    int32 value = 1;
+}
+
+message PingResponse {
+    int32 value = 1;
+}
