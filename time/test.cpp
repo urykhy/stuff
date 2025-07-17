@@ -35,6 +35,14 @@ BOOST_AUTO_TEST_CASE(simple)
     BOOST_CHECK_EQUAL(t.format(t.parse("1970-01-01 01:02:03"), Time::DATETIME), "1970-01-01 01:02:03");
     BOOST_CHECK_EQUAL(t.parse("Sun, 06 Nov 1994 08:49:37 GMT"), 784100977);
 }
+BOOST_AUTO_TEST_CASE(xsimple)
+{
+    Time::Zone t(cctz::utc_time_zone());
+    BOOST_CHECK_EQUAL(t.parse("1900-01-01 01:02:03"), -2208985077);
+    BOOST_CHECK_EQUAL(t.parse("2200-01-01 01:02:03"), 7258122123);
+    BOOST_CHECK_EQUAL(t.format(-2208985077, Time::ISO), "19000101010203");
+    BOOST_CHECK_EQUAL(t.format(7258122123, Time::ISO), "22000101010203");
+}
 BOOST_AUTO_TEST_CASE(simple64)
 {
     Time::Zone t(Time::load("Europe/Moscow"));
@@ -65,10 +73,8 @@ BOOST_AUTO_TEST_CASE(deadline)
     Time::Meter    sMeter;
     Time::Deadline sTimer(0.5);
     while (!sTimer.expired()) {
-        const struct timespec sleep_time
-        {
-            0, 1 * 1000 * 1000
-        };
+        const struct timespec sleep_time{
+            0, 1 * 1000 * 1000};
         nanosleep(&sleep_time, nullptr);
     }
     BOOST_CHECK_CLOSE(sMeter.get().to_double(), 0.5, 1);
