@@ -1,17 +1,15 @@
 #pragma once
 
-#include <grpc/grpc.h>
 #include <grpcpp/client_context.h>
 #include <grpcpp/completion_queue.h>
 #include <grpcpp/create_channel.h>
+#include <grpcpp/security/credentials.h>
+#include <grpcpp/security/server_credentials.h>
 #include <grpcpp/server_builder.h>
 
 #include "Play.grpc.pb.h"
 
-#include <grpcpp/security/credentials.h>
-#include <grpcpp/security/server_credentials.h>
 #include <threads/Asio.hpp>
-#include <unsorted/Raii.hpp>
 
 namespace PlayGRPC {
 

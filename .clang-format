@@ -22,11 +22,13 @@
   IncludeCategories:
   [
     { Regex: '<boost\/test\/unit_test.hpp>', Priority: 1 },
+    { Regex: '<grpc\/.*>', Priority: 11 },
+    { Regex: '<grpcpp\/.*>', Priority: 11 },
+    { Regex: '<boost\/.*>', Priority: 11 },
+    { Regex: '<thrift\/.*>', Priority: 11 },
     { Regex: '^<[a-z_]+\/[a-z_]+\.h>', Priority: 5 },
     { Regex: '^<[a-z_0-9]+\.h>', Priority: 5 },
     { Regex: "^<[a-z_]+>", Priority: 10 },
-    { Regex: '<boost\/.*>', Priority: 11 },
-    { Regex: '<thrift\/.*>', Priority: 11 },
     { Regex: '^<[A-Za-z_-0-9]+\/[A-Za-z_-0-9]+\.hpp>', Priority: 20 },
     { Regex: '^"', Priority: 30 },
   ],
