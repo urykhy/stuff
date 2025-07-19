@@ -998,6 +998,17 @@ function show-cgroup-version
     fi
 }
 
+function show-deps
+{
+    if [ $# -lt 1 ]; then
+        echo "usage: show-deps <binary> ..."
+        return
+    fi
+    dpkg -S `(for a in "$*"; do ldd $a; done) | grep '=> /' | awk '{print $3}' | while read x; do echo /usr$x $x; done` 2>/dev/null \
+          | awk -F: '{print $1}' | sort -u
+
+}
+
 function mass-download
 {
     if [ $# -ne 1 ]; then
