@@ -1,4 +1,5 @@
 project('kafka', 'cpp', version : '0.1')
+add_project_link_arguments('-Wl,--no-as-needed', language: 'cpp')
 
 includes = include_directories('..')
 boost     = dependency('boost', modules : ['unit_test_framework', 'system', 'coroutine'])

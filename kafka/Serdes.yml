@@ -1,0 +1,52 @@
+version: '3'
+
+vars:
+  avrocpp: https://dlcdn.apache.org/avro/stable/cpp/avro-cpp-1.12.0.tar.gz
+  serdes: https://github.com/confluentinc/libserdes/archive/refs/tags/v7.3.13-cp1-rc250708081645.tar.gz
+
+tasks:
+  deps:
+    desc: install deps
+    cmds:
+      - sudo apt install libjansson-dev libavro-dev
+  avrocpp:
+    desc: install avrocpp
+    dir: /tmp
+    cmds:
+      - |
+        curl -O -C - {{$.avrocpp}}
+        tar -zxf avro-cpp-1.12.0.tar.gz
+      - |
+        cd avro-cpp-1.12.0
+        sed -i '85,92d' CMakeLists.txt
+        sed -i 's/FetchContent_MakeAvailable(fmt)/find_package(fmt)/' CMakeLists.txt
+        sed -i '189,219d' CMakeLists.txt
+      - |
+        cd avro-cpp-1.12.0
+        rm -rf build || true
+        mkdir build
+        cd build
+        CXXFLAGS="$CXXFLAGS -Wno-float-equal" cmake ..
+        cmake --build . -j 6
+        cmake --install . --strip --prefix /tmp/install-avrocpp
+      - |
+        D=$(dpkg -S `(ldd install-avrocpp/lib/libavrocpp.so; ldd install-avrocpp/bin/avrogencpp) | grep '=> /' | awk '{print $3}' | while read x; do echo /usr$x $x; done` 2>/dev/null | awk -F: '{print $1}' | sort -u | while read x; do echo --depends $x; done)
+        fpm -f -C install-avrocpp -s dir -t deb --version 1.12.0 --name libavrocpp --description "Avro serialization system implemented in C++" $D \
+            bin=/usr/ include=/usr/ $(for x in `find install-avrocpp/lib/ -type f,l -name "lib*"`; do echo "${x#install-avrocpp/}=/usr/lib/x86_64-linux-gnu${x#install-avrocpp/lib} "; done)
+  serdes:
+    desc: install serdes
+    dir: /tmp
+    cmds:
+      - |
+        curl -O -C - -L {{$.serdes}}
+        tar -zxf v7.3.13-cp1-rc250708081645.tar.gz
+      - |
+        cd libserdes-7.3.13-cp1-rc250708081645
+        ./configure --prefix=/tmp/install-serdes --no-download --enable-strip
+        make -j6 CXXFLAGS="-std=c++17 -I../src"
+        make install
+      - |
+        rm -rf install-serdes/lib/pkgconfig install-serdes/lib/*.a
+        D=$(dpkg -S `(ldd install-serdes/lib/libserdes++.so; ldd install-serdes/lib/libserdes.so ) | grep '=> /' | awk '{print $3}' | while read x; do echo /usr$x $x; done` 2>/dev/null | awk -F: '{print $1}' | sort -u | while read x; do echo --depends $x; done)
+        fpm -f -C install-serdes -s dir -t deb --version 7.3.13-cp1 --name libserdes --description "Confluent Schema-Registry C/C++ client library" $D \
+            include=/usr/ $(for x in `find install-serdes/lib/ -type f,l -name "lib*.so*"`; do echo "${x#install-serdes/}=/usr/lib/x86_64-linux-gnu${x#install-serdes/lib} "; done)
