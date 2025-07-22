@@ -11,6 +11,11 @@
 
 #include <threads/Asio.hpp>
 
+#define AGRPC_BOOST_ASIO
+#include <agrpc/grpc_context.hpp>
+#include <agrpc/register_awaitable_rpc_handler.hpp>
+#include <agrpc/server_rpc.hpp>
+
 namespace PlayGRPC {
 
     class Server : public play::PlayService::Service
@@ -140,6 +145,57 @@ namespace PlayGRPC {
         }
 
         virtual ~AsyncServer() { Stop(); }
+    };
+
+    // https://github.com/Tradias/asio-grpc
+    class TradiasServer
+    {
+        play::PlayService::AsyncService m_Service;
+        std::unique_ptr<grpc::Server>   m_Server;
+        grpc::ServerBuilder             m_Builder;
+        agrpc::GrpcContext              m_Context;
+        std::jthread                    m_Thread;
+
+        boost::asio::awaitable<void> DoPing(play::PingRequest& aRequest, play::PingResponse& aResponse)
+        {
+            aResponse.set_value(aRequest.value());
+            co_return;
+        }
+
+    public:
+        TradiasServer()
+        : m_Context(m_Builder.AddCompletionQueue())
+        {
+        }
+
+        void Start(const std::string& aAddr)
+        {
+            m_Builder.AddListeningPort(aAddr, grpc::InsecureServerCredentials());
+            m_Builder.RegisterService(&m_Service);
+            m_Server = m_Builder.BuildAndStart();
+
+            using RPC = agrpc::ServerRPC<&play::PlayService::AsyncService::RequestPing>;
+            agrpc::register_awaitable_rpc_handler<RPC>(
+                m_Context,
+                m_Service,
+                [this](RPC& aRPC, play::PingRequest& aRequest) -> boost::asio::awaitable<void> {
+                    play::PingResponse sResponse;
+                    co_await DoPing(aRequest, sResponse);
+                    co_await aRPC.finish(sResponse, grpc::Status::OK, boost::asio::use_awaitable);
+                },
+                boost::asio::detached);
+
+            m_Thread = std::jthread([this] {
+                m_Context.run();
+            });
+        }
+
+        void Stop()
+        {
+            m_Server->Shutdown();
+        }
+
+        virtual ~TradiasServer() { Stop(); }
     };
 
     class Client

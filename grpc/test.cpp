@@ -71,3 +71,25 @@ BOOST_AUTO_TEST_CASE(ghz)
     GhzBench(sAddr);
 }
 BOOST_AUTO_TEST_SUITE_END()
+
+BOOST_AUTO_TEST_SUITE(Tradias)
+BOOST_AUTO_TEST_CASE(basic)
+{
+    const std::string       sAddr = "127.0.0.1:56780";
+    PlayGRPC::TradiasServer sServer;
+    PlayGRPC::Client        sClient(sAddr);
+
+    sServer.Start(sAddr);
+    std::this_thread::sleep_for(10ms);
+
+    BOOST_CHECK_EQUAL(123, sClient.Ping(123));
+}
+BOOST_AUTO_TEST_CASE(ghz)
+{
+    const std::string       sAddr = "127.0.0.1:56780";
+    PlayGRPC::TradiasServer sServer;
+    sServer.Start(sAddr);
+    std::this_thread::sleep_for(10ms);
+    GhzBench(sAddr);
+}
+BOOST_AUTO_TEST_SUITE_END()
