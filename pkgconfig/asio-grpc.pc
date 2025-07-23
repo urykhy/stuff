@@ -1,4 +1,3 @@
 Name: asio-grpc
 Description: Asynchronous gRPC with Asio executor
 Version: 3.5.0
-Cflags: -I/u03/git/_c/asio-grpc/src

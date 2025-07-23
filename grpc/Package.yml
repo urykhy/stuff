@@ -1,0 +1,15 @@
+version: '3'
+
+vars:
+  agrpc: https://github.com/Tradias/asio-grpc/archive/refs/tags/v3.5.0.tar.gz
+
+tasks:
+  agrpc:
+    desc: package Tradias/asio-grpc
+    dir: /tmp
+    cmds:
+      - |
+        curl -O -L {{$.agrpc}}
+        tar -zxf v3.5.0.tar.gz
+      - |
+        fpm -f -C asio-grpc-3.5.0 -s dir -t deb --version 3.5.0 --name tradias-asio-grpc --description "Asynchronous gRPC with Asio executor" src/agrpc=/usr/include
