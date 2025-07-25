@@ -257,8 +257,8 @@ BOOST_AUTO_TEST_CASE(walk)
     std::pmr::monotonic_buffer_resource sPool{std::data(sBuffer), std::size(sBuffer)};
     pmr_tutorial::rwalk                 sCustom(&sPool);
 
-    sCustom.m1         = {};
-    sCustom.m1->m2     = {};
+    sCustom.m1         = pmr_tutorial::rwalk::xpart1(&sPool);
+    sCustom.m1->m2     = pmr_tutorial::rwalk::xpart2(&sPool);
     sCustom.m1->m2->id = 10;
     int32_t sVal       = 0;
 

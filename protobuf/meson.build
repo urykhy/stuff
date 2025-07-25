@@ -7,7 +7,6 @@ benchmark = dependency('benchmark', required : true)
 boost     = dependency('boost', modules : ['unit_test_framework', 'system'])
 threads   = dependency('threads')
 json      = dependency('jsoncpp')
-exprtk    = dependency('exprtk')
 gperf     = find_program('gperf')
 import('python').find_installation('python3', modules : ['lark','jinja2'])
 
@@ -28,26 +27,26 @@ foreach name : ['tutorial.proto']
 endforeach
 
 cpp_args = ['-DWITH_JSON']
+exprtk_dep = dependency('', required : false)
 if get_option('reflection')
-    cpp_args += '-DWITH_REFLECTION'
+    exprtk     = dependency('exprtk', required : true)
+    cpp_args  += '-DWITH_REFLECTION'
+    exprtk_lib = static_library('exprtk', 'ExprTK.cpp', dependencies : [exprtk], cpp_args : cpp_args, include_directories : includes)
+    exprtk_dep = declare_dependency(link_with : exprtk_lib, dependencies: [exprtk], include_directories: exprtk_lib.private_dir_include())
 endif
 
-exprtk_lib = static_library('exprtk', 'ExprTK.cpp', dependencies : [exprtk], cpp_args : cpp_args, include_directories : includes)
-
-a  = executable('a.out',  'test.cpp',       api_src,
-    dependencies : [tutorial_dep, protobuf, boost, json],
+a  = executable('a.out',  'test.cpp', api_src,
+    dependencies : [tutorial_dep, protobuf, boost, json, exprtk_dep],
     cpp_args : cpp_args,
-    link_with: [exprtk_lib],
     include_directories : includes)
 
-b  = executable('b.out',  'benchmark.cpp',  api_src,
-    dependencies : [tutorial_dep, protobuf, boost, json, benchmark],
+b  = executable('b.out',  'benchmark.cpp', api_src,
+    dependencies : [tutorial_dep, protobuf, boost, json, exprtk_dep, benchmark],
     include_directories : includes)
 
 b2 = executable('b2.out', 'benchmark2.cpp', api_src,
-    dependencies : [tutorial_dep, protobuf, boost, json, benchmark],
+    dependencies : [tutorial_dep, protobuf, boost, json, exprtk_dep, benchmark],
     cpp_args : cpp_args,
-    link_with: [exprtk_lib],
     include_directories : includes)
 
 test('basic', a, args : ['-l', 'all'])
@@ -61,7 +60,7 @@ conf.set_quoted('PACKAGE', meson.project_name())
 conf.set_quoted('VERSION', meson.project_version())
 conf.set_quoted('LICENSE', meson.project_license())
 conf.set_quoted('TAG', run_command('git', 'rev-parse', '--short', 'HEAD', check: true).stdout().strip())
-conf.set_quoted('SOURCE_ROOT', meson.source_root())
+conf.set_quoted('SOURCE_ROOT', meson.project_source_root())
 binaries=[]
 foreach x : [a, b, b2]
     n = import('fs').name(x.full_path())
