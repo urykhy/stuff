@@ -17,3 +17,9 @@ play_dep  = declare_dependency(link_with : play_lib, include_directories: play_l
 
 a = executable('a.out', 'test.cpp', dependencies : [boost, play_dep, protobuf, grpc, agrpc], include_directories : includes)
 test('basic', a, args : ['-l', 'all'])
+
+# meson test --benchmark -v
+benchmark = dependency('benchmark', required : true)
+b  = executable('b.out',  'benchmark.cpp', dependencies : [boost, play_dep, protobuf, grpc, agrpc, benchmark], include_directories : includes)
+benchmark('perf', b, timeout : 90,
+          args : ['--benchmark_min_time=10','--benchmark_color=true', '--benchmark_counters_tabular=true'])
