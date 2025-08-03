@@ -24,10 +24,12 @@ case "$1" in
         ip l set $IFB down
         ip l del $IFB
     ;;
+
     restart)
         $0 stop
         $0 start
     ;;
+
     status)
         tc -s qdisc show dev $IFB
         echo
@@ -37,4 +39,6 @@ case "$1" in
         echo "Usage: $0 {start|stop|restart|status}"
         exit 1
     ;;
+
 esac
+

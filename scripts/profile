@@ -833,6 +833,13 @@ function show-dnssec
     fi
 }
 
+function show-dns-resolvers
+{
+    local D=()
+    readarray -t D < <(cat /etc/supervisor/conf.d/dnsproxy.conf | sed -ne 's/-u \([^ ]*\)/X:\1/gp' | grep -o X:.* | sed -e 's/X:/@/g' | tr -d \")
+    doggo -J linux.org.ru ${D} | jq -cr '.responses[].answers[] | [.nameserver, .rtt] | @tsv' | column -t
+}
+
 function show-etcd
 {
     etcdctl get "" --prefix
