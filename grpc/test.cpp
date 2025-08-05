@@ -22,6 +22,14 @@ void GhzBench(const std::string& aAddr)
     BOOST_TEST_MESSAGE(sChild.out);
 }
 
+void K6Bench()
+{
+    // port hardcoded in js script
+    auto sChild = Util::Perform("unbuffer", "k6", "run", "../k6.js");
+    BOOST_CHECK_EQUAL(0, sChild.code);
+    BOOST_TEST_MESSAGE(sChild.out);
+}
+
 BOOST_AUTO_TEST_SUITE(GRPC)
 BOOST_AUTO_TEST_CASE(basic)
 {
@@ -109,5 +117,13 @@ BOOST_AUTO_TEST_CASE(ghz)
     sServer.Start(sAddr);
     std::this_thread::sleep_for(10ms);
     GhzBench(sAddr);
+}
+BOOST_AUTO_TEST_CASE(k6)
+{
+    const std::string       sAddr = "127.0.0.1:56780";
+    PlayGRPC::TradiasServer sServer;
+    sServer.Start(sAddr);
+    std::this_thread::sleep_for(10ms);
+    K6Bench();
 }
 BOOST_AUTO_TEST_SUITE_END()
