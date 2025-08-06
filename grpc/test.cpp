@@ -15,6 +15,7 @@ using namespace std::chrono_literals;
 
 void GhzBench(const std::string& aAddr)
 {
+    putenv("GOMAXPROCS=1");
     auto sChild = Util::Perform("unbuffer", "ghz", "--insecure", "--async", "--proto", "../Play.proto", "--call", "play.PlayService/Ping",
                                 "-c", "10", "-n", "60000", "--rps", "30000", "-d",
                                 R"({"value":"{{.RequestNumber}}"})", aAddr);
@@ -25,7 +26,7 @@ void GhzBench(const std::string& aAddr)
 void K6Bench()
 {
     // port hardcoded in js script
-    auto sChild = Util::Perform("unbuffer", "k6", "run", "../k6.js");
+    auto sChild = Util::Perform("unbuffer", "taskset", "-c", "1", "k6", "run", "../k6.js");
     BOOST_CHECK_EQUAL(0, sChild.code);
     BOOST_TEST_MESSAGE(sChild.out);
 }
