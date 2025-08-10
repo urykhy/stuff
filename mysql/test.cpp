@@ -18,9 +18,12 @@
 #include "TaskQueue.hpp"
 #include "Updateable.hpp"
 #include "Upload.hpp"
+#include "Workflow.hpp"
 
 #include <container/Pool.hpp>
+#include <format/Float.hpp>
 #include <format/List.hpp>
+#include <prometheus/Histogramm.hpp>
 #include <threads/Group.hpp>
 #include <time/Meter.hpp>
 
@@ -420,6 +423,168 @@ BOOST_AUTO_TEST_CASE(massive, *boost::unit_test::disabled())
         BOOST_TEST_MESSAGE("processed in " << sMeter.get().to_double() << " s; rps: " << TASKS / sMeter.get().to_double());
         BOOST_CHECK_EQUAL(sHandled.load(), TASKS);
     }
+}
+BOOST_AUTO_TEST_SUITE_END()
+
+BOOST_AUTO_TEST_SUITE(Workflow)
+BOOST_AUTO_TEST_CASE(strand)
+{
+    MySQL::Workflow::Config  sQueueCfg;
+    MySQL::Config            sCfg = MySQL::Config{.database = "test"};
+    MySQL::Connection        sConnection(sCfg);
+    MySQL::Workflow::Manager sQueue(sQueueCfg, &sConnection);
+
+    // space: bill/backup, strand: 123
+    sConnection.Query("TRUNCATE TABLE workflow");
+    sConnection.Query("INSERT INTO workflow(space, strand, task, priority) VALUES ('bill/backup', '123', 'flow/2', 2), ('bill/backup', '123', 'flow/4', 4)");
+
+    // pick one flow (cause strand prevent 2nd from run)
+    auto sFlow = sQueue.get("bill/backup", "flow", "flow-worker");
+    BOOST_CHECK(sFlow);
+    BOOST_CHECK_EQUAL(sFlow->task, "flow/4");
+    auto sFirstTaskId = sFlow->id;
+
+    // can't run 2nd flow, since strand already taken
+    sFlow = sQueue.get("bill/backup", "flow", "flow-worker");
+    BOOST_CHECK(!sFlow);
+
+    // mark flow as done, and pick again
+    sQueue.done(sFirstTaskId, true /* success */);
+    sFlow = sQueue.get("bill/backup", "flow", "flow-worker");
+    BOOST_CHECK(sFlow);
+    BOOST_CHECK_EQUAL(sFlow->task, "flow/2");
+}
+BOOST_AUTO_TEST_CASE(tasks)
+{
+    MySQL::Workflow::Config  sQueueCfg;
+    MySQL::Config            sCfg = MySQL::Config{.database = "test"};
+    MySQL::Connection        sConnection(sCfg);
+    MySQL::Workflow::Manager sQueue(sQueueCfg, &sConnection);
+
+    // space: bill/backup, strand: not used.
+    // use prio to force tasks order
+    sConnection.Query("TRUNCATE TABLE workflow");
+    sConnection.Query("INSERT INTO workflow(space, task) VALUES ('bill/backup/plan', 'task/flow-123/1')");
+
+    // worker for workflow
+    auto sTask = sQueue.get("bill/backup", "task", "task-worker1");
+    BOOST_CHECK_EQUAL(sTask->task, "task/flow-123/1");
+    sQueue.done(sTask->id, true /* success */);
+
+    sConnection.Query("INSERT INTO workflow(space, task) VALUES ('bill/backup/create', 'task/flow-123/2')");
+    sTask = sQueue.get("bill/backup", "task", "task-worker2");
+    BOOST_CHECK_EQUAL(sTask->task, "task/flow-123/2");
+    sQueue.done(sTask->id, true /* success */);
+
+    sConnection.Query("INSERT INTO workflow(space, task) VALUES ('bill/backup/notify', 'task/flow-123/3')");
+    sTask = sQueue.get("bill/backup", "task", "task-worker3");
+    BOOST_CHECK_EQUAL(sTask->task, "task/flow-123/3");
+    sQueue.done(sTask->id, true /* success */);
+
+    auto sStatus = sQueue.status("bill/backup", "task/flow-123");
+    for (auto& x : sStatus) {
+        BOOST_TEST_MESSAGE("task: " << x.task << " status: " << x.status);
+    }
+}
+BOOST_AUTO_TEST_CASE(massive, *boost::unit_test::disabled())
+{
+    MySQL::Workflow::Config sQueueCfg;
+    MySQL::Config           sCfg    = MySQL::Config{.database = "test"};
+    const int               FLOWS   = 100;
+    const int               THREADS = 15;
+    const int               TASKS   = 10;
+    const double            DELAY   = 0.01;
+
+    // fill flows
+    {
+        MySQL::Connection sConnection(sCfg);
+        sConnection.Query("TRUNCATE TABLE workflow");
+        Time::Meter sMeter;
+        sConnection.Query("BEGIN");
+        for (int i = 0; i < FLOWS; i++) {
+            sConnection.Query("INSERT INTO workflow(space, task) VALUES ('massive/bench', 'flow/" + std::to_string(i) + "')");
+        }
+        sConnection.Query("COMMIT");
+        BOOST_TEST_MESSAGE("generated in " << Format::for_human(sMeter.get().to_double()) << "s");
+    }
+
+    std::atomic<bool> sExit{false};
+    std::atomic<int>  sHandled{0};
+    Time::Meter       sMeter;
+    Threads::Group    sGroup;
+
+    // start flow workers
+    std::atomic<unsigned> sFlowWaitForDone;
+    sGroup.start(
+        [&]() {
+            MySQL::Connection        sConnection(sCfg);
+            MySQL::Workflow::Manager sQueue(sQueueCfg, &sConnection);
+            while (!sExit) {
+                auto sFlow = sQueue.get("massive/bench", "flow", "flow-worker");
+                if (!sFlow) {
+                    Threads::sleep(DELAY);
+                    continue;
+                }
+                for (int i = 0; i < TASKS; i++) {
+                    sConnection.Query(fmt::format("INSERT INTO workflow(space, task) VALUES ('massive/bench/step-{1}', 'task/{0}/{1}')", sFlow->task, i));
+                }
+                // wait until all tasks are done
+                while (!sExit) {
+                    const auto sStatus = sQueue.status("massive/bench", "task/" + sFlow->task);
+                    size_t     sDone   = 0;
+                    for (auto& x : sStatus) {
+                        if (x.status == "done")
+                            sDone++;
+                    }
+                    if (sDone == TASKS)
+                        break;
+                    Threads::sleep(DELAY);
+                    sFlowWaitForDone++;
+                }
+                sQueue.done(sFlow->id, true);
+                sHandled++;
+            }
+        },
+        THREADS);
+
+    // start task workers
+    Prometheus::Histogramm sWorkerLatency;
+    std::atomic<unsigned>  sWorkerSleep;
+    sGroup.start(
+        [&]() {
+            MySQL::Connection        sConnection(sCfg);
+            MySQL::Workflow::Manager sQueue(sQueueCfg, &sConnection);
+            while (!sExit) {
+                Time::Meter sMeter;
+                auto        sTask = sQueue.get("massive/bench", "task", "task-worker");
+                if (!sTask) {
+                    Threads::sleep(DELAY);
+                    sWorkerSleep++;
+                    continue;
+                }
+                sWorkerLatency.tick(sMeter.get().to_ms());
+                sQueue.done(sTask->id, true);
+            }
+        },
+        THREADS);
+
+    // wait
+    while (sHandled != FLOWS) {
+        Threads::sleep(DELAY);
+    }
+    sExit = true;
+    sGroup.wait();
+
+    // report
+    BOOST_TEST_MESSAGE("processed in " << Format::for_human(sMeter.get().to_double()) << "s; task rps: " << Format::for_human(FLOWS * TASKS / sMeter.get().to_double()));
+    BOOST_TEST_MESSAGE("flow avg wait time per flow: " << Format::for_human(sFlowWaitForDone * DELAY / FLOWS) << "s");
+    BOOST_TEST_MESSAGE("worker avg idle time per task: " << Format::for_human(sWorkerSleep * DELAY / (FLOWS * TASKS)) << "s");
+    BOOST_TEST_MESSAGE("max possible task rps: " << Format::for_human(FLOWS * TASKS / (sMeter.get().to_double() - sWorkerSleep * DELAY / THREADS)));
+    BOOST_CHECK_EQUAL(sHandled.load(), FLOWS);
+
+    constexpr std::array<double, 4> sProb{0.5, 0.99, 1.0};
+    const auto                      sResult = sWorkerLatency.quantile(sProb);
+    BOOST_TEST_MESSAGE("worker get task latency (ms): q.5: " << sResult[0] << "; q.99: " << sResult[1] << ", max: " << sResult[2]);
 }
 BOOST_AUTO_TEST_SUITE_END()
 
