@@ -542,18 +542,20 @@ function show-battery
 function show-temp
 {
     sudo hddtemp /dev/sd?
+    echo -n "/dev/nvme0n1: Samsung SSD 980 1TB: "
+    sudo nvme smart-log /dev/nvme0n1 | grep "Temperature Sensor 2" | awk '{print $5$6}'
     echo
 
     echo -n "CPU Temp "
-    T=`cat /sys/devices/platform/nct6775.656/hwmon/hwmon1/temp7_input | tr -d "\n"`
+    T=`cat /sys/devices/platform/nct6775.656/hwmon/hwmon2/temp7_input | tr -d "\n"`
     echo -n "$(($T / 1000)) °C  Fan "
-    cat /sys/devices/platform/nct6775.656/hwmon/hwmon1/fan2_input | tr -d "\n"
+    cat /sys/devices/platform/nct6775.656/hwmon/hwmon2/fan2_input | tr -d "\n"
     echo " RPM"
 
     echo -n "CHA Temp "
-    T=`cat /sys/devices/platform/nct6775.656/hwmon/hwmon1/temp2_input | tr -d "\n"`
+    T=`cat /sys/devices/platform/nct6775.656/hwmon/hwmon2/temp2_input | tr -d "\n"`
     echo -n "$(($T / 1000)) °C  Fan "
-    cat /sys/devices/platform/nct6775.656/hwmon/hwmon1/fan1_input | tr -d "\n"
+    cat /sys/devices/platform/nct6775.656/hwmon/hwmon2/fan1_input | tr -d "\n"
     echo " RPM"
 
     echo -n "GPU Temp "
