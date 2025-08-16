@@ -178,6 +178,19 @@ BOOST_AUTO_TEST_CASE(coro)
         BOOST_CHECK(sCommited);
     }
 }
+
+struct SerdesTest
+{
+    std::string name;
+    int         type;
+
+    void avro_encode(avro::GenericRecord& aRecord) const
+    {
+        aRecord.field("name") = name;
+        aRecord.field("type") = type;
+    }
+};
+
 BOOST_AUTO_TEST_CASE(serdes)
 {
     const std::string sDef  = R"(
@@ -203,6 +216,18 @@ BOOST_AUTO_TEST_CASE(serdes)
     std::string       sActual = sRegistry.Decode(sAvroView);
     BOOST_TEST_MESSAGE("actual message: " << sActual);
     BOOST_CHECK_EQUAL(sJson, sActual);
+
+    // w/o json
+    {
+        SerdesTest       sTest{.name = "bar", .type = 321};
+        auto             sAvro = sRegistry.Encode(sTest, sCurrent.get());
+        std::string_view sAvroView(&sAvro[0], sAvro.size());
+        std::string      sActual = sRegistry.Decode(sAvroView);
+        BOOST_TEST_MESSAGE("decoded message: " << sActual);
+
+        const std::string sJson = R"({"name":"bar","type":321})";
+        BOOST_CHECK_EQUAL(sJson, sActual);
+    }
 }
 BOOST_AUTO_TEST_CASE(transform)
 {

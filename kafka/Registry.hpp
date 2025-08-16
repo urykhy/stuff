@@ -31,6 +31,16 @@ namespace Kafka {
             return sTmp;
         }
 
+        template <class T>
+        requires std::is_member_function_pointer_v<decltype(&T::avro_encode)>
+        static std::unique_ptr<avro::GenericDatum> ToAvro(const T& aData, Serdes::Schema* aSchema)
+        {
+            auto                                sSchema = aSchema->object();
+            std::unique_ptr<avro::GenericDatum> sTmp(new avro::GenericDatum(*sSchema));
+            aData.avro_encode(sTmp->value<avro::GenericRecord>());
+            return sTmp;
+        }
+
         static std::string FromAvro(avro::GenericDatum* aTmp, Serdes::Schema* aSchema)
         {
             auto               sSchema  = aSchema->object();
@@ -98,6 +108,19 @@ namespace Kafka {
         std::vector<char> Encode(std::string_view aJson, Serdes::Schema* aSchema)
         {
             auto              sTmp = ToAvro(aJson, aSchema);
+            std::vector<char> sOut;
+            std::string       sErr;
+            if (m_Serdes->serialize(aSchema, sTmp.get(), sOut, sErr) == -1) {
+                throw std::runtime_error("Serdes: fail to encode: " + sErr);
+            }
+            return sOut;
+        }
+
+        template <class T>
+        requires std::is_member_function_pointer_v<decltype(&T::avro_encode)>
+        std::vector<char> Encode(const T& aData, Serdes::Schema* aSchema)
+        {
+            auto              sTmp = ToAvro(aData, aSchema);
             std::vector<char> sOut;
             std::string       sErr;
             if (m_Serdes->serialize(aSchema, sTmp.get(), sOut, sErr) == -1) {
