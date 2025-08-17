@@ -640,6 +640,11 @@ function show-flatpak
     popd
 }
 
+function show-jails
+{
+    firejail --list
+}
+
 function vg-mem
 {
     local SUPP=""
