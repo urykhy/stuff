@@ -6,11 +6,11 @@ import dis
 import glob
 import logging
 import os
-import pytest
 import shelve
 import subprocess
-
 from xml.etree.ElementTree import fromstring
+
+import pytest
 
 PROJECTS = ["prometheus", "protobuf", "mysql", "cache"]
 LOGGER = logging.getLogger(__name__)
