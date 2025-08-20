@@ -86,14 +86,20 @@ function meson-sanitize()
     CC="ccache clang" CXX="ccache clang++" meson setup build-sanitize -Dcpp_args="${CXXFLAGS} -g -O2 -fno-omit-frame-pointer -fno-sanitize-recover=all -fsanitize-memory-track-origins" -Db_sanitize="$1" -Db_lundef=false
 }
 
-function meson-coverage()
+function meson-coverage
 {
     CC="ccache clang" CXX="ccache clang++" meson setup build-coverage -Dcpp_args="${CXXFLAGS} -g" -Db_coverage=true
     echo
-    echo "build, run tests"
-    echo "after that, use 'ninja coverage' to build reports"
-    echo "and 'python3 -m http.server -d meson-logs/coveragereport/ & sleep 1; chromium 127.0.0.1:8000' to view in browser"
-    echo "use fg and Ctrl+C to stop web server"
+    echo "build, run tests and then call show-coverage"
+}
+
+function show-coverage
+{
+    ninja coverage
+    python3 -m http.server -d meson-logs/coveragereport/ & sleep 1
+    x-www-browser 127.0.0.1:8000
+    sleep 2
+    kill `jobs -p`
 }
 
 function meson-release()
@@ -684,8 +690,36 @@ function flamegraph
 {
     perf record --call-graph lbr --all-user "$@"
     perf script --no-inline | stackcollapse-perf.pl | flamegraph.pl > /tmp/perf.svg
-    echo "spawn chromium to check results..."
-    chromium /tmp/perf.svg
+    echo "spawn browser to check results..."
+    x-www-browser /tmp/perf.svg
+}
+
+function tc-cpu
+{
+    if [ $# -lt 1 ]; then
+        echo "usage: tc-cpu command..."
+        return
+    fi
+    rm -rf /tmp/tc-cpu*
+    LD_PRELOAD="/usr/lib/x86_64-linux-gnu/libtcmalloc_and_profiler.so" CPUPROFILE=/tmp/tc-cpu CPUPROFILE_FREQUENCY=1000 "$@"
+    P=$(ls -1 -S /tmp/tc-cpu* | head -n1)
+    pprof --text $1 $P | head -n 20
+    pprof-symbolize --collapsed $1 $P | flamegraph.pl > /tmp/cpu.svg
+    x-www-browser /tmp/cpu.svg
+}
+
+function tc-heap
+{
+    if [ $# -lt 1 ]; then
+        echo "usage: tc-heap command..."
+        return
+    fi
+    rm -rf /tmp/tc-heap*
+    LD_PRELOAD="/usr/lib/x86_64-linux-gnu/libtcmalloc_and_profiler.so" HEAPPROFILE=/tmp/tc-heap HEAP_PROFILE_TIME_INTERVAL=3 "$@"
+    P=$(ls -1 -S /tmp/tc-heap* | head -n1)
+    pprof --text $1 $P | head -n 20
+    pprof-symbolize --collapsed $1 $P | flamegraph.pl > /tmp/heap.svg
+    x-www-browser /tmp/heap.svg
 }
 
 # flame-grafana protobuf ./b2.out --benchmark_min_time=1
