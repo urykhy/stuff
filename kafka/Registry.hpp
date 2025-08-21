@@ -53,6 +53,15 @@ namespace Kafka {
             return sStream.str();
         }
 
+        template <class T>
+        requires std::is_member_function_pointer_v<decltype(&T::avro_decode)>
+        static T FromAvro(avro::GenericDatum* aTmp, Serdes::Schema*)
+        {
+            T sTmp;
+            sTmp.avro_decode(aTmp->value<avro::GenericRecord>());
+            return sTmp;
+        }
+
     public:
         Registry()
         {
@@ -139,6 +148,20 @@ namespace Kafka {
             }
             std::unique_ptr<avro::GenericDatum> sTmpPtr(sTmp);
             return FromAvro(sTmp, sSchema);
+        }
+
+        template <class T>
+        requires std::is_member_function_pointer_v<decltype(&T::avro_decode)>
+        T Decode(std::string_view aMessage)
+        {
+            avro::GenericDatum* sTmp    = nullptr;
+            Serdes::Schema*     sSchema = nullptr;
+            std::string         sErr;
+            if (m_Serdes->deserialize(&sSchema, &sTmp, aMessage.data(), aMessage.size(), sErr) == -1) {
+                throw std::runtime_error("Serdes: fail to decode: " + sErr);
+            }
+            std::unique_ptr<avro::GenericDatum> sTmpPtr(sTmp);
+            return FromAvro<T>(sTmp, sSchema);
         }
     };
 
