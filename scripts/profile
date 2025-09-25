@@ -1057,6 +1057,13 @@ function show-deps
 
 }
 
+function show-fonts
+{
+    fc-match monospace
+    fc-match sans
+    fc-match serif
+}
+
 function mass-download
 {
     if [ $# -ne 1 ]; then
