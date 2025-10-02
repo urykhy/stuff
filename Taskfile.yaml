@@ -84,7 +84,7 @@ tasks:
   install:pip:
     desc: make packages from pip and install
     cmds:
-      - pip3 install -U --break-system-packages pprintpp==0.4.0
+      - pip3 install -U --break-system-packages pprintpp==0.4.0 pytest-randomly==4.0.1
       - for: { var: pip }
         cmd: fpm --verbose -f --python-bin=python3 -s python -t deb --python-package-name-prefix python3 --python-disable-dependency attrs --python-disable-dependency pprintpp {{.ITEM}}
       - sudo dpkg -i python3-allure-python-commons_2.15.0_all.deb python3-allure-pytest_2.15.0_all.deb python3-pytest-clarity_1.0.1_all.deb
