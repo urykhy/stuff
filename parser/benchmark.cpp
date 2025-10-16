@@ -4,6 +4,7 @@
 #include <fmt/ranges.h>
 #include <rapidjson/document.h>
 #include <simdjson.h>
+#include <yyjson.h>
 
 #include <iostream>
 #include <vector>
@@ -91,6 +92,22 @@ void from_json(const glz::json_t& aJson, Tmp& aTmp)
         aTmp.base = sIt->second.get<std::string>();
     if (auto sIt = sObject.find("index"); sIt != sObject.end())
         aTmp.index = sIt->second.get<double>();
+}
+
+void from_json(yyjson_val* aObject, Tmp& aTmp)
+{
+    yyjson_val*     sKey  = nullptr;
+    yyjson_obj_iter sIter = yyjson_obj_iter_with(aObject);
+    while ((sKey = yyjson_obj_iter_next(&sIter))) {
+        auto             sVal = yyjson_obj_iter_get_val(sKey);
+        std::string_view sKeyV{yyjson_get_str(sKey), yyjson_get_len(sKey)};
+
+        if (sKeyV == "base" and yyjson_is_str(sVal)) {
+            aTmp.base.assign(yyjson_get_str(sVal), yyjson_get_len(sVal));
+        } else if (sKeyV == "index" and yyjson_is_int(sVal)) {
+            aTmp.index = yyjson_get_uint(sVal);
+        }
+    }
 }
 
 namespace fmt {
@@ -207,6 +224,32 @@ static void BM_Rapid(benchmark::State& state)
     }
 }
 BENCHMARK(BM_Rapid);
+
+static void BM_YY(benchmark::State& state)
+{
+    std::vector<Tmp> sTmp;
+    for (auto _ : state) {
+        yyjson_doc* sDoc = yyjson_read(gJsonStr.data(), gJsonStr.size(), 0);
+        if (sDoc == nullptr) {
+            return;
+        }
+        yyjson_val* sRoot = yyjson_doc_get_root(sDoc);
+
+        if (yyjson_is_arr(sRoot)) {
+            for (unsigned i = 0; i < yyjson_arr_size(sRoot); i++) {
+                auto sItem = yyjson_arr_get(sRoot, i);
+                if (yyjson_is_obj(sItem)) {
+                    sTmp.emplace_back(Tmp());
+                    from_json(sItem, sTmp.back());
+                }
+            }
+        }
+        // std::cout << fmt::format("parsed: {}", fmt::join(sTmp, ", ")) << std::endl;
+        sTmp.clear();
+        yyjson_doc_free(sDoc);
+    }
+}
+BENCHMARK(BM_YY);
 
 static void BM_Glaze(benchmark::State& state)
 {

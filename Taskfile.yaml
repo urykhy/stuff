@@ -44,13 +44,14 @@ tasks:
             libprotobuf-dev \
             libpython3.13-dev \
             librapidxml-dev \
-            librdkafka-dev \
             librdkafka++1 \
+            librdkafka-dev \
             libsimdjson-dev \
             libsqlite3-dev \
             libssl-dev \
             liburing-dev \
             libxxhash-dev \
+            libyyjson-dev \
             libzip-dev \
             libzstd-dev \
             nlohmann-json3-dev \
