@@ -32,6 +32,8 @@ echo 'nameserver 10.103.10.3' > /etc/netns/$NAME/resolv.conf
 # firewall
 ip netns exec $NAME iptables -F
 ip netns exec $NAME iptables -A INPUT -m conntrack --ctstate established,related -j ACCEPT
+ip netns exec $NAME iptables -A INPUT -i lo -j ACCEPT
+ip netns exec $NAME iptables -A INPUT -i space+ -j ACCEPT
 ip netns exec $NAME iptables -A INPUT -j REJECT
 ip netns exec $NAME iptables -A FORWARD -m conntrack --ctstate established,related -j ACCEPT
 ip netns exec $NAME iptables -A FORWARD -j REJECT
