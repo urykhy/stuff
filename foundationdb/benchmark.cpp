@@ -31,6 +31,35 @@ static void BM_Get(benchmark::State& state)
 }
 BENCHMARK(BM_Get)->UseRealTime()->Arg(1)->Arg(100)->Arg(500)->Unit(benchmark::kMillisecond);
 
+static void BM_GetBy100(benchmark::State& state)
+{
+    FDB::Client sClient;
+    unsigned    COUNT = 100;
+    Benchmark::Coro(
+        state,
+        state.range(0),
+        [&]() -> boost::asio::awaitable<void> {
+            FDB::Transaction sTxn(sClient);
+            for (unsigned i = 0; i < COUNT; i++) {
+                sTxn.Set("foo-" + std::to_string(i), "bar");
+            }
+            co_await sTxn.CoCommit();
+        },
+        [&](auto) -> boost::asio::awaitable<void> {
+            FDB::Transaction       sTxn(sClient);
+            std::list<FDB::Future> sFuture;
+            for (unsigned i = 0; i < COUNT; i++) {
+                sFuture.push_back(sTxn.Get("foo-" + std::to_string(i)));
+            }
+            for (auto& x : sFuture) {
+                co_await x.CoWait();
+                benchmark::DoNotOptimize(x.Get());
+            }
+        },
+        [&]() -> boost::asio::awaitable<void> { co_return; });
+}
+BENCHMARK(BM_GetBy100)->UseRealTime()->Arg(1)->Arg(100)->Unit(benchmark::kMillisecond);
+
 static void BM_Set(benchmark::State& state)
 {
     FDB::Client sClient;
