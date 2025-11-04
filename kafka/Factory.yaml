@@ -4,7 +4,7 @@
             {
                 "name": "test_source",
                 "topic": "t_source",
-                "options": { "acks": "all", "bootstrap.servers": "broker-1.kafka" },
+                "options": { "acks": "all", "bootstrap.servers": "broker-1.kafka", "serdesSchema": "test_serdes_5" },
             },
         ],
     "consumer":
