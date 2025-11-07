@@ -16,7 +16,7 @@ namespace Kafka::Factory {
     {
         Kafka::Options sOpt;
 
-        auto sStr  = File::to_string("../Factory.yaml");
+        auto sStr  = File::to_string("../Factory.json");
         auto sJson = Parser::Json::parse(sStr);
 
         if (!sJson.isMember(aKind)) {
