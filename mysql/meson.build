@@ -15,5 +15,5 @@ test('basic', a, args : ['-l', 'all'])
 
 # need tool: https://github.com/golang-migrate/migrate
 # run via: ninja migrate
-find_program('migrate', required : true)
-run_target('migrate', command : ['bash', '-c', 'migrate -path @SOURCE_ROOT@/migrations -database "mysql://${MYSQL_USER}:${MYSQL_PASS}@tcp(${MYSQL_HOST}:${MYSQL_PORT})/test" up'])
+migrate = find_program('migrate', required : true)
+run_target('migrate', command : ['bash', '-c', migrate.full_path() + ' -path @SOURCE_ROOT@/migrations -database "mysql://${MYSQL_USER}:${MYSQL_PASS}@tcp(${MYSQL_HOST}:${MYSQL_PORT})/test" up'])
