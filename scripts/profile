@@ -737,6 +737,15 @@ function flame-grafana
     pprof -raw tmp.prof* | stackcollapse-go.pl | curl -X POST --data-binary "@-" "pyroscope.grafana:4040/ingest?name=${name}&from=${t1}&until=${t2}&format=folded"
 }
 
+function show-benchmark
+{
+    if [ $# -lt 1 ]; then
+        echo "usage: show-benchmark <cmd>"
+        return
+    fi
+    "$@" | grep '^B' | awk '{print $1,$2}' | uplot -d\  bar -H -C
+}
+
 function lvm-show
 {
     pvs
