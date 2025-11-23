@@ -791,6 +791,78 @@ function allure-test
     fi
 }
 
+function allure-benchmark
+{
+    if [ $# -lt 1 ]; then
+        echo "usage: allure-benchmark <cmd>"
+        return
+    fi
+    local array
+    local dir=`pwd`
+    IFS='/' read -r -a array <<< "$dir"
+    dir="${array[-2]}"
+    echo -e "* using '$dir' as benchmark name"
+    touch .benchmark.timstamp
+    "$@" | grep '^B' | awk '{print $1,$2}' > benchmark.csv
+
+    python -c '
+import matplotlib.pyplot as plt
+from matplotlib.colors import TABLEAU_COLORS
+from textwrap import wrap
+import csv
+import sys
+import os
+import time
+
+x = []
+y = []
+xname = None
+yname = None
+fname = f"{sys.argv[1]}-benchmark.png"
+
+with open("benchmark.csv", "r") as f:
+    rows = csv.reader(f, delimiter = " ")
+    h = next(rows, None)
+    xname = h[0]
+    yname = h[1]
+    for row in rows:
+        x.append(row[0])
+        y.append(float(row[1]))
+
+plt.figure(figsize=(12.8, 9.6))
+plt.bar(x, y, width = 0.72, label = x, color = TABLEAU_COLORS)
+plt.title(f"Benchmark {sys.argv[1]}, {yname}")
+plt.legend(x)
+plt.xticks(rotation=45)
+plt.tight_layout()
+for i in range(len(x)):
+    plt.text(i, y[i] // 2, y[i], weight="bold", ha="center")
+plt.savefig(fname)
+print(f"* {fname} generated")
+# make allure
+ts1 = int(os.path.getctime(".benchmark.timstamp") * 1000)
+ts2 = int(time.time() * 1000)
+x = f"""<?xml version="1.0" ?>
+<ns0:test-suite xmlns:ns0="urn:model.allure.qatools.yandex.ru" start="{ts1}" stop="{ts2}">
+    <name>{sys.argv[1].capitalize()}:benchmark</name>
+    <test-cases>
+        <test-case start="{ts1}" stop="{ts2}" status="passed">
+            <name>Benchmark</name>
+            <attachments>
+                <attachment><title>plot.png</title><source>{fname}</source><type>image/png</type></attachment>
+            </attachments>
+        </test-case>
+    </test-cases>
+</ns0:test-suite>
+"""
+print (x, file=open(f"{sys.argv[1]}-benchmark-testsuite.xml", "w"))
+print(f"* {sys.argv[1]}-benchmark-testsuite.xml generated")
+' $dir
+    ~/code/docker/allure/upload.sh $dir-benchmark-testsuite.xml
+    ~/code/docker/allure/upload.sh $dir-benchmark.png
+    echo -e "* testsuite uploaded to http://web.allure.docker"
+}
+
 function allure-clear
 {
     curl -s http://web.allure/upload/ | sed -ne 's/.*href="\(.*\)".*/\1/p' | grep xml | while read a; do curl -X DELETE "http://web.allure/upload/$a"; done
