@@ -53,7 +53,7 @@ void BM_Google(benchmark::State& state)
             sData.back().ParseFromString(gBuf);
         }
     }
-    state.SetItemsProcessed(state.iterations() * state.range(0));
+    state.SetItemsProcessed(state.iterations() * state.range(0) * state.threads());
 }
 BENCHMARK(BM_Google)->Arg(P_COUNT)->Threads(1)->Threads(4)->UseRealTime()->Unit(benchmark::kMillisecond);
 
@@ -70,7 +70,7 @@ void BM_Arena(benchmark::State& state)
         sData.clear();
         sArena.Reset();
     }
-    state.SetItemsProcessed(state.iterations() * state.range(0));
+    state.SetItemsProcessed(state.iterations() * state.range(0) * state.threads());
 }
 BENCHMARK(BM_Arena)->Arg(P_COUNT)->Threads(1)->Threads(4)->UseRealTime()->Unit(benchmark::kMillisecond);
 
@@ -89,7 +89,7 @@ void BM_PMR(benchmark::State& state)
         sData.clear();
         sPool.release();
     }
-    state.SetItemsProcessed(state.iterations() * state.range(0));
+    state.SetItemsProcessed(state.iterations() * state.range(0) * state.threads());
 }
 BENCHMARK(BM_PMR)->Arg(P_COUNT)->Threads(1)->Threads(4)->UseRealTime()->Unit(benchmark::kMillisecond);
 
@@ -108,7 +108,7 @@ void BM_PMR_View(benchmark::State& state)
         sData.clear();
         sPool.release();
     }
-    state.SetItemsProcessed(state.iterations() * state.range(0));
+    state.SetItemsProcessed(state.iterations() * state.range(0) * state.threads());
 }
 BENCHMARK(BM_PMR_View)->Arg(P_COUNT)->Threads(1)->Threads(4)->UseRealTime()->Unit(benchmark::kMillisecond);
 
