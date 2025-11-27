@@ -803,7 +803,14 @@ function allure-benchmark
     dir="${array[-2]}"
     echo -e "* using '$dir' as benchmark name"
     touch .benchmark.timstamp
-    "$@" | grep '^B' | awk '{print $1,$2}' > benchmark.csv
+    "$@" | grep '^B' > benchmark.out
+    echo "* benchmark.out generated"
+    if grep -q 'items_per_second' benchmark.out; then
+        echo "Benchmark,ItemsPerSecond" > benchmark.csv
+        cat benchmark.out | sed -ne 's/\(BM_[^ ]\+\).*items_per_second=\([^/]*\).*/\1,\2/p' >> benchmark.csv
+    else
+        cat benchmark.out | awk '{print $1","$2}' > benchmark.csv
+    fi
 
     python -c '
 import matplotlib.pyplot as plt
@@ -814,6 +821,7 @@ import sys
 import os
 import time
 
+suffixes = {"K": 10**3, "M": 10**6}
 x = []
 y = []
 xname = None
@@ -821,13 +829,14 @@ yname = None
 fname = f"{sys.argv[1]}-benchmark.png"
 
 with open("benchmark.csv", "r") as f:
-    rows = csv.reader(f, delimiter = " ")
+    rows = csv.reader(f, delimiter = ",")
     h = next(rows, None)
     xname = h[0]
     yname = h[1]
     for row in rows:
         x.append(row[0])
-        y.append(float(row[1]))
+        v = row[1]
+        y.append(float(v[:-1]) * suffixes[v[-1]] if v[-1] in suffixes else float(v))
 
 plt.figure(figsize=(12.8, 9.6))
 plt.bar(x, y, width = 0.72, label = x, color = TABLEAU_COLORS)
