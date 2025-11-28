@@ -1,0 +1,19 @@
+# serializer version: 1
+# name: test_snapshot1
+  '1'
+# ---
+# name: test_snapshot1.1
+  dict({
+    'cities': list([
+      dict({
+        'id': '2',
+        'name': 'Alexandra Bowman',
+      }),
+    ]),
+    'id': '3',
+    'name': 'Steven Myers',
+  })
+# ---
+# name: test_snapshot2
+  '1'
+# ---

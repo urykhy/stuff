@@ -780,14 +780,14 @@ function allure-test
         echo "usage: allure-test <test binary>"
         return
     fi
-    rm test.xml || true
+    rm test.xml ctest*.xml || true
     "$@" -l all -f XML -k test.xml
+    echo "* test.xml generated"
     if [ -f test.xml ]; then
         ~/code/stuff/testing/boost-test-xml-2-allure.py test.xml
+        echo "* testsuite generated"
         for x in ctest*.xml; do ~/code/docker/allure/upload.sh $x; done
-        rm test.xml ctest*.xml
-        sleep 1
-        x-www-browser http://web.allure.docker/
+        echo -e "* testsuite uploaded to http://web.allure.docker"
     fi
 }
 

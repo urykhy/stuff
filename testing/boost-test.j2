@@ -1,7 +1,7 @@
 {%- for s in doc.iter('TestSuite') %}
     {%- if s.findall('TestCase') | length > 0 %}
-        {%- set suite_name = s.attrib['name'] %}
-        {%- set parent = doc.find('.//TestSuite[@name="' + suite_name + '"]...').attrib['name'] %}
+        {%- set suite_name = s.attrib.get('name') %}
+        {%- set parent = doc.find('.//TestSuite[@name="' + suite_name + '"]...').attrib.get('name', 'Suites') %}
         {% if parent != 'Suites' %}
             {% set suite_name = parent + ':' + suite_name %}
         {% endif %}
@@ -17,7 +17,7 @@
                 {%- for tcase in s.findall('TestCase') %}
                     {%- set errors = tcase.iter() | selectattr('tag', 'in', ('Error', 'Exception', 'FatalError')) | list %}
                     {%- set err_count = errors | length -%}
-                    {%- set time_used = tcase.find("TestingTime").text | int %}
+                    {%- set time_used = tcase.find("TestingTime").text | default("0") | int %}
                     {%- set time_used = (time_used / 1000 + 1) | int %}
                     <test-case start="{{ meta.time }}" stop="{{ meta.time + time_used }}" status="{% if err_count == 0 %}passed{% else %}failed{% endif %}">
                         <name>{{ tcase.attrib["name"] | escape }}</name>
