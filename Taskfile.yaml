@@ -8,82 +8,80 @@ tasks:
   install:boost:
     desc: install boost
     cmds:
-      - |
-        apt install \
-            libboost-coroutine{{.boost}} \
-            libboost-filesystem{{.boost}} \
-            libboost-iostreams{{.boost}} \
-            libboost-program-options{{.boost}} \
-            libboost-python{{.boost}} \
-            libboost-test{{.boost}} \
-            libboost-thread{{.boost}} \
+      - apt install
+            libboost-coroutine{{.boost}}
+            libboost-filesystem{{.boost}}
+            libboost-iostreams{{.boost}}
+            libboost-program-options{{.boost}}
+            libboost-python{{.boost}}
+            libboost-test{{.boost}}
+            libboost-thread{{.boost}}
 
   install:apt:
     desc: install deps
     cmds:
-      - |
-        apt install \
-            libavro-dev \
-            libbenchmark-dev \
-            libcctz-dev \
-            libcurl4-openssl-dev \
-            libfmt-dev \
-            libgoogle-perftools-dev \
-            libgrpc++-dev \
-            libgsl-dev \
-            libhiredis-dev \
-            libjsoncpp-dev \
-            liblog4cxx-dev \
-            liblz4-dev \
-            liblzma-dev \
-            libmysqlclient-dev \
-            libnetfilter-log-dev \
-            libnetfilter-queue-dev \
-            libnghttp2-dev \
-            libpq-dev \
-            libprotobuf-dev \
-            libpython3.13-dev \
-            librapidxml-dev \
-            librdkafka++1 \
-            librdkafka-dev \
-            libsimdjson-dev \
-            libsqlite3-dev \
-            libssl-dev \
-            liburing-dev \
-            libxxhash-dev \
-            libyyjson-dev \
-            libzip-dev \
-            libzstd-dev \
-            nlohmann-json3-dev \
-            protobuf-compiler \
-            protobuf-compiler-grpc \
-            rapidjson-dev \
-            uuid-dev \
-            zlib1g-dev \
+      - apt install
+            libavro-dev
+            libbenchmark-dev
+            libcctz-dev
+            libcurl4-openssl-dev
+            libfmt-dev
+            libgoogle-perftools-dev
+            libgrpc++-dev
+            libgsl-dev
+            libhiredis-dev
+            libjsoncpp-dev
+            liblog4cxx-dev
+            liblz4-dev
+            liblzma-dev
+            libmysqlclient-dev
+            libnetfilter-log-dev
+            libnetfilter-queue-dev
+            libnghttp2-dev
+            libpq-dev
+            libprotobuf-dev
+            libpython3.13-dev
+            librapidxml-dev
+            librdkafka++1
+            librdkafka-dev
+            libsimdjson-dev
+            libsqlite3-dev
+            libssl-dev
+            liburing-dev
+            libxxhash-dev
+            libyyjson-dev
+            libzip-dev
+            libzstd-dev
+            nlohmann-json3-dev
+            protobuf-compiler
+            protobuf-compiler-grpc
+            rapidjson-dev
+            uuid-dev
+            zlib1g-dev
 
   install:py:
     desc: install python deps
     cmds:
-      - |
-        apt install \
-            meson \
-            mypy \
-            python3-cherrypy3 \
-            python3-clang-15 \
-            python3-confluent-kafka \
-            python3-fake-factory \
-            python3-jinja2 \
-            python3-lark \
-            python3-pandas \
-            python3-plotly \
-            python3-psycopg2 \
-            python3-pydantic \
-            python3-pymysql \
-            python3-pytest-check \
-            python3-pytest \
-            python3-pytest-sugar \
-            python3-sqlalchemy-ext \
-            python3-syrupy \
+      - apt install
+            meson
+            mypy
+            python3-cherrypy3
+            python3-clang-15
+            python3-confluent-kafka
+            python3-fake-factory
+            python3-jinja2
+            python3-lark
+            python3-pandas
+            python3-plotly
+            python3-psycopg2
+            python3-pydantic
+            python3-pymysql
+            python3-pytest
+            python3-pytest-bdd
+            python3-pytest-check
+            python3-pytest-sugar
+            python3-sqlalchemy-ext
+            python3-syrupy
 
   install:pip:
     desc: make packages from pip and install
