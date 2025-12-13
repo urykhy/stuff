@@ -22,15 +22,12 @@ namespace Kafka::Factory {
         if (!sJson.isMember(aKind)) {
             throw std::invalid_argument("Kafka::Factory: kind " + aKind + " not found");
         }
-        for (auto& sItem : sJson[aKind]) {
-            if (sItem.isMember("name") and sItem["name"] == aName) {
-                const auto& sOptions = sItem["options"];
-                for (auto i = sOptions.begin(); i != sOptions.end(); i++) {
-                    sOpt[i.key().asString()] = i->asString();
-                }
-                return std::pair(sOpt, sItem["topic"].asString());
-            }
+        auto&       sItem    = sJson[aKind][aName];
+        const auto& sOptions = sItem["options"];
+        for (auto i = sOptions.begin(); i != sOptions.end(); i++) {
+            sOpt[i.key().asString()] = i->asString();
         }
+        return std::pair(sOpt, sItem["topic"].asString());
         throw std::invalid_argument("Kafka::Factory: name " + aName + " not found for kind " + aKind);
     };
 

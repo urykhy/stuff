@@ -1,23 +1,22 @@
 {
-    "producer":
-        [
-            {
-                "name": "test_source",
-                "topic": "t_source",
-                "options": { "acks": "all", "bootstrap.servers": "broker-1.kafka", "serdesSchema": "test_serdes_5" },
-            },
-        ],
-    "consumer":
-        [
-            {
-                "name": "g_basic",
-                "topic": "t_source",
-                "options":
-                    {
-                        "auto.offset.reset": "earliest",
-                        "bootstrap.servers": "broker-1.kafka",
-                        "enable.auto.commit": "false",
-                    },
-            },
-        ],
+    "producer": {
+        "test_source": {
+            "topic": "t_source",
+            "options": {
+                "acks": "all",
+                "bootstrap.servers": "broker-1.kafka",
+                "serdesSchema": "test_serdes_5"
+            }
+        }
+    },
+    "consumer": {
+        "g_basic": {
+            "topic": "t_source",
+            "options": {
+                "auto.offset.reset": "earliest",
+                "bootstrap.servers": "broker-1.kafka",
+                "enable.auto.commit": "false"
+            }
+        }
+    }
 }
