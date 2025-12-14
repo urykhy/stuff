@@ -469,6 +469,9 @@ function show-mem
     grep --color=never -E '^(Dirty:|Writeback:|MemFree:|Cached:)' /proc/meminfo
     cat /proc/net/sockstat | grep ^TCP: | awk '{printf "TCP: %19s kB\n", $11 * 4}'
     cat /proc/net/sockstat | grep ^UDP: | awk '{printf "UDP: %19s kB\n", $5 * 4}'
+    echo -n "Browsers: "
+    cat /sys/fs/cgroup/my_browser/memory.current | awk '{printf "%14s %s", $1/1024,"kB"}'
+    echo
     echo
     swapon
     echo
