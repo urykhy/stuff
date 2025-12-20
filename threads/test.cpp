@@ -452,7 +452,7 @@ BOOST_AUTO_TEST_CASE(boost_cancel_with_exception)
 
     auto f = [&]() -> boost::asio::awaitable<void> {
         try {
-            //co_await boost::asio::this_coro::throw_if_cancelled(true);
+            // co_await boost::asio::this_coro::throw_if_cancelled(true);
             while (true) {
                 co_await timer2(30ms);
             }
@@ -512,6 +512,38 @@ BOOST_AUTO_TEST_CASE(co_await_spawn_multiple)
                       asio::co_spawn(sContext, f, asio::use_awaitable));
         },
         asio::detached);
+    sContext.run();
+}
+
+BOOST_AUTO_TEST_CASE(parallel_group)
+{
+    using namespace boost::asio;
+
+    auto sStep = [](int aID) -> awaitable<void> {
+        BOOST_TEST_MESSAGE("Task " << aID << " started");
+        auto         sExecutor = co_await this_coro::executor;
+        steady_timer sTimer(sExecutor);
+        sTimer.expires_after(std::chrono::milliseconds(100 + Util::randomInt(200)));
+        co_await sTimer.async_wait(use_awaitable);
+        BOOST_TEST_MESSAGE("Task " << aID << " finished");
+        co_return;
+    };
+
+    auto sStart = [&]() -> awaitable<void> {
+        auto sExecutor = co_await this_coro::executor;
+        using T        = decltype(co_spawn(sExecutor, sStep(0), deferred));
+        std::vector<T> sTasks;
+        for (int i = 0; i < 5; ++i) {
+            sTasks.push_back(co_spawn(sExecutor, sStep(i), deferred));
+        }
+        auto sGroup    = experimental::make_parallel_group(std::move(sTasks));
+        auto sResponse = co_await sGroup.async_wait(experimental::wait_for_all(), use_awaitable);
+        BOOST_TEST_MESSAGE("All tasks finished");
+        co_return;
+    };
+
+    io_context sContext(1);
+    co_spawn(sContext, sStart(), detached);
     sContext.run();
 }
 
