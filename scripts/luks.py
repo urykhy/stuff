@@ -22,7 +22,7 @@ def read_info():
     for i in [line.strip() for line in open("/etc/crypttab", "r")]:
         if len(i) == 0 or i[0] == "#":
             continue
-        i = re.split("\s+", i)
+        i = re.split("\\s+", i)
         if "luks" in i[3]:
             if i[1].startswith("UUID="):
                 i[1] = os.path.realpath("/dev/disk/by-uuid/" + i[1][len("UUID=") :])
@@ -32,7 +32,7 @@ def read_info():
     for i in [line.strip() for line in open("/etc/fstab", "r")]:
         if len(i) == 0 or i[0] == "#":
             continue
-        i = re.split("\s+", i)
+        i = re.split("\\s+", i)
         if i[0].startswith(dev_prefix):
             # print (i[0][len(dev_prefix):], ":", i[1])
             fstab[i[0][len(dev_prefix) :]] = i[1]
