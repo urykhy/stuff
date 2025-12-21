@@ -472,6 +472,9 @@ function show-mem
     echo -n "Browsers: "
     cat /sys/fs/cgroup/my_browser/memory.current | awk '{printf "%14s %s", $1/1024,"kB"}'
     echo
+    echo -n "GPU:      "
+    nvidia-smi --query-gpu memory.used --format=csv,noheader | awk '{printf "%14s %s", $1 * 1024, "kB"}'
+    echo
     echo
     swapon
     echo
