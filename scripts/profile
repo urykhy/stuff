@@ -47,15 +47,6 @@ function docker-security-scanner
     trivy image -s HIGH --scanners vuln "$1"
 }
 
-function docker-watchtower
-{
-    docker run --rm \
-           --name watchtower \
-           -v /var/run/docker.sock:/var/run/docker.sock \
-           containrrr/watchtower --run-once --monitor-only --porcelain=v1 \
-           nextcloud nginx
-}
-
 function docker-upload
 {
     if [ $# -ne 1 ]; then
