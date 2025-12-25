@@ -182,7 +182,7 @@ func handleDnsRequest(w dns.ResponseWriter, r *dns.Msg) {
 				}
 			}
 		} else {
-			m.SetRcode(r, dns.RcodeRefused)
+			m.SetRcode(r, dns.RcodeSuccess)
 		}
 	}
 
