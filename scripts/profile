@@ -312,11 +312,20 @@ function tls-debug
 
 function tls-imap
 {
-    if [ $# -ne 3 ]; then
-        echo "usage: tls-debug host:port username password"
+    if [ $# -ne 1 ]; then
+        echo "usage: tls-imap host:port"
         return
     fi
-    (echo -e "a login $2 $3\n1 list \"\" *"; sleep 1) | openssl s_client -connect $1 -showcerts
+    openssl s_client -starttls imap -connect $1 < /dev/null
+}
+
+function tls-smtp
+{
+    if [ $# -ne 1 ]; then
+        echo "usage: tls-smtp host:port"
+        return
+    fi
+    openssl s_client -starttls smtp -connect $1 < /dev/null
 }
 
 
