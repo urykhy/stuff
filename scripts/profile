@@ -1168,3 +1168,12 @@ function mass-download
     fi
     cat $1 | xargs -P10 -I N bash -c 'while ! curl -s -C - -O "N" ; do echo "retry in 1s ..."; sleep 1; done'
 }
+
+function ocr
+{
+    if [ $# -ne 1 ]; then
+        echo "usage: ocr <filename>"
+        return
+    fi
+    tesseract -l rus+eng "$1" - quiet
+}
