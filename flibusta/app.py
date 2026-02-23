@@ -14,16 +14,17 @@ import sys
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(SCRIPT_DIR))
 
-from flibusta.common import *
-
-from sqlalchemy import select, text, bindparam
-
+import re
+import shutil
 import string
+import zipfile
+from os.path import isfile, join
+
 import cherrypy
 from cherrypy.lib.static import serve_download
-import re
-from os.path import isfile, join
-import zipfile, shutil
+from sqlalchemy import bindparam, select, text
+
+from flibusta.common import *
 
 _home = os.path.dirname(os.path.abspath(__file__))
 
@@ -82,15 +83,11 @@ class App(object):
         s = select(Book)
         if len(limit_author) > 0:
             s = s.where(
-                text("MATCH (author) AGAINST (:a IN BOOLEAN MODE)").bindparams(
-                    bindparam("a", limit_author)
-                ),
+                text("MATCH (author) AGAINST (:a IN BOOLEAN MODE)").bindparams(bindparam("a", limit_author)),
             )
         if len(limit_title) > 0:
             s = s.where(
-                text("MATCH (title) AGAINST (:t IN BOOLEAN MODE)").bindparams(
-                    bindparam("t", limit_title)
-                ),
+                text("MATCH (title) AGAINST (:t IN BOOLEAN MODE)").bindparams(bindparam("t", limit_title)),
             )
         s = s.order_by(Book.id.desc())
         if limit_count > 0:
@@ -100,7 +97,7 @@ class App(object):
         with Session(self.engine) as session:
             for b in session.execute(s).all():
                 b = b[0]
-                #cherrypy.log(f"result is {b}")
+                # cherrypy.log(f"result is {b}")
                 a = [int(b.id), str(b.author), str(b.title), int(b.size), str(b.date)]
                 data.append(a)
 

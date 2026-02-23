@@ -14,10 +14,9 @@ def init_logger():
     logging.getLogger("sqlalchemy").setLevel(logging.ERROR)
 
 
-from sqlalchemy import create_engine, String, Integer, Date, Column, select
+from sqlalchemy import Column, Date, Index, Integer, String, create_engine, select
 from sqlalchemy.engine import URL
-from sqlalchemy.orm import declarative_base, Session
-from sqlalchemy import Index
+from sqlalchemy.orm import Session, declarative_base
 
 Base = declarative_base()
 
@@ -31,7 +30,9 @@ class Book(Base):
     date = Column(Date, nullable=False)
 
     def __repr__(self) -> str:
-        return f"Book(id={self.id!r}, author={self.author!r}, title={self.title!r}, size={self.size!r}, date={self.date!r}"
+        return (
+            f"Book(id={self.id!r}, author={self.author!r}, title={self.title!r}, size={self.size!r}, date={self.date!r}"
+        )
 
     @staticmethod
     def already(session, ids):

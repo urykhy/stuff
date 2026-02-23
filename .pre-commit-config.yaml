@@ -48,7 +48,7 @@ repos:
       entry: mypy
       language: python
       types_or: [python]
-      args: ["--ignore-missing-imports", "--scripts-are-modules"]
+      args: ["--ignore-missing-imports", "--explicit-package-bases"]
       require_serial: true
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.6.0

@@ -8,10 +8,10 @@ import sys
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(SCRIPT_DIR))
 
-import zipfile
 import time
-from flibusta.common import *
+import zipfile
 
+from flibusta.common import *
 
 mirror_path = "/u03/mirror/fb2.Flibusta.Net"
 init_logger()
