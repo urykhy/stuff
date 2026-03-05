@@ -95,6 +95,7 @@ namespace Logger {
         struct timeval tv;
         struct tm result;
         std::ostringstream m;
+        std::string tmp;
 
         const char* operator()()
         {
@@ -109,7 +110,8 @@ namespace Logger {
             << std::setw(2) << result.tm_min  << ':'
             << std::setw(2) << result.tm_sec  << '.'
             << std::setw(3) << int(tv.tv_usec/1000) << ' ';
-            return m.str().data();
+            tmp = m.str();
+            return tmp.data();
         }
     };
 
