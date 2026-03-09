@@ -31,11 +31,11 @@ const std::string gBuf = []() {
   "phones": [
     {
       "number": "+1234567890",
-      "type": "MOBILE"
+      "type": "PHONE_TYPE_MOBILE"
     },
     {
       "number": "+0987654321",
-      "type": "HOME"
+      "type": "PHONE_TYPE_HOME"
     }
   ]
 }

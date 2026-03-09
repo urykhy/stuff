@@ -117,7 +117,7 @@ BOOST_AUTO_TEST_CASE(xdecode)
     GOOGLE_PROTOBUF_VERIFY_VERSION;
 
     auto xTest = [](auto p, auto v) {
-        tutorial::xtest sMessage;
+        tutorial::Xtest sMessage;
         p(sMessage);
 
         std::string sBuf;
@@ -161,7 +161,7 @@ BOOST_AUTO_TEST_CASE(xdecode)
 }
 BOOST_AUTO_TEST_CASE(generated)
 {
-    tutorial::xtest sMessage;
+    tutorial::Xtest sMessage;
     sMessage.set_i32(123);  // fixed
     sMessage.set_s32(-45);  // zz
     sMessage.set_f32(-4.6); // fixed float
@@ -175,7 +175,7 @@ BOOST_AUTO_TEST_CASE(generated)
 
     char                                sBuffer[1024] = {};
     std::pmr::monotonic_buffer_resource sPool{std::data(sBuffer), std::size(sBuffer)};
-    pmr_tutorial::xtest                 sCustom(&sPool);
+    pmr_tutorial::Xtest                 sCustom(&sPool);
     sCustom.ParseFromString(sBuf);
     BOOST_CHECK_EQUAL(sMessage.i32(), *sCustom.i32);
     BOOST_CHECK_EQUAL(sMessage.s32(), *sCustom.s32);
@@ -198,10 +198,10 @@ BOOST_AUTO_TEST_CASE(person)
     sPerson.set_id(0x01020304);
     auto phone = sPerson.add_phones();
     phone->set_number("+1234567890");
-    phone->set_type(tutorial::Person_PhoneType::Person_PhoneType_MOBILE);
+    phone->set_type(tutorial::Person_PhoneType::Person_PhoneType_PHONE_TYPE_MOBILE);
     phone = sPerson.add_phones();
     phone->set_number("+0987654321");
-    phone->set_type(tutorial::Person_PhoneType::Person_PhoneType_HOME);
+    phone->set_type(tutorial::Person_PhoneType::Person_PhoneType_PHONE_TYPE_HOME);
 
     std::string sBuf;
     BOOST_CHECK_EQUAL(true, sPerson.SerializeToString(&sBuf));

@@ -1,0 +1,10 @@
+---
+version: v2
+lint:
+    ignore_only:
+        PACKAGE_VERSION_SUFFIX:
+            - protobuf/tutorial.proto
+        PACKAGE_DIRECTORY_MATCH:
+            - protobuf/tutorial.proto
+        FIELD_NOT_REQUIRED:
+            - protobuf/tutorial.proto

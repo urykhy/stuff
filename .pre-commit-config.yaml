@@ -1,57 +1,65 @@
+---
 repos:
-  - repo: local
-    hooks:
-    - id: clang-format
-      name: clang-format
-      entry: clang-format
-      language: system
-      types_or: [c++, c]
-      args: ["-i"]
-      require_serial: true
-    - id: clang-tidy
-      name: clang-tidy
-      entry: clang-tidy
-      language: system
-      types_or: [c++, c]
-      args: ["-p", ".", "--warnings-as-errors", "*"]
-      require_serial: true
-    - id: spectral
-      name: spectral
-      entry: spectral
-      language: system
-      files: ^swagger\/api\/.+\.v.*\.yaml$
-      args: ["lint"]
-      require_serial: true
-    - id: yamllint
-      name: yamllint
-      entry: yamllint
-      language: system
-      files: '\.(yml|yaml)$'
-      args: ["-s"]
-      require_serial: true
-    - id: black
-      name: black
-      entry: black
-      language: python
-      types_or: [python]
-      args: ["--line-length=120"]
-      require_serial: true
-    - id: isort
-      name: isort
-      entry: isort
-      language: python
-      types_or: [python]
-      args: ["--profile", "black", "--filter-files"]
-      require_serial: true
-    - id: mypy
-      name: mypy
-      entry: mypy
-      language: python
-      types_or: [python]
-      args: ["--ignore-missing-imports", "--explicit-package-bases"]
-      require_serial: true
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.6.0
-    hooks:
-      - id: end-of-file-fixer
-      - id: trailing-whitespace
+    - repo: local
+      hooks:
+          - id: clang-format
+            name: clang-format
+            entry: clang-format
+            language: system
+            types_or: [c++, c]
+            args: ["-i"]
+            require_serial: true
+          - id: clang-tidy
+            name: clang-tidy
+            entry: clang-tidy
+            language: system
+            types_or: [c++, c]
+            args: ["-p", ".", "--warnings-as-errors", "*"]
+            require_serial: true
+          - id: spectral
+            name: spectral
+            entry: spectral
+            language: system
+            files: ^swagger\/api\/.+\.v.*\.yaml$
+            args: ["lint"]
+            require_serial: true
+          - id: yamllint
+            name: yamllint
+            entry: yamllint
+            language: system
+            files: '\.(yml|yaml)$'
+            args: ["-s"]
+            require_serial: true
+          - id: protobuf
+            name: protobuf
+            entry: buf
+            language: system
+            files: '\.(proto)$'
+            args: ["lint"]
+            require_serial: true
+          - id: black
+            name: black
+            entry: black
+            language: python
+            types_or: [python]
+            args: ["--line-length=120"]
+            require_serial: true
+          - id: isort
+            name: isort
+            entry: isort
+            language: python
+            types_or: [python]
+            args: ["--profile", "black", "--filter-files"]
+            require_serial: true
+          - id: mypy
+            name: mypy
+            entry: mypy
+            language: python
+            types_or: [python]
+            args: ["--ignore-missing-imports", "--explicit-package-bases"]
+            require_serial: true
+    - repo: https://github.com/pre-commit/pre-commit-hooks
+      rev: v4.6.0
+      hooks:
+          - id: end-of-file-fixer
+          - id: trailing-whitespace

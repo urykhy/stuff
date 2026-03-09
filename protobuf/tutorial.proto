@@ -8,14 +8,15 @@ message Person {
     optional string email = 3;
 
     enum PhoneType {
-        MOBILE = 0;
-        HOME = 1;
-        WORK = 2;
+        PHONE_TYPE_UNSPECIFIED = 0;
+        PHONE_TYPE_MOBILE = 1;
+        PHONE_TYPE_HOME = 2;
+        PHONE_TYPE_WORK = 3;
     }
 
     message PhoneNumber {
         required string number = 1;
-        optional PhoneType type = 2 [default = HOME];
+        optional PhoneType type = 2 [default = PHONE_TYPE_HOME];
     }
 
     repeated PhoneNumber phones = 4;
@@ -31,20 +32,21 @@ message PersonView {
     optional string email = 3; // use:string_view
 
     enum PhoneType {
-        MOBILE = 0;
-        HOME = 1;
-        WORK = 2;
+        PHONE_TYPE_UNSPECIFIED = 0;
+        PHONE_TYPE_MOBILE = 1;
+        PHONE_TYPE_HOME = 2;
+        PHONE_TYPE_WORK = 3;
     }
 
     message PhoneNumber {
         required string number = 1; // use:string_view
-        optional PhoneType type = 2 [default = HOME];
+        optional PhoneType type = 2 [default = PHONE_TYPE_HOME];
     }
 
     repeated PhoneNumber phones = 4;
 }
 
-message xtest {
+message Xtest {
     optional fixed32 i32 = 1; // fixed
     optional sint32  s32 = 2; // zigzag
     optional float   f32 = 3; // fixed, float32
@@ -56,12 +58,12 @@ message xtest {
     optional double  f64 = 12; // float64
 }
 
-message rwalk {
-    message xpart2 {
+message Rwalk {
+    message Xpart2 {
         optional int32 id = 10;
     }
-    message xpart1 {
-        optional xpart2 m2 = 2;
+    message Xpart1 {
+        optional Xpart2 m2 = 2;
     }
-    optional xpart1 m1 = 1;
+    optional Xpart1 m1 = 1;
 }
