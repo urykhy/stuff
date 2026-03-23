@@ -10,6 +10,7 @@
 #include "Play.grpc.pb.h"
 
 #include <threads/Asio.hpp>
+#include <threads/Group.hpp>
 
 #define AGRPC_BOOST_ASIO
 #include <agrpc/client_rpc.hpp>
@@ -151,11 +152,13 @@ namespace PlayGRPC {
     // https://github.com/Tradias/asio-grpc
     class TradiasServer
     {
+        using ContextPtr = std::shared_ptr<agrpc::GrpcContext>;
         play::PlayService::AsyncService m_Service;
         std::unique_ptr<grpc::Server>   m_Server;
         grpc::ServerBuilder             m_Builder;
-        agrpc::GrpcContext              m_Context;
-        std::thread                     m_Thread;
+        std::vector<ContextPtr>         m_Contexts;
+        Threads::Group                  m_Thread;
+        const unsigned                  m_ThreadCount;
 
         boost::asio::awaitable<void> DoPing(play::PingRequest& aRequest, play::PingResponse& aResponse)
         {
@@ -164,9 +167,12 @@ namespace PlayGRPC {
         }
 
     public:
-        TradiasServer()
-        : m_Context(m_Builder.AddCompletionQueue())
+        TradiasServer(unsigned aThreadCount = 1)
+        : m_ThreadCount(aThreadCount)
         {
+            for (unsigned i = 0; i < m_ThreadCount; i++) {
+                m_Contexts.push_back(std::make_shared<agrpc::GrpcContext>(m_Builder.AddCompletionQueue()));
+            }
         }
 
         void Start(const std::string& aAddr)
@@ -176,26 +182,24 @@ namespace PlayGRPC {
             m_Server = m_Builder.BuildAndStart();
 
             using RPC = agrpc::ServerRPC<&play::PlayService::AsyncService::RequestPing>;
-            agrpc::register_awaitable_rpc_handler<RPC>(
-                m_Context,
-                m_Service,
-                [this](RPC& aRPC, play::PingRequest& aRequest) -> boost::asio::awaitable<void> {
-                    play::PingResponse sResponse;
-                    co_await DoPing(aRequest, sResponse);
-                    co_await aRPC.finish(sResponse, grpc::Status::OK, boost::asio::use_awaitable);
-                },
-                boost::asio::detached);
-
-            m_Thread = std::thread([this] {
-                prctl(PR_SET_NAME, "grpc:server");
-                m_Context.run();
-            });
+            for (auto& sContext : m_Contexts) {
+                agrpc::register_awaitable_rpc_handler<RPC>(
+                    *sContext,
+                    m_Service,
+                    [this](RPC& aRPC, play::PingRequest& aRequest) -> boost::asio::awaitable<void> {
+                        play::PingResponse sResponse;
+                        co_await DoPing(aRequest, sResponse);
+                        co_await aRPC.finish(sResponse, grpc::Status::OK, boost::asio::use_awaitable);
+                    },
+                    boost::asio::detached);
+                m_Thread.start([this, sContext]() { prctl(PR_SET_NAME, "grpc:server"); sContext->run(); });
+            }
         }
 
         void Stop()
         {
             m_Server->Shutdown();
-            m_Thread.join();
+            m_Thread.wait();
         }
 
         virtual ~TradiasServer() { Stop(); }
@@ -203,29 +207,41 @@ namespace PlayGRPC {
 
     class TradiasClient
     {
-        agrpc::GrpcContext      m_Context;
+        using ContextPtr = std::shared_ptr<agrpc::GrpcContext>;
+        std::vector<ContextPtr> m_Contexts;
         play::PlayService::Stub m_Stub;
-        std::thread             m_Thread;
+        Threads::Group          m_Thread;
+        const unsigned          m_ThreadCount;
+        std::atomic<unsigned>   m_Current{0};
 
     public:
-        TradiasClient(const std::string& aAddr)
+        TradiasClient(const std::string& aAddr, unsigned aThreadCount = 1)
         : m_Stub(grpc::CreateChannel(aAddr, grpc::InsecureChannelCredentials()))
+        , m_ThreadCount(aThreadCount)
         {
+            for (unsigned i = 0; i < m_ThreadCount; i++) {
+                m_Contexts.push_back(std::make_shared<agrpc::GrpcContext>());
+            }
         }
 
         void Start()
         {
-            m_Thread = std::thread([this] {
-                prctl(PR_SET_NAME, "grpc:client");
-                boost::asio::executor_work_guard<decltype(m_Context.get_executor())> sWork{m_Context.get_executor()};
-                m_Context.run();
-            });
+            for (auto& sContext : m_Contexts) {
+                m_Thread.start(
+                    [this, sContext] {
+                        prctl(PR_SET_NAME, "grpc:client");
+                        boost::asio::executor_work_guard<decltype(sContext->get_executor())> sWork{sContext->get_executor()};
+                        sContext->run();
+                    });
+            }
         }
 
         void Stop()
         {
-            m_Context.stop();
-            m_Thread.join();
+            for (auto& sContext : m_Contexts) {
+                sContext->stop();
+            }
+            m_Thread.wait();
         }
 
         ~TradiasClient()
@@ -242,16 +258,15 @@ namespace PlayGRPC {
             play::PingRequest sRequest;
             sRequest.set_value(aValue);
             play::PingResponse sResponse;
+            const auto         sCurrent = m_Current.fetch_add(1, std::memory_order_relaxed) % m_Contexts.size();
             const grpc::Status sStatus =
-                co_await RPC::request(m_Context, m_Stub, sContext, sRequest, sResponse, boost::asio::use_awaitable);
+                co_await RPC::request(*m_Contexts[sCurrent], m_Stub, sContext, sRequest, sResponse, boost::asio::use_awaitable);
             if (sStatus.ok()) {
                 co_return sResponse.value();
             } else {
                 throw std::runtime_error("TradiasClient: Ping failed, status " + sStatus.error_message());
             }
         }
-
-        agrpc::GrpcContext& Context() { return m_Context; }
     };
 
     class Client

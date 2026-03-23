@@ -7,11 +7,12 @@
 #include <unsorted/Benchmark.hpp>
 
 template <class H>
-inline void BenchmarkTradias(benchmark::State& state, unsigned aCount, agrpc::GrpcContext& aContext, H aHandler)
+inline void BenchmarkTradias(benchmark::State& state, unsigned aCount, boost::asio::io_context& aContext, H aHandler)
 {
-    bool                   sExit  = false;
-    uint32_t               sCount = 0;
-    uint32_t               sError = 0;
+    std::atomic<bool>      sExit  = false;
+    std::atomic<uint32_t>  sCount = 0;
+    std::atomic<uint32_t>  sError = 0;
+    std::mutex             sMutex;
     Prometheus::Histogramm sLatency;
 
     for (unsigned i = 0; i < aCount; i++) {
@@ -22,6 +23,7 @@ inline void BenchmarkTradias(benchmark::State& state, unsigned aCount, agrpc::Gr
                     Time::Meter sMeter;
                     try {
                         co_await aHandler(aSerial);
+                        std::unique_lock sLock(sMutex);
                         sLatency.tick(sMeter.get().to_ms());
                         sCount++;
                     } catch (...) {
@@ -54,17 +56,22 @@ static void BM_Produce(benchmark::State& state)
     using namespace std::chrono_literals;
 
     const std::string       sAddr = "127.0.0.1:56780";
-    PlayGRPC::TradiasServer sServer;
-    PlayGRPC::TradiasClient sClient(sAddr);
+    PlayGRPC::TradiasServer sServer(2 /* threads */);
+    PlayGRPC::TradiasClient sClient(sAddr, 2 /* threads */);
 
     sServer.Start(sAddr);
     sClient.Start();
     std::this_thread::sleep_for(10ms);
+    boost::asio::io_context sContext;
+    auto                    sGuard = boost::asio::make_work_guard(sContext);
+    Threads::Group          sThreads;
+    sThreads.start([&]() { prctl(PR_SET_NAME, "asio:context"); sContext.run(); }, 2 /* threads */);
+    sThreads.at_stop([&]() { sGuard.reset(); });
 
     BenchmarkTradias(
         state,
         state.range(0),
-        sClient.Context(),
+        sContext,
         [&](auto i) -> boost::asio::awaitable<void> {
             co_await sClient.Ping(i);
         });

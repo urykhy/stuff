@@ -105,10 +105,12 @@ BOOST_AUTO_TEST_CASE(client)
     sClient.Start();
     std::this_thread::sleep_for(10ms);
 
-    auto sFuture = boost::asio::co_spawn(
-        sClient.Context(),
+    boost::asio::io_context sContext;
+    auto                    sFuture = boost::asio::co_spawn(
+        sContext,
         [&]() -> boost::asio::awaitable<int> { co_return co_await sClient.Ping(123); },
         boost::asio::use_future);
+    sContext.run();
     BOOST_CHECK_EQUAL(123, sFuture.get());
 }
 BOOST_AUTO_TEST_CASE(ghz)
