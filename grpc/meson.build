@@ -15,7 +15,16 @@ play_src  = protoc.process('Play.proto')
 play_lib  = static_library('play', play_src)
 play_dep  = declare_dependency(link_with : play_lib, include_directories: play_lib.private_dir_include())
 
-a = executable('a.out', 'test.cpp', dependencies : [boost, play_dep, protobuf, grpc, agrpc], include_directories : includes)
+# grpc with python
+python    = find_program('python', required : true)
+py_gen    = custom_target('grpc_python_stubs',
+    input: 'Play.proto',
+    output: ['Play_pb2.py', 'Play_pb2_grpc.py'],
+    command: [python, '-m', 'grpc_tools.protoc', '--python_out=@OUTDIR@', '--grpc_python_out=@OUTDIR@', '-I..', '@INPUT@'],
+)
+py_dep = declare_dependency(sources: py_gen)
+
+a = executable('a.out', 'test.cpp', dependencies : [boost, play_dep, protobuf, grpc, agrpc, py_dep], include_directories : includes)
 test('basic', a, args : ['-l', 'all'])
 
 # meson test --benchmark -v

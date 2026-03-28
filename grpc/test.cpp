@@ -31,6 +31,13 @@ void K6Bench()
     BOOST_TEST_MESSAGE(sChild.out);
 }
 
+void PyBench()
+{
+    auto sChild = Util::Perform("unbuffer", "taskset", "-c", "1", "python3", "../bench.py");
+    BOOST_CHECK_EQUAL(0, sChild.code);
+    BOOST_TEST_MESSAGE(sChild.out);
+}
+
 BOOST_AUTO_TEST_SUITE(GRPC)
 BOOST_AUTO_TEST_CASE(basic)
 {
@@ -128,5 +135,13 @@ BOOST_AUTO_TEST_CASE(k6)
     sServer.Start(sAddr);
     std::this_thread::sleep_for(10ms);
     K6Bench();
+}
+BOOST_AUTO_TEST_CASE(python)
+{
+    const std::string       sAddr = "127.0.0.1:56780";
+    PlayGRPC::TradiasServer sServer;
+    sServer.Start(sAddr);
+    std::this_thread::sleep_for(10ms);
+    PyBench();
 }
 BOOST_AUTO_TEST_SUITE_END()
