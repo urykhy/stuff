@@ -17,30 +17,8 @@
 template <class T>
 std::string simpleFilter(const std::string& aStr)
 {
-    T           sFilter;
-    size_t      sInputPos = 0;
-    std::string sResult;
-    std::string sBuffer(sFilter.estimate(2), ' '); // dst buffer contain 2 bytes
-
-    while (sInputPos < aStr.size()) {
-        auto sInputSize = std::min(aStr.size() - sInputPos, 2ul); // input upto 2 bytes
-        auto sInfo      = sFilter.filter(aStr.data() + sInputPos, sInputSize, &sBuffer[0], sBuffer.size());
-        sInputPos += sInfo.usedSrc;
-        sResult.append(sBuffer.substr(0, sInfo.usedDst));
-        if (sInfo.usedDst == 0 and sInfo.usedSrc == 0)
-            throw std::logic_error("Archive::filter make no progress");
-    }
-
-    while (true) {
-        auto sInfo = sFilter.finish(&sBuffer[0], sBuffer.size());
-        sResult.append(sBuffer.substr(0, sInfo.usedDst));
-        if (sInfo.done)
-            break;
-        if (sInfo.usedDst == 0)
-            throw std::logic_error("Archive::filter make no progress");
-    }
-
-    return sResult;
+    T sFilter;
+    return Archive::filter(aStr, &sFilter, 2 /* block size */);
 }
 
 struct LZ4

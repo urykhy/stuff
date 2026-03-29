@@ -7,11 +7,10 @@
 #include <exception/Error.hpp>
 
 namespace Archive {
-    inline std::string filter(const std::string& aStr, IFilter* aFilter)
+    inline std::string filter(const std::string& aStr, IFilter* aFilter, const size_t MAX_INPUT_CHUNK = 64 * 1024)
     {
-        const size_t MAX_INPUT_CHUNK = 64 * 1024;
-        std::string  sResult;
-        std::string  sBuffer(aFilter->estimate(MAX_INPUT_CHUNK), ' '); // tmp buffer
+        std::string sResult;
+        std::string sBuffer(aFilter->estimate(MAX_INPUT_CHUNK), ' '); // tmp buffer
 
         size_t sInputPos = 0;
         while (sInputPos < aStr.size()) {
