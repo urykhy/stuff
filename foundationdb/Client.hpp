@@ -152,6 +152,24 @@ namespace FDB {
             }
             return std::string_view((const char*)sPtr, sSize);
         }
+
+        using Pair = std::pair<std::string_view, std::string_view>; // key -> value
+        std::vector<Pair> GetRange()
+        {
+            std::vector<Pair>  sRes;
+            fdb_bool_t         sMore  = 0;
+            FDBKeyValue const* sPtr   = nullptr;
+            int                sCount = 0;
+            Check(fdb_future_get_keyvalue_array(m_Future, &sPtr, &sCount, &sMore), "future get keyvalue array");
+
+            sRes.reserve(sCount);
+            for (int i = 0; i < sCount; i++) {
+                sRes.push_back(Pair(
+                    std::string_view((const char*)sPtr[i].key, sPtr[i].key_length),
+                    std::string_view((const char*)sPtr[i].value, sPtr[i].value_length)));
+            }
+            return sRes;
+        }
     };
 
     inline Client::Client(bool aUseGrvCache)
@@ -201,6 +219,16 @@ namespace FDB {
             return fdb_transaction_get(m_Transaction, (uint8_t*)aKey.data(), aKey.size(), aSnapshot);
         }
 
+        Future GetRange(std::string_view aFrom, std::string_view aTo, unsigned aLimit, bool aSnapshot = false)
+        {
+            return fdb_transaction_get_range(m_Transaction,
+                                             FDB_KEYSEL_FIRST_GREATER_OR_EQUAL((uint8_t*)aFrom.data(), aFrom.size()),
+                                             FDB_KEYSEL_FIRST_GREATER_OR_EQUAL((uint8_t*)aTo.data(), aTo.size()),
+                                             aLimit, 0 /* target_bytes */, FDB_STREAMING_MODE_LARGE,
+                                             0 /* iteration */, aSnapshot, false /* reverse */
+            );
+        }
+
         void Set(std::string_view aKey, std::string_view aValue)
         {
             fdb_transaction_set(m_Transaction, (uint8_t*)aKey.data(), aKey.size(), (uint8_t*)aValue.data(), aValue.size());
@@ -209,6 +237,11 @@ namespace FDB {
         void Erase(std::string_view aKey)
         {
             fdb_transaction_clear(m_Transaction, (uint8_t*)aKey.data(), aKey.size());
+        }
+
+        void EraseRange(std::string_view aFrom, std::string aTo)
+        {
+            fdb_transaction_clear_range(m_Transaction, (uint8_t*)aFrom.data(), aFrom.size(), (uint8_t*)aTo.data(), aTo.size());
         }
 
         void Commit()
