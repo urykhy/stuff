@@ -39,16 +39,13 @@ static void BM_GetSet(benchmark::State& state)
         co_await sRedis.Get(sKey);
     };
 
-    auto sInit = [&]() -> boost::asio::awaitable<void> { co_return; };
-    auto sFini = [&]() -> boost::asio::awaitable<void> { co_return; };
-
     const Benchmark::GetSetConfig sBenchConfig{
         .COUNT         = 20,   // num of coroutines
         .MAX_READ_RPS  = 1000, // rps per coro
         .MAX_WRITE_RPS = 1000, // rps per coro
     };
 
-    Benchmark::GetSet(state, sBenchConfig, sInit, sReadOp, sWriteOp, sFini);
+    Benchmark::GetSet(state, sBenchConfig, sReadOp, sWriteOp);
 }
 BENCHMARK(BM_GetSet)->UseRealTime()->Unit(benchmark::kMillisecond);
 

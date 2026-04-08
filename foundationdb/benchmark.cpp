@@ -3,7 +3,6 @@
 #include <chrono>
 
 #include "Client.hpp"
-#include "Overlap.hpp"
 
 #include <parser/Atoi.hpp>
 #include <unsorted/Benchmark.hpp>
@@ -93,10 +92,8 @@ BENCHMARK(BM_Set)->UseRealTime()->Arg(1)->Arg(100)->Arg(500)->Unit(benchmark::kM
 
 static void BM_GetSet(benchmark::State& state)
 {
-    const bool   sOverlapMode = state.range(0);
-    const bool   sGRV         = state.range(1);
-    FDB::Client  sClient(sGRV);
-    FDB::Overlap sOverlap(sClient);
+    const bool  sGRV = state.range(0);
+    FDB::Client sClient(sGRV);
 
     constexpr int     PADDING_LENGTH = 1500;
     const std::string sPadding(PADDING_LENGTH, 'x');
@@ -105,12 +102,7 @@ static void BM_GetSet(benchmark::State& state)
     auto sReadOp = [&]() -> boost::asio::awaitable<void> {
         const std::string sKey = "tmp-" + std::to_string(Util::randomInt(KEYS_COUNT));
         FDB::Transaction  sTxn(sClient);
-        if (sOverlapMode) {
-            if (auto sVersion = sOverlap.GetVersionTimestamp(); sVersion > 0) {
-                sTxn.SetVersionTimestamp(sVersion);
-            }
-        }
-        auto sFuture = sTxn.Get(sKey);
+        auto              sFuture = sTxn.Get(sKey);
         co_await sFuture.CoWait();
         sFuture.Get();
     };
@@ -118,14 +110,8 @@ static void BM_GetSet(benchmark::State& state)
     auto sWriteOp = [&]() -> boost::asio::awaitable<void> {
         const std::string sKey = "tmp-" + std::to_string(Util::randomInt(KEYS_COUNT));
         FDB::Transaction  sTxn(sClient);
-
-        if (sOverlapMode) {
-            if (auto sVersion = sOverlap.GetVersionTimestamp(); sVersion > 0) {
-                sTxn.SetVersionTimestamp(sVersion);
-            }
-        }
-        auto        sFuture = sTxn.Get(sKey, true /* snapshot read */); // avoid transaction conflicts
-        std::string sVal;
+        auto              sFuture = sTxn.Get(sKey, true /* snapshot read */); // avoid transaction conflicts
+        std::string       sVal;
         co_await sFuture.CoWait();
         auto sResult = sFuture.Get();
         if (sResult == std::nullopt) {
@@ -141,28 +127,15 @@ static void BM_GetSet(benchmark::State& state)
         co_await sTxn.CoCommit();
     };
 
-    auto sInit = [&]() -> boost::asio::awaitable<void> {
-        if (sOverlapMode) {
-            co_await sOverlap.Start();
-        }
-    };
-
-    auto sFini = [&]() -> boost::asio::awaitable<void> {
-        if (sOverlapMode) {
-            sOverlap.Stop();
-        }
-        co_return;
-    };
-
     const Benchmark::GetSetConfig sBenchConfig{
-        .COUNT         = 20,   // num of coroutines
+        .COUNT         = 50,   // num of coroutines
         .MAX_READ_RPS  = 1000, // rps per coro
         .MAX_WRITE_RPS = 1000, // rps per coro
     };
 
-    Benchmark::GetSet(state, sBenchConfig, sInit, sReadOp, sWriteOp, sFini);
+    Benchmark::GetSet(state, sBenchConfig, sReadOp, sWriteOp);
 }
-BENCHMARK(BM_GetSet)->UseRealTime()->Args({0, 0})->Args({0, 1})->Args({1, 0})->Unit(benchmark::kMillisecond);
+BENCHMARK(BM_GetSet)->UseRealTime()->Args({0})->Args({1})->Unit(benchmark::kMillisecond);
 
 static void BM_MultiSet(benchmark::State& state)
 {

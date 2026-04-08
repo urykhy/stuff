@@ -6,7 +6,6 @@
 #include <boost/asio/use_future.hpp>
 
 #include "Client.hpp"
-#include "Overlap.hpp"
 
 using namespace std::chrono_literals;
 
@@ -104,38 +103,6 @@ BOOST_AUTO_TEST_CASE(basic)
             BOOST_CHECK(sFuture.Get() == std::nullopt);
         }
     }
-}
-
-BOOST_AUTO_TEST_CASE(overlap)
-{
-    boost::asio::io_service sAsio;
-    FDB::Client             sClient;
-
-    auto sFuture = boost::asio::co_spawn(
-        sAsio,
-        [&]() mutable -> boost::asio::awaitable<void> {
-            FDB::Overlap sOverlap(sClient);
-            co_await sOverlap.Start();
-            for (int i = 0; i < 10; i++) {
-                FDB::Transaction sTxn(sClient);
-                if (auto sVersion = sOverlap.GetVersionTimestamp(); sVersion > 0) {
-                    BOOST_TEST_MESSAGE("use version: " << sVersion);
-                    sTxn.SetVersionTimestamp(sVersion);
-                }
-
-                auto sFuture = sTxn.Get("foo1");
-                sFuture.Wait();
-                BOOST_TEST_MESSAGE(*sFuture.Get());
-
-                boost::asio::steady_timer sTimer(co_await boost::asio::this_coro::executor);
-                sTimer.expires_from_now(std::chrono::seconds(1));
-                co_await sTimer.async_wait(boost::asio::use_awaitable);
-            }
-            sOverlap.Stop();
-        },
-        boost::asio::use_future);
-    sAsio.run_for(15s);
-    sFuture.get();
 }
 
 BOOST_AUTO_TEST_CASE(async)

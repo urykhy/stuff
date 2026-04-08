@@ -124,8 +124,8 @@ namespace Benchmark {
         unsigned MAX_WRITE_RPS = 1000; // rps per coro
     };
 
-    template <class I, class R, class W, class F>
-    inline void GetSet(benchmark::State& state, const GetSetConfig& aConfig, I aInit, R aReadOp, W aWriteOp, F aFini)
+    template <class R, class W>
+    inline void GetSet(benchmark::State& state, const GetSetConfig& aConfig, R aReadOp, W aWriteOp)
     {
         using namespace std::chrono_literals;
 
@@ -134,13 +134,6 @@ namespace Benchmark {
         unsigned                sReadCount = 0;
         unsigned                sReadError = 0;
         Prometheus::Histogramm  sReadLatency;
-
-        // INIT
-        boost::asio::co_spawn(
-            sAsio,
-            [&]() -> boost::asio::awaitable<void> { co_await aInit(); },
-            boost::asio::detached);
-        sAsio.run_one();
 
         for (unsigned i = 0; i < aConfig.COUNT; i++) {
             boost::asio::co_spawn(
@@ -197,7 +190,6 @@ namespace Benchmark {
                     co_await sTimer.async_wait(boost::asio::use_awaitable);
                 }
                 sExit = true;
-                co_await aFini();
             },
             boost::asio::detached);
 
