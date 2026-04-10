@@ -5,8 +5,9 @@ boost     = dependency('boost', modules : ['unit_test_framework', 'system', 'cor
 threads   = dependency('threads')
 benchmark = dependency('benchmark', required : true)
 fmt       = dependency('fmt')
+log4cxx  = dependency('liblog4cxx')
 
-a = executable('a.out', 'test.cpp', dependencies : [boost, threads, fmt], include_directories : includes)
+a = executable('a.out', 'test.cpp', dependencies : [boost, threads, fmt, log4cxx], include_directories : includes)
 test('basic', a, args : ['-l', 'all'])
 
 b  = executable('b.out',  'benchmark.cpp',  dependencies : [boost, threads, benchmark], include_directories : includes)

@@ -9,7 +9,8 @@
 #include <future>
 #include <iostream>
 
-#include <boost/asio/coroutine.hpp> // for pipeline::task
+#include <boost/asio/coroutine.hpp>  // for pipeline::task
+#include <boost/asio/use_future.hpp> // for WithAsio fixture
 
 // for boost_cpp20 test
 #include <boost/asio/co_spawn.hpp>
@@ -48,6 +49,22 @@ auto sTimestamp = []() {
     const auto sSince = sNow.time_since_epoch();
     const auto sUs    = std::chrono::duration_cast<std::chrono::microseconds>(sSince).count() % 1'000'000;
     return fmt::format("{:%Y-%m-%d %X}.{:06d}", sNow, sUs);
+};
+
+struct WithAsio
+{
+    Threads::Asio  asio;
+    Threads::Group tg;
+    WithAsio()
+    {
+        asio.start(tg);
+    }
+
+    template <class F>
+    void run(F f)
+    {
+        co_spawn(asio.service(), f, boost::asio::use_future).get();
+    }
 };
 
 BOOST_AUTO_TEST_SUITE(pipeline)
@@ -327,6 +344,7 @@ BOOST_AUTO_TEST_CASE(basic)
 using boost::asio::awaitable;
 using boost::asio::co_spawn;
 using boost::asio::detached;
+using boost::asio::steady_timer;
 
 awaitable<void> cpp20_step2()
 {
@@ -656,6 +674,31 @@ BOOST_AUTO_TEST_CASE(early_refresh)
     BOOST_CHECK_LE(sSumTime, 2);
 }
 BOOST_AUTO_TEST_SUITE_END() // cache
+BOOST_FIXTURE_TEST_CASE(cron, WithAsio)
+{
+    int  sCounter = 0;
+    auto sHandler = [&](int64_t now) -> awaitable<void> {
+        INFO("handler called");
+        sCounter++;
+        co_return;
+    };
+    bool sFiniCall = false;
+    auto sFini     = [&]() -> awaitable<void> {
+        INFO("fini called");
+        sFiniCall = true;
+        co_return;
+    };
+    auto cron = std::make_shared<Threads::Coro::Cron>("test", 100 /* wakeup every 100ms */, sHandler, sFini);
+
+    run([&]() -> awaitable<void> {
+        co_await cron->Start();
+        co_await Threads::Coro::Sleep(400 /* ms */);
+        cron->Stop();
+        co_await Threads::Coro::Sleep(100 /* ms */);
+    });
+    BOOST_CHECK_GE(sCounter, 2);
+    BOOST_CHECK(sFiniCall);
+}
 BOOST_AUTO_TEST_SUITE_END() // Coro
 
 BOOST_AUTO_TEST_SUITE(Async)

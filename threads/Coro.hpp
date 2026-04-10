@@ -14,8 +14,15 @@
 #include <boost/asio/detached.hpp>
 #include <boost/asio/experimental/parallel_group.hpp>
 #include <boost/asio/io_service.hpp>
+#include <boost/asio/steady_timer.hpp>
+#include <boost/asio/this_coro.hpp>
+
+#include <time/Meter.hpp>
+#include <unsorted/Log4cxx.hpp>
+#include <unsorted/Random.hpp>
 
 namespace Threads::Coro {
+    inline log4cxx::LoggerPtr sLogger = Logger::Get("coro");
 
     // copy paste from https://www.scs.stanford.edu/~dm/blog/c++-coroutines.html
     struct Return
@@ -167,7 +174,7 @@ namespace Threads::Coro {
 
         boost::asio::awaitable<Value> Wait(const Key& aKey)
         {
-            auto sPtr      = co_await Schedule(aKey);
+            auto sPtr = co_await Schedule(aKey);
 
             // check if value already available
             if (sPtr->value) {
@@ -294,5 +301,70 @@ namespace Threads::Coro {
         co_await sWaiter.wait();
         co_return sResult;
     }
+
+    inline boost::asio::awaitable<void> Sleep(uint64_t aDelayMs)
+    {
+        co_await boost::asio::steady_timer(co_await boost::asio::this_coro::executor, std::chrono::steady_clock::now() + std::chrono::milliseconds(aDelayMs)).async_wait(boost::asio::use_awaitable);
+    }
+
+    class Cron : public std::enable_shared_from_this<Cron>
+    {
+    public:
+        using Handler = std::function<boost::asio::awaitable<void>(int64_t)>;
+        using Fini    = std::function<boost::asio::awaitable<void>()>;
+
+    private:
+        const std::string m_Name;
+        const uint64_t    m_PeriodMs;
+        Handler           m_Handler;
+        Fini              m_Fini;
+        std::atomic<bool> m_Running;
+
+    public:
+        Cron(const std::string& aName, uint64_t aPeriodMs, Handler aHandler, Fini aFini = {})
+        : m_Name(aName)
+        , m_PeriodMs(aPeriodMs)
+        , m_Handler(aHandler)
+        , m_Fini(aFini)
+        {
+        }
+
+        boost::asio::awaitable<void> Start()
+        {
+            m_Running = true;
+            boost::asio::co_spawn(
+                co_await boost::asio::this_coro::executor,
+                [this, self = shared_from_this()]() -> boost::asio::awaitable<void> {
+                    INFO("starting cron '" << m_Name << "' with period " << m_PeriodMs << " ms");
+                    boost::asio::steady_timer sTimer(co_await boost::asio::this_coro::executor);
+                    uint64_t                  sNext = Time::get_time().to_ms() + Util::randomInt(m_PeriodMs); // slow start
+                    while (m_Running) {
+                        uint64_t sNow = Time::get_time().to_ms();
+                        if (sNext < sNow) {
+                            sNext = sNow + m_PeriodMs / 2 + Util::randomInt(m_PeriodMs);
+                            DEBUG("wakeup cron '" << m_Name << "', next call in " << sNext - sNow << " ms");
+                            try {
+                                co_await m_Handler(sNow);
+                            } catch (const std::exception& e) {
+                                ERROR("cron '" << m_Name << "' handler error: " << e.what());
+                            }
+                        }
+                        sTimer.expires_after(std::chrono::milliseconds(std::min(uint64_t(100), sNext - sNow)));
+                        co_await sTimer.async_wait(boost::asio::use_awaitable);
+                    }
+                    INFO("stopping cron '" << m_Name << "'");
+                    try {
+                        co_await m_Fini();
+                    } catch (const std::exception& e) {
+                        ERROR("cron '" << m_Name << "' cleanup failed: " << e.what());
+                    }
+                },
+                boost::asio::detached);
+        }
+        void Stop()
+        {
+            m_Running = false;
+        }
+    };
 
 } // namespace Threads::Coro
