@@ -5,6 +5,7 @@
 #include <boost/noncopyable.hpp>
 
 #include <format/Hex.hpp>
+#include <format/List.hpp>
 #include <mpl/Mpl.hpp>
 #include <parser/Hex.hpp>
 #include <parser/Parser.hpp>
@@ -104,7 +105,7 @@ namespace Jaeger {
     {
     public:
         virtual void send(trace::ScopeSpans& aMsg) noexcept = 0;
-        virtual ~QueueFace(){};
+        virtual ~QueueFace() {};
     };
     using QueuePtr = std::shared_ptr<QueueFace>;
 
@@ -133,12 +134,29 @@ namespace Jaeger {
             return m_Spans.add_spans();
         }
 
+        template <class T>
+        void iterate(T t)
+        {
+            std::unique_lock sLock(m_Mutex);
+            for (auto& x : m_Spans.spans()) {
+                t(x);
+            }
+        }
+
         ~Store()
         {
             m_Queue->send(m_Spans);
         }
     };
     using StorePtr = std::shared_ptr<Store>;
+
+    struct LogEntry
+    {
+        const trace::Span*       m_Span  = nullptr;
+        const trace::Span_Event* m_Event = nullptr;
+    };
+    using LogList  = std::vector<LogEntry>;
+    using TextList = std::vector<std::string>;
 
     class Span : boost::noncopyable
     {
@@ -253,6 +271,64 @@ namespace Jaeger {
         std::string traceparent() const
         {
             return Params{m_Store->params().traceIdHigh, m_Store->params().traceIdLow, m_SpanId}.traceparent();
+        }
+
+        TextList export_log() const
+        {
+            TextList text;
+            LogList  log;
+            m_Store->iterate([&](const trace::Span& aSpan) {
+                if (aSpan.events_size() > 0) {
+                    for (auto& event : aSpan.events()) {
+                        log.push_back(LogEntry{&aSpan, &event});
+                    }
+                } else {
+                    log.push_back(LogEntry{&aSpan, nullptr});
+                }
+            });
+            auto timestamp = [](auto& a) {
+                if (a.m_Event == nullptr) {
+                    return a.m_Span->start_time_unix_nano();
+                } else {
+                    return a.m_Event->time_unix_nano();
+                }
+            };
+            auto span_name = [](auto& a) -> std::string {
+                if (a->has_status()) {
+                    return a->name() + " (status: " + a->status().message() + ")";
+                } else {
+                    return a->name();
+                }
+            };
+            std::sort(log.begin(), log.end(), [&](auto a, auto b) {
+                return timestamp(a) < timestamp(b);
+            });
+            text.reserve(log.size());
+            for (const auto& x : log) {
+                const std::string name = span_name(x.m_Span);
+                if (x.m_Event == nullptr) {
+                    text.push_back(name);
+                } else {
+                    std::stringstream sTmp;
+                    Format::List(sTmp, x.m_Event->attributes(), [](auto a) {
+                        std::stringstream sTmp;
+                        sTmp << a.key() << ": ";
+                        if (a.value().has_string_value()) {
+                            sTmp << a.value().string_value();
+                        } else if (a.value().has_int_value()) {
+                            sTmp << a.value().int_value();
+                        } else if (a.value().has_double_value()) {
+                            sTmp << a.value().double_value();
+                        } else {
+                            sTmp << "not-supported-value-type";
+                        }
+                        return sTmp.str();
+                    });
+                    std::string sStr = name + ": " + x.m_Event->name() + (x.m_Event->attributes_size() > 0 ? (" " + sTmp.str()) : "");
+                    text.push_back(std::move(sStr));
+                }
+            }
+            return text;
         }
     };
     using SpanPtr = std::shared_ptr<Span>;

@@ -85,6 +85,24 @@ BOOST_AUTO_TEST_CASE(simple)
             auto sM = start(sTrace, "commit");
             std::this_thread::sleep_for(10us);
         }
+        {
+            // get work log
+            const auto sLog = sTrace->export_log();
+            for (const auto& x : sLog) {
+                BOOST_TEST_MESSAGE(x);
+            }
+            const std::vector<std::string> sExpected{
+                {"root"},
+                {"initialize"},
+                {"download"},
+                {"process"},
+                {"fetch"},
+                {"merge: merge1"},
+                {"merge: merge2 factor: 42.2, duplicates: 50, unique: 10, truncated: 4"},
+                {"write (status: error)"},
+                {"commit"}};
+            BOOST_CHECK_EQUAL_COLLECTIONS(sExpected.begin(), sExpected.end(), sLog.begin(), sLog.end());
+        }
     }
     waitTrace(sTraceId);
 }
