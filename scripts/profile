@@ -780,6 +780,17 @@ function ffmpeg-recode-video
     ffmpeg -i "$1" -y -c:v h264 -preset:v faster -vf scale=1280x720 -c:a libmp3lame -q:a 5 "$filename.recode.mkv"
 }
 
+function ffmpeg-to-audio
+{
+    if [ $# -ne 1 ]; then
+        echo "usage: ffmpeg-to-audio <filename>"
+        return
+    fi
+    filename="${1%.*}"
+    extension="${1##*.}"
+    ffmpeg -i "$1" -y -vn -q:a 5 -acodec libmp3lame "$filename.mp3"
+}
+
 function allure-test
 {
     if [ $# -eq 0 ]; then
