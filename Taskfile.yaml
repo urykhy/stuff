@@ -73,6 +73,7 @@ tasks:
             - apt install
               meson
               mypy
+              python3-boto3
               python3-cherrypy3
               python3-clang-15
               python3-confluent-kafka
