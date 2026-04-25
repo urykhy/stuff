@@ -1,0 +1,4 @@
+Name: mysql-connector
+Description: C++ interface for communicating with MySQL servers
+Version: 9.7.0
+Libs: -lmysqlcppconnx

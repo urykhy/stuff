@@ -1,6 +1,8 @@
 #define BOOST_TEST_MODULE Suites
 #include <boost/test/unit_test.hpp>
 
+#include <mysqlx/xdevapi.h> // for x_protocol
+
 #include <cassert>
 #include <iostream>
 
@@ -318,6 +320,33 @@ BOOST_AUTO_TEST_CASE(cacheable)
     BOOST_CHECK_EQUAL(0, sMissing.size());
     BOOST_CHECK_EQUAL(9, sCached.size());
     BOOST_CHECK_EQUAL("1303398", sCached.find("2002-07-02")->second);
+}
+BOOST_AUTO_TEST_CASE(x_protocol)
+{
+    using namespace mysqlx;
+    Session sSession(fmt::format("mysqlx://{}:{}@{}:{}",
+                                 Util::getEnv("MYSQL_USER"),
+                                 Util::getEnv("MYSQL_PASS"),
+                                 Util::getEnv("MYSQL_HOST"),
+                                 33060));
+    BOOST_TEST_MESSAGE("connected");
+    auto sCollection = sSession.createSchema("test", true).createCollection("c1", true);
+    sCollection.remove("true").execute();
+    try {
+        sCollection.dropIndex("by_name");
+    } catch (...) {
+    }
+    sCollection.createIndex("by_name", R"_({ "type":"INDEX", "fields": [{"field":"$.name","type":"TEXT(10)"}] })_");
+    BOOST_TEST_MESSAGE("about to add/find");
+    sCollection.add(R"({"name":"foo", "value":"bar"})").execute();
+    Time::Meter sMeter;
+    auto        sResponse = sCollection.find("name = 'foo'").execute();
+    BOOST_TEST_MESSAGE("elapsed " << sMeter.get().to_us() << " us");
+    BOOST_CHECK_EQUAL(sResponse.count(), 1);
+    for (auto x : sResponse) {
+        BOOST_TEST_MESSAGE("name: " << x["name"] << " and value: " << x["value"]);
+        BOOST_CHECK_EQUAL(x["name"].get<std::string>(), "foo");
+    }
 }
 BOOST_AUTO_TEST_SUITE_END()
 

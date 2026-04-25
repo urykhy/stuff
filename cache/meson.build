@@ -5,8 +5,9 @@ boost     = dependency('boost', modules : ['unit_test_framework', 'system'])
 xxh       = dependency('libxxhash')
 redispp   = dependency('redis-plus-plus')
 benchmark = dependency('benchmark', required : true)
+log4cxx   = dependency('liblog4cxx')
 
-a  = executable('a.out', 'test.cpp', dependencies : [boost, xxh, redispp], include_directories: [includes])
+a  = executable('a.out', 'test.cpp', dependencies : [boost, xxh, redispp, log4cxx], include_directories: [includes])
 test('basic', a, args : ['-l', 'all'])
 
 hopscotch = dependency('hopscotch', required: false)
@@ -14,6 +15,6 @@ b  = executable('b.out', 'bench.cpp', dependencies : [boost, xxh, hopscotch], in
 test('s3 arc', b, args : ['-l', 'all'])
 
 # meson test --benchmark -v
-rb  = executable('rb.out',  'redis-bench.cpp', dependencies : [boost, xxh, redispp, benchmark], include_directories : includes)
+rb  = executable('rb.out',  'redis-bench.cpp', dependencies : [boost, xxh, redispp, benchmark, log4cxx], include_directories : includes)
 benchmark('get', rb, timeout : 300,
           args : ['--benchmark_min_time=10','--benchmark_counters_tabular=1'])

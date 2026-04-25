@@ -1,0 +1,46 @@
+version: '3'
+
+vars:
+  version: 9.7.0
+  filename: "{{$.version}}.tar.gz"
+  url: https://github.com/mysql/mysql-connector-cpp/archive/refs/tags/{{$.filename}}
+  dir: mysql-connector-cpp-{{$.version}}
+  install: mysql-connector-install
+
+tasks:
+  connector:download:
+    desc: download connector
+    dir: /tmp
+    cmds:
+      - |
+        curl -O -L {{$.url}}
+        tar -zxf {{$.filename}}
+    status:
+      - test -d {{$.dir}}
+
+  connector:build:
+    desc: build connector
+    dir: /tmp
+    cmds:
+      - task: connector:download
+      - |
+        cd {{$.dir}}
+        cmake -DCMAKE_INSTALL_PREFIX=/tmp/{{$.install}} -DWITH_SSL=system -DWITH_LZ4=system -DWITH_PROTOBUF=system -DWITH_DOC=false -DCMAKE_BUILD_TYPE=Release
+        cmake --build . --target install/strip --config Release -j6
+    status:
+      - test -d {{$.install}}
+
+  connector:package:
+    desc: package connector
+    dir: /tmp
+    cmds:
+      - task: connector:build
+      - |
+        readarray -t D < <(dpkg -S `ldd {{$.install}}/lib64/lib*.so \
+            | grep '=> /' | awk '{print $3}' \
+            | while read x; do echo /usr$x $x; done` 2>/dev/null | awk -F: '{print $1}' | sort -u \
+            | while read x; do echo "--depends"; echo "$x (>= "`dpkg-query -f '${Version}' --show $x | sed -ne 's/\([^+-]*\).*/\1/p'`")"; done)
+        echo "deps:" "${D[@]}"
+        readarray -t L < <(for x in `find {{$.install}}/lib64/ -type f,l -name "lib*.so*"`; do echo "${x#{{$.install}}/}=/usr/lib/x86_64-linux-gnu${x#{{$.install}}/lib64}"; done)
+        echo "libs:" "${L[@]}"
+        fpm -f -C {{$.install}} -s dir -t deb --version {{$.version}} --name libmysql-connector-cpp --description "C++ interface for communicating with MySQL servers" "${D[@]}" include=/usr/ "${L[@]}"
