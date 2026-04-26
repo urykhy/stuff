@@ -855,14 +855,23 @@ with open("benchmark.csv", "r") as f:
         v = row[1]
         y.append(float(v[:-1]) * suffixes[v[-1]] if v[-1] in suffixes else float(v))
 
+from math import log, floor
+def human_format(number):
+    units = ["", "K", "M", "G", "T", "P"]
+    k = 1000.0
+    magnitude = int(floor(log(number, k)))
+    return "%.1f%s" % (number / k**magnitude, units[magnitude])
+
+x = list(reversed(x))
+y = list(reversed(y))
 plt.figure(figsize=(12.8, 9.6))
-plt.bar(x, y, width = 0.72, label = x, color = TABLEAU_COLORS)
+plt.barh(x, width = y, label = x, color = TABLEAU_COLORS)
 plt.title(f"Benchmark {sys.argv[1]}, {yname}")
-plt.legend(x)
-plt.xticks(rotation=45)
+#plt.legend(x)
+#plt.xticks(rotation=45)
 plt.tight_layout()
 for i in range(len(x)):
-    plt.text(i, y[i] // 2, y[i], weight="bold", ha="center")
+    plt.text(y[i] // 2, i, human_format(y[i]), weight="bold", ha="center")
 plt.savefig(fname)
 print(f"* {fname} generated")
 # make allure

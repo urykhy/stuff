@@ -81,6 +81,7 @@ tasks:
               python3-grpc-tools
               python3-jinja2
               python3-lark
+              python3-matplotlib
               python3-pandas
               python3-plotly
               python3-psycopg2
