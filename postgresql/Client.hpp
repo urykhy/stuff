@@ -104,8 +104,7 @@ namespace PQ {
                     const auto sStatus = PQresultStatus(sRes.get());
                     if (sStatus == PGRES_COMMAND_OK) {
                         DEBUG("... query without response");
-                        sDone = true;
-                        break;
+                        continue;
                     }
                     if (sStatus != PGRES_TUPLES_OK and sStatus != PGRES_SINGLE_TUPLE) {
                         throw Error("unexpected PQresultStatus (" + std::to_string(sStatus) + ")");

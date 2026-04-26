@@ -1,11 +1,9 @@
-#include <benchmark/benchmark.h>
-
 #include <chrono>
 
 #include "Client.hpp"
 
+#include <benchmark/Benchmark.hpp>
 #include <parser/Atoi.hpp>
-#include <unsorted/Benchmark.hpp>
 #include <unsorted/Random.hpp>
 
 static void BM_Get(benchmark::State& state)
@@ -17,12 +15,12 @@ static void BM_Get(benchmark::State& state)
         state.range(0),
         [&]() -> boost::asio::awaitable<void> {
             FDB::Transaction sTxn(sClient);
-            sTxn.Set("foo", "bar");
+            sTxn.Set("get", "bar");
             co_await sTxn.CoCommit();
         },
         [&](auto) -> boost::asio::awaitable<void> {
             FDB::Transaction sTxn(sClient);
-            auto             sFuture = sTxn.Get("foo");
+            auto             sFuture = sTxn.Get("get");
             co_await sFuture.CoWait();
             benchmark::DoNotOptimize(sFuture.Get());
         },
@@ -40,7 +38,7 @@ static void BM_GetBy100(benchmark::State& state)
         [&]() -> boost::asio::awaitable<void> {
             FDB::Transaction sTxn(sClient);
             for (unsigned i = 0; i < COUNT; i++) {
-                sTxn.Set("foo-" + std::to_string(i), "bar");
+                sTxn.Set("get-by-100-" + std::to_string(i), "bar");
             }
             co_await sTxn.CoCommit();
         },
@@ -48,7 +46,7 @@ static void BM_GetBy100(benchmark::State& state)
             FDB::Transaction       sTxn(sClient);
             std::list<FDB::Future> sFuture;
             for (unsigned i = 0; i < COUNT; i++) {
-                sFuture.push_back(sTxn.Get("foo-" + std::to_string(i)));
+                sFuture.push_back(sTxn.Get("get-by-100-" + std::to_string(i)));
             }
             for (auto& x : sFuture) {
                 co_await x.CoWait();
@@ -67,12 +65,10 @@ static void BM_Set(benchmark::State& state)
         state,
         state.range(0),
         [&]() -> boost::asio::awaitable<void> {
-            FDB::Transaction sTxn(sClient);
-            sTxn.Set("foo", "bar");
-            co_await sTxn.CoCommit();
+            co_return;
         },
         [&](unsigned aSerial) -> boost::asio::awaitable<void> {
-            const std::string sKey = "tmp-" + std::to_string(aSerial);
+            const std::string sKey = "set-" + std::to_string(aSerial);
             FDB::Transaction  sTxn(sClient);
             auto              sFuture = sTxn.Get(sKey);
             co_await sFuture.CoWait();
@@ -90,53 +86,6 @@ static void BM_Set(benchmark::State& state)
 }
 BENCHMARK(BM_Set)->UseRealTime()->Arg(1)->Arg(100)->Arg(500)->Unit(benchmark::kMillisecond);
 
-static void BM_GetSet(benchmark::State& state)
-{
-    const bool  sGRV = state.range(0);
-    FDB::Client sClient(sGRV);
-
-    constexpr int     PADDING_LENGTH = 1500;
-    const std::string sPadding(PADDING_LENGTH, 'x');
-    constexpr int     KEYS_COUNT = 1000000;
-
-    auto sReadOp = [&]() -> boost::asio::awaitable<void> {
-        const std::string sKey = "tmp-" + std::to_string(Util::randomInt(KEYS_COUNT));
-        FDB::Transaction  sTxn(sClient);
-        auto              sFuture = sTxn.Get(sKey);
-        co_await sFuture.CoWait();
-        sFuture.Get();
-    };
-
-    auto sWriteOp = [&]() -> boost::asio::awaitable<void> {
-        const std::string sKey = "tmp-" + std::to_string(Util::randomInt(KEYS_COUNT));
-        FDB::Transaction  sTxn(sClient);
-        auto              sFuture = sTxn.Get(sKey, true /* snapshot read */); // avoid transaction conflicts
-        std::string       sVal;
-        co_await sFuture.CoWait();
-        auto sResult = sFuture.Get();
-        if (sResult == std::nullopt) {
-            sVal = "0";
-        } else {
-            std::string_view sTmp = *sResult;
-            if (sTmp.size() > PADDING_LENGTH) {
-                sTmp.remove_suffix(PADDING_LENGTH);
-            }
-            sVal = std::to_string(Parser::Atoi<unsigned>(sTmp) + 1);
-        }
-        sTxn.Set(sKey, sVal + sPadding);
-        co_await sTxn.CoCommit();
-    };
-
-    const Benchmark::GetSetConfig sBenchConfig{
-        .COUNT         = 50,   // num of coroutines
-        .MAX_READ_RPS  = 1000, // rps per coro
-        .MAX_WRITE_RPS = 1000, // rps per coro
-    };
-
-    Benchmark::GetSet(state, sBenchConfig, sReadOp, sWriteOp);
-}
-BENCHMARK(BM_GetSet)->UseRealTime()->Args({0})->Args({1})->Unit(benchmark::kMillisecond);
-
 static void BM_MultiSet(benchmark::State& state)
 {
     FDB::Client sClient;
@@ -145,23 +94,21 @@ static void BM_MultiSet(benchmark::State& state)
         state,
         state.range(0),
         [&]() -> boost::asio::awaitable<void> {
-            FDB::Transaction sTxn(sClient);
-            sTxn.Set("foo", "bar");
-            co_await sTxn.CoCommit();
+            co_return;
         },
         [&](unsigned aSerial) -> boost::asio::awaitable<void> {
             const int                KEY_PER_TRANSACTION = 10;
             std::vector<FDB::Future> sFuture;
             FDB::Transaction         sTxn(sClient);
             for (int i = 0; i < KEY_PER_TRANSACTION; i++) {
-                const std::string sKey = "tmp-" + std::to_string(aSerial) + "-" + std::to_string(i);
+                const std::string sKey = "multi-set-" + std::to_string(aSerial) + "-" + std::to_string(i);
                 sFuture.emplace_back(sTxn.Get(sKey));
             }
             for (int i = 0; i < KEY_PER_TRANSACTION; i++) {
                 co_await sFuture[i].CoWait();
             }
             for (int i = 0; i < KEY_PER_TRANSACTION; i++) {
-                const std::string sKey    = "tmp-" + std::to_string(aSerial) + "-" + std::to_string(i);
+                const std::string sKey    = "multi-set-" + std::to_string(aSerial) + "-" + std::to_string(i);
                 const auto        sResult = sFuture[i].Get();
                 std::string       sVal;
                 if (sResult == std::nullopt) {

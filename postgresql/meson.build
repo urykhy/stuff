@@ -11,11 +11,6 @@ benchmark = dependency('benchmark', required : true)
 a = executable('a.out', 'test.cpp', dependencies : [boost, threads, fmt, log4cxx, pq], include_directories : includes)
 test('basic', a, args : ['-l', 'all'])
 
-# meson test --benchmark -v
-b  = executable('b.out',  'benchmark.cpp', dependencies : [boost, threads, fmt, benchmark, log4cxx, pq], include_directories : includes)
-benchmark('get', b, timeout : 300, env : ['LOG4CXX='],
-          args : ['--benchmark_min_time=1','--benchmark_counters_tabular=1'])
-
 # need tool: https://github.com/golang-migrate/migrate
 # run via: ninja migrate
 migrate = find_program('migrate', required : true)

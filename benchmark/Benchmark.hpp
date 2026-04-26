@@ -4,6 +4,10 @@
 
 #include <chrono>
 
+#include <boost/asio/awaitable.hpp>
+#include <boost/asio/co_spawn.hpp>
+#include <boost/asio/detached.hpp>
+#include <boost/asio/io_service.hpp>
 #include <boost/asio/steady_timer.hpp>
 
 #include <prometheus/Histogramm.hpp>
