@@ -29,6 +29,7 @@ tasks:
         desc: install deps
         cmds:
             - apt install
+              gcovr
               libavro-dev
               libbenchmark-dev
               libcctz-dev
