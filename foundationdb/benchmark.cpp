@@ -8,7 +8,7 @@
 
 static void BM_Get(benchmark::State& state)
 {
-    FDB::Client sClient;
+    FDB::Client sClient(state.range(1) /* with GRV proxy */);
 
     Benchmark::Coro(
         state,
@@ -26,11 +26,11 @@ static void BM_Get(benchmark::State& state)
         },
         [&]() -> boost::asio::awaitable<void> { co_return; });
 }
-BENCHMARK(BM_Get)->UseRealTime()->Arg(1)->Arg(100)->Arg(500)->Unit(benchmark::kMillisecond);
+BENCHMARK(BM_Get)->UseRealTime()->ArgsProduct({{1, 100}, {0, 1}})->ArgNames({"coro", "grv"})->Unit(benchmark::kMillisecond);
 
 static void BM_GetBy100(benchmark::State& state)
 {
-    FDB::Client sClient;
+    FDB::Client sClient(true /* grv cache */);
     unsigned    COUNT = 100;
     Benchmark::Coro(
         state,
@@ -55,7 +55,7 @@ static void BM_GetBy100(benchmark::State& state)
         },
         [&]() -> boost::asio::awaitable<void> { co_return; });
 }
-BENCHMARK(BM_GetBy100)->UseRealTime()->Arg(1)->Arg(100)->Unit(benchmark::kMillisecond);
+BENCHMARK(BM_GetBy100)->UseRealTime()->Arg(1)->Arg(100)->ArgName("coro")->Unit(benchmark::kMillisecond);
 
 static void BM_Set(benchmark::State& state)
 {
@@ -84,7 +84,7 @@ static void BM_Set(benchmark::State& state)
         },
         [&]() -> boost::asio::awaitable<void> { co_return; });
 }
-BENCHMARK(BM_Set)->UseRealTime()->Arg(1)->Arg(100)->Arg(500)->Unit(benchmark::kMillisecond);
+BENCHMARK(BM_Set)->UseRealTime()->Arg(1)->Arg(100)->ArgName("coro")->Unit(benchmark::kMillisecond);
 
 static void BM_MultiSet(benchmark::State& state)
 {
@@ -122,6 +122,6 @@ static void BM_MultiSet(benchmark::State& state)
         },
         [&]() -> boost::asio::awaitable<void> { co_return; });
 }
-BENCHMARK(BM_MultiSet)->UseRealTime()->Arg(1)->Arg(100)->Arg(500)->Unit(benchmark::kMillisecond);
+BENCHMARK(BM_MultiSet)->UseRealTime()->Arg(1)->Arg(100)->ArgName("coro")->Unit(benchmark::kMillisecond);
 
 BENCHMARK_MAIN();
