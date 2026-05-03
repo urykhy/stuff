@@ -34,49 +34,83 @@ namespace FDB {
         int Code() const { return m_Error; }
     };
 
-    namespace {
-        static void Check(fdb_error_t aError, const std::string& aMsg)
-        {
-            if (aError) {
-                throw Error(aMsg, aError);
-            }
+    static void Check(fdb_error_t aError, const std::string& aMsg)
+    {
+        if (aError) {
+            throw Error(aMsg, aError);
         }
-
-        class Guard
-        {
-            std::thread m_Thread;
-
-        public:
-            Guard()
-            {
-                Check(fdb_select_api_version(FDB_API_VERSION), "select api version");
-                Check(fdb_setup_network(), "setup network");
-
-                m_Thread = std::thread([]() {
-                    prctl(PR_SET_NAME, "fdb-network");
-                    if (auto sError = fdb_run_network(); sError) {
-                        std::cerr << "FDB::run network error: " << fdb_get_error(sError) << std::endl;
-                    }
-                });
-            }
-
-            ~Guard()
-            {
-                if (auto sError = fdb_stop_network(); sError) {
-                    std::cerr << "FDB::stop network error: " << fdb_get_error(sError) << std::endl;
-                }
-                if (m_Thread.joinable()) {
-                    m_Thread.join();
-                }
-            }
-        };
-    } // namespace
-
-    static inline Guard sGuard;
+    }
 
     class Client;
     class Transaction;
     class Future;
+
+    class Guard
+    {
+        std::thread m_Thread;
+
+        friend class Future;
+        // api for Future, to store waitings
+    protected:
+        static std::mutex                                                            m_Mutex;
+        static std::unordered_map<uintptr_t, std::shared_ptr<Threads::Coro::Waiter>> m_FutureWaits;
+
+        static std::shared_ptr<Threads::Coro::Waiter> CreateWaiter()
+        {
+            std::unique_lock sLock(m_Mutex);
+            auto             sWaiter                = std::make_shared<Threads::Coro::Waiter>();
+            m_FutureWaits[(uintptr_t)sWaiter.get()] = sWaiter;
+            return sWaiter;
+        }
+
+        static void EraseWaiter(void* aPtr)
+        {
+            std::unique_lock sLock(m_Mutex);
+            auto             sIt = m_FutureWaits.find((uintptr_t)aPtr);
+            if (sIt != m_FutureWaits.end()) {
+                m_FutureWaits.erase(sIt);
+            }
+        }
+
+        static void Notify(void* aPtr)
+        {
+            std::unique_lock sLock(m_Mutex);
+            auto             sIt = m_FutureWaits.find((uintptr_t)aPtr);
+            if (sIt != m_FutureWaits.end()) {
+                sIt->second->notify();
+                m_FutureWaits.erase(sIt);
+            }
+        }
+
+    public:
+        Guard()
+        {
+            Check(fdb_select_api_version(FDB_API_VERSION), "select api version");
+            Check(fdb_setup_network(), "setup network");
+
+            m_Thread = std::thread([]() {
+                prctl(PR_SET_NAME, "fdb-network");
+                if (auto sError = fdb_run_network(); sError) {
+                    std::cerr << "FDB::run network error: " << fdb_get_error(sError) << std::endl;
+                }
+            });
+        }
+
+        ~Guard()
+        {
+            if (auto sError = fdb_stop_network(); sError) {
+                std::cerr << "FDB::stop network error: " << fdb_get_error(sError) << std::endl;
+            }
+            if (m_Thread.joinable()) {
+                m_Thread.join();
+            }
+        }
+    };
+
+    // must be defined before sGuard, so they created before one.
+    inline std::mutex                                                            Guard::m_Mutex;
+    inline std::unordered_map<uintptr_t, std::shared_ptr<Threads::Coro::Waiter>> Guard::m_FutureWaits;
+    static inline Guard                                                          sGuard;
 
     class Client : public boost::noncopyable
     {
@@ -99,7 +133,7 @@ namespace FDB {
 
         static void callback(FDBFuture*, void* aWaiter)
         {
-            ((Threads::Coro::Waiter*)aWaiter)->notify();
+            Guard::Notify(aWaiter);
         }
 
     public:
@@ -135,9 +169,14 @@ namespace FDB {
 
         boost::asio::awaitable<void> CoWait()
         {
-            Threads::Coro::Waiter sWaiter;
-            Check(fdb_future_set_callback(m_Future, &Future::callback, &sWaiter), "future set callback");
-            co_await sWaiter.wait();
+            auto sWaiter = Guard::CreateWaiter();
+            try {
+                Check(fdb_future_set_callback(m_Future, &Future::callback, sWaiter.get()), "future set callback");
+            } catch (...) {
+                Guard::EraseWaiter(sWaiter.get());
+                throw;
+            }
+            co_await sWaiter->wait();
             Check(fdb_future_get_error(m_Future), "future get error");
         }
 

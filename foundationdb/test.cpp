@@ -3,6 +3,7 @@
 
 #include <chrono>
 
+#include <boost/asio/experimental/awaitable_operators.hpp>
 #include <boost/asio/use_future.hpp>
 
 #include "Client.hpp"
@@ -128,12 +129,23 @@ BOOST_AUTO_TEST_CASE(async)
                 BOOST_CHECK_NO_THROW(co_await sTxn.CoCommit());
             }
 
+            // set + timeout
+            {
+                using namespace boost::asio::experimental::awaitable_operators;
+                FDB::Transaction sTxn(sClient);
+                sTxn.Set("foo", "bar2");
+                boost::asio::steady_timer sTimer(co_await boost::asio::this_coro::executor);
+                sTimer.expires_from_now(10us);
+                const auto sResult = co_await (sTxn.CoCommit() || sTimer.async_wait(boost::asio::use_awaitable));
+                BOOST_CHECK_EQUAL(sResult.index(), 1); // ensure we got timeout
+            }
+
             // get existing value
             {
                 FDB::Transaction sTxn(sClient);
                 auto             sFuture = sTxn.Get("foo");
                 co_await sFuture.CoWait();
-                BOOST_CHECK(*sFuture.Get() == "bar");
+                BOOST_CHECK(*sFuture.Get() == "bar2");
             }
 
             // clear
