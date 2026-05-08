@@ -27,7 +27,7 @@ BOOST_AUTO_TEST_CASE(simple)
             break;
         }
     }
-    //BOOST_CHECK_EQUAL(sList.truncated, false);
+    // BOOST_CHECK_EQUAL(sList.truncated, false);
     BOOST_CHECK_EQUAL(sFound, true);
 
     auto sHead = sAPI.HEAD("some_file");
@@ -45,43 +45,24 @@ BOOST_AUTO_TEST_CASE(simple)
     BOOST_CHECK_EQUAL(sResult, sContent);
     sAPI.DELETE("some_file");
 }
+
 BOOST_AUTO_TEST_CASE(multipart)
 {
-    S3::Params sParams;
-    S3::API    sAPI(sParams);
+    S3::Params          sParams;
+    S3::API             sAPI(sParams);
+    S3::MultipartUpload sUpload(sAPI, "some_multipart");
 
-    // Each part must be at least 5 MB in size
-    auto sGenerator = [serial = 0]() mutable -> std::string {
-        serial++;
-        switch (serial) {
-        case 1: return std::string(5 * 1024 * 1024, 'a');
-        case 2: return std::string(5 * 1024 * 1024, 'b');
-        case 3: return std::string(5 * 1024 * 1024, 'c');
-        case 4: return std::string(1 * 1024 * 1024, 'd');
-        default: return "";
-        };
-    };
-
-    // Cals hash...
-    const auto sHash = [sGenerator]() mutable {
-        std::string sBuf;
-        while (true) {
-            auto sTmp = sGenerator();
-            if (sTmp.empty())
-                break;
-            sBuf += sTmp;
-        }
-        return SSLxx::DigestStr(EVP_sha256(), sBuf);
-    }();
-
-    sAPI.multipartPUT("some_multipart", sGenerator, sHash);
+    sUpload.Write(std::string(5 * 1024 * 1024, 'a'));
+    sUpload.Write(std::string(5 * 1024 * 1024, 'b'));
+    sUpload.Write(std::string(5 * 1024 * 1024, 'c'));
+    sUpload.Write(std::string(1 * 1024 * 1024, 'd'));
+    sUpload.Commit();
 
     auto sData = sAPI.GET("some_multipart");
     BOOST_CHECK_EQUAL(sData.size(), (5 * 3 + 1) * 1024 * 1024);
 
     auto sHead = sAPI.HEAD("some_multipart");
     BOOST_CHECK_EQUAL(sHead.size, (5 * 3 + 1) * 1024 * 1024);
-    BOOST_CHECK_EQUAL(sHead.sha256, sHash);
     BOOST_CHECK_EQUAL(sHead.parts, 4);
 
     // HEAD by part-number
@@ -95,6 +76,7 @@ BOOST_AUTO_TEST_CASE(multipart)
     // cleanup
     sAPI.DELETE("some_multipart");
 }
+
 BOOST_AUTO_TEST_CASE(csv)
 {
     S3::Params sParams;

@@ -34,8 +34,10 @@ namespace S3 {
         Curl::Client::Default curl;
     };
 
+    class MultipartUpload;
     class API
     {
+        friend class MultipartUpload;
         const Params m_Params;
         Time::Zone   m_Zone;
         Curl::Client m_Client;
@@ -127,9 +129,11 @@ namespace S3 {
 
             sRequest.headers["x-amz-content-sha256"] = sContentHash;
             sRequest.headers["x-amz-date"]           = sDateTime;
-            // no x-amz-meta-sha256 for part uploads
-            if ((aMethod == Curl::Client::Method::PUT or aMethod == Curl::Client::Method::POST) and !aQuery.starts_with("partNumber="))
+            // no x-amz-meta-sha256 for multipart uploads
+            if ((aMethod == Curl::Client::Method::PUT or aMethod == Curl::Client::Method::POST) and
+                !(aQuery.starts_with("partNumber=") or aQuery == "uploads=")) {
                 sRequest.headers["x-amz-meta-sha256"] = sContentHash;
+            }
             if (aMethod == Curl::Client::Method::POST and aQuery == "uploads=") // create multipart upload
                 sRequest.headers["x-amz-checksum-algorithm"] = "SHA256";
             if (aMethod == Curl::Client::Method::PUT and aQuery.starts_with("partNumber=")) // upload part
@@ -385,22 +389,6 @@ namespace S3 {
             }
         }
 
-        void multipartPUT(std::string_view aName, std::function<std::string()> aSrc, std::string_view aSha256 = {})
-        {
-            std::string sUploadId = startMultipartUpload(aName, aSha256);
-            uint32_t    sSerial   = 1;
-
-            std::vector<UploadTag> sETags;
-            while (true) {
-                auto sTmp = aSrc();
-                if (sTmp.empty())
-                    break;
-                sETags.push_back(uploadPart(aName, sUploadId, sSerial, sTmp));
-                sSerial++;
-            }
-            completeMultipartUpload(aName, sUploadId, sETags);
-        }
-
         std::string SELECT(std::string_view aName, const std::string& aQuery)
         {
             auto sXML     = std::make_unique<rapidxml::xml_document<>>();
@@ -445,5 +433,47 @@ namespace S3 {
     };
 
     inline thread_local Time::Zone* API::m_ZonePtr = nullptr;
+
+    class MultipartUpload
+    {
+        std::string                 m_Buffer;
+        uint32_t                    m_Serial = 1;
+        std::vector<API::UploadTag> m_Parts;
+        std::string                 m_UploadId;
+
+        API&              m_API;
+        const std::string m_Name;
+
+        void Flush()
+        {
+            m_Parts.push_back(m_API.uploadPart(m_Name, m_UploadId, m_Serial, m_Buffer));
+            m_Serial++;
+            m_Buffer.clear();
+        }
+
+    public:
+        MultipartUpload(API& aAPI, std::string_view aName)
+        : m_API(aAPI)
+        , m_Name(aName)
+        {
+            m_UploadId = m_API.startMultipartUpload(aName, {} /* Sha256 */);
+        }
+
+        void Write(std::string_view aData)
+        {
+            constexpr size_t CHUNK_SIZE = 5 * 1024 * 1024; // minimal chunk size
+            m_Buffer.append(aData);
+            if (m_Buffer.size() >= CHUNK_SIZE) {
+                Flush();
+            }
+        }
+        void Commit()
+        {
+            if (!m_Buffer.empty()) {
+                Flush();
+            }
+            m_API.completeMultipartUpload(m_Name, m_UploadId, m_Parts);
+        }
+    };
 
 } // namespace S3
