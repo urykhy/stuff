@@ -777,7 +777,7 @@ function ffmpeg-recode-video
     fi
     filename="${1%.*}"
     extension="${1##*.}"
-    ffmpeg -i "$1" -y -c:v h264 -preset:v faster -vf scale=1280x720 -c:a libmp3lame -q:a 5 "$filename.recode.mkv"
+    ffmpeg -hide_banner -i "$1" -y -c:v h264 -preset:v faster -vf scale=1280x720 -c:a libmp3lame -q:a 5 "$filename.recode.mkv"
 }
 
 function ffmpeg-to-audio
@@ -788,7 +788,16 @@ function ffmpeg-to-audio
     fi
     filename="${1%.*}"
     extension="${1##*.}"
-    ffmpeg -i "$1" -y -vn -q:a 5 -acodec libmp3lame "$filename.mp3"
+    ffmpeg -hide_banner -i "$1" -y -vn -q:a 5 -acodec libmp3lame "$filename.mp3"
+}
+
+function mass-to-audio
+{
+    if [ $# -ne 1 ]; then
+        echo "usage: mass-to-audio <dirname>"
+        return
+    fi
+    ls "$1"/*.{mkv,webm,mp4} | xargs -P4 -I N bash -c 'source ~/code/stuff/scripts/profile; ffmpeg-to-audio "N"'
 }
 
 function allure-test
