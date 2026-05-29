@@ -1,0 +1,4 @@
+Name: sol2
+Description: C++ library binding to Lua
+Version: 3.5.0-c1f95a773c6f8f4fde8ca3efe872e7286afe4444
+Cflags: -I/u03/git/_c/sol2/include

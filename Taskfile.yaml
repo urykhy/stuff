@@ -41,6 +41,7 @@ tasks:
               libhiredis-dev
               libjsoncpp-dev
               liblog4cxx-dev
+              libluajit-5.1-dev
               liblz4-dev
               liblzma-dev
               libmysqlclient-dev
@@ -100,7 +101,10 @@ tasks:
         desc: make packages from pip and install
         cmds:
             - for: { var: pip }
-              cmd: fpm --verbose -f --python-bin=python3 -s python -t deb --python-package-name-prefix python3 --python-disable-dependency attrs --python-disable-dependency pprintpp {{.ITEM}}
+              cmd: fpm --verbose -f --python-bin=python3 -s python -t deb
+                  --python-package-name-prefix python3
+                  --python-disable-dependency attrs
+                  --python-disable-dependency pprintpp {{.ITEM}}
             - sudo dpkg -i
               python3-pprintpp_0.4.0_all.deb
               python3-pytest-randomly_4.0.1_all.deb
