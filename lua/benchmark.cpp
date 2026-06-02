@@ -1,47 +1,19 @@
 #include <benchmark/benchmark.h>
 
-#include <exprtk.hpp>
-
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wfloat-equal"
 #include <sol/debug.hpp>
 #include <sol/sol.hpp>
 #pragma GCC diagnostic pop
 
-struct ExprTK
-{
-    using symbol_table_t = exprtk::symbol_table<double>;
-    using expression_t   = exprtk::expression<double>;
-    using parser_t       = exprtk::parser<double>;
-    using settings_t     = parser_t::settings_t;
+#include "ExprTK.hpp"
 
-    settings_t     m_Settings;
-    symbol_table_t m_Table;
-    expression_t   m_Expression;
-    parser_t       m_Parser;
-
-    ExprTK()
-    : m_Settings(settings_t::compile_all_opts)
-    , m_Parser(m_Settings)
-    {
-        m_Expression.register_symbol_table(m_Table);
-    }
-
-    void compile(const std::string& aStr)
-    {
-        if (!m_Parser.compile(aStr, m_Expression))
-            throw std::invalid_argument("Exprtk: fail to compile: " + m_Parser.error());
-    }
-    double eval()
-    {
-        return m_Expression.value();
-    }
-};
+#include <unsorted/Tcc.hpp>
 
 static void
 BM_Exprtk(benchmark::State& aState)
 {
-    ExprTK sExpr;
+    Util::ExprTK sExpr;
     sExpr.m_Table.create_variable("x");
     sExpr.compile("(x > 5 and x < 20) or (x > 20 and x < 30)");
 
@@ -81,5 +53,31 @@ static void BM_Lua(benchmark::State& aState)
     }
 }
 BENCHMARK(BM_Lua);
+
+static void BM_Tcc(benchmark::State& aState)
+{
+    const std::string  sCode = R"(
+    int test1(int x) {
+        return (x > 5 && x < 20) || (x > 20 && x < 30);
+    }
+    )";
+    Util::TinyCompiler sCompiler;
+    sCompiler.Compile(sCode);
+
+    using T   = int (*)(int);
+    T sMethod = (T)sCompiler.GetSymbol("test1");
+    if (!sMethod) {
+        throw std::invalid_argument("fail to get symbol");
+    }
+
+    int sParam = 25;
+    for (auto _ : aState) {
+        bool sResult = sMethod(sParam);
+        benchmark::DoNotOptimize(sResult);
+        sParam++;
+        sParam %= 40;
+    }
+}
+BENCHMARK(BM_Tcc);
 
 BENCHMARK_MAIN();

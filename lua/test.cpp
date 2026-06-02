@@ -7,6 +7,8 @@
 #include <sol/sol.hpp>
 #pragma GCC diagnostic pop
 
+#include <unsorted/Tcc.hpp>
+
 BOOST_AUTO_TEST_SUITE(Lua)
 BOOST_AUTO_TEST_CASE(Simple)
 {
@@ -29,5 +31,24 @@ BOOST_AUTO_TEST_CASE(Simple)
     sResult = sMethod(21);
     BOOST_CHECK_EQUAL(false, sResult);
 }
+BOOST_AUTO_TEST_SUITE_END()
 
+BOOST_AUTO_TEST_SUITE(Tcc)
+BOOST_AUTO_TEST_CASE(Simple)
+{
+    const std::string  sCode = R"(
+    int test1(int x) {
+        return x > 5 && x < 20;
+    }
+    )";
+    Util::TinyCompiler sCompiler;
+    sCompiler.Compile(sCode);
+
+    using T = int (*)(int);
+    T sPtr  = (T)sCompiler.GetSymbol("test1");
+    if (!sPtr) {
+        throw std::invalid_argument("fail to get symbol");
+    }
+    BOOST_CHECK_EQUAL(sPtr(10), 1);
+}
 BOOST_AUTO_TEST_SUITE_END()

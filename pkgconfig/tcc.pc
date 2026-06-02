@@ -1,0 +1,4 @@
+Name: tcc
+Description: fast library for dynamic code generation
+Version: 0.9.27
+Libs: -ltcc

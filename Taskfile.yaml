@@ -57,6 +57,7 @@ tasks:
               libsimdjson-dev
               libsqlite3-dev
               libssl-dev
+              libtcc-dev
               liburing-dev
               libxxhash-dev
               libyyjson-dev
@@ -66,6 +67,7 @@ tasks:
               protobuf-compiler
               protobuf-compiler-grpc
               rapidjson-dev
+              tcc
               uuid-dev
               zlib1g-dev
 
