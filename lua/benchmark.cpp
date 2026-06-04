@@ -80,4 +80,20 @@ static void BM_Tcc(benchmark::State& aState)
 }
 BENCHMARK(BM_Tcc);
 
+static void BM_Native(benchmark::State& aState)
+{
+    const std::function<bool(int)> sMethod([](int x) {
+        return (x > 5 && x < 20) || (x > 20 && x < 30);
+    });
+
+    int sParam = 25;
+    for (auto _ : aState) {
+        bool sResult = sMethod(sParam);
+        benchmark::DoNotOptimize(sResult);
+        sParam++;
+        sParam %= 40;
+    }
+}
+BENCHMARK(BM_Native);
+
 BENCHMARK_MAIN();
