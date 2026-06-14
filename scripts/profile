@@ -1189,6 +1189,16 @@ function show-fonts
     fc-match serif
 }
 
+function show-geoip
+{
+    if [ $# -lt 1 ]; then
+        echo "usage: show-geoip <addr>"
+        return
+    fi
+    # curl -s ipinfo.io/$1
+    curl ip-api.com/$1
+}
+
 function mass-download
 {
     if [ $# -ne 1 ]; then
