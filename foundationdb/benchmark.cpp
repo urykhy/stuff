@@ -4,6 +4,7 @@
 
 #include <benchmark/Benchmark.hpp>
 #include <parser/Atoi.hpp>
+#include <time/Meter.hpp>
 #include <unsorted/Random.hpp>
 
 static void BM_Get(benchmark::State& state)
@@ -56,6 +57,40 @@ static void BM_GetBy100(benchmark::State& state)
         [&]() -> boost::asio::awaitable<void> { co_return; });
 }
 BENCHMARK(BM_GetBy100)->UseRealTime()->Arg(1)->Arg(100)->ArgName("coro")->Unit(benchmark::kMillisecond);
+
+static void BM_GetCachedVersion(benchmark::State& state)
+{
+    FDB::Client          sClient(false /* grv cache */);
+    std::atomic_uint64_t sVersion{0};
+    Time::time_spec      sUpdateAt = Time::time_spec::now();
+
+    Benchmark::Coro(
+        state,
+        state.range(0),
+        [&]() -> boost::asio::awaitable<void> {
+            FDB::Transaction sTxn(sClient);
+            sTxn.Set("get-vt", "bar");
+            co_await sTxn.CoCommit();
+        },
+        [&](auto) -> boost::asio::awaitable<void> {
+            auto sNow = Time::time_spec::now();
+            if (sVersion == 0 or (sNow - sUpdateAt).to_ms() > 500) {
+                FDB::Transaction sTxn(sClient);
+                sTxn.Set("__tmp", "overlap"); // set some key, required for GetVersionTimestamp
+                co_await sTxn.CoCommit();
+                sVersion  = sTxn.GetVersionTimestamp();
+                sUpdateAt = Time::time_spec::now();
+            }
+
+            FDB::Transaction sTxn(sClient);
+            sTxn.SetVersionTimestamp(sVersion);
+            auto sFuture = sTxn.Get("get-vt");
+            co_await sFuture.CoWait();
+            benchmark::DoNotOptimize(sFuture.Get());
+        },
+        [&]() -> boost::asio::awaitable<void> { co_return; });
+}
+BENCHMARK(BM_GetCachedVersion)->Arg(1)->UseRealTime()->Unit(benchmark::kMillisecond);
 
 static void BM_Set(benchmark::State& state)
 {
