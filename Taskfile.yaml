@@ -6,6 +6,7 @@ vars:
     pip:
         [
             "pprintpp==0.4.0",
+            "pytest-slowest-first==0.1.2",
             "pytest-randomly==4.0.1",
             "allure-pytest==2.15.0",
             "allure-python-commons==2.15.0",
@@ -95,6 +96,7 @@ tasks:
               python3-pytest-bdd
               python3-pytest-check
               python3-pytest-sugar
+              python3-pytest-xdist
               python3-sqlalchemy-ext
               python3-syrupy
               python3-tabulate
@@ -109,6 +111,7 @@ tasks:
                   --python-disable-dependency pprintpp {{.ITEM}}
             - sudo dpkg -i
               python3-pprintpp_0.4.0_all.deb
+              python3-pytest-slowest-first_0.1.2_all.deb
               python3-pytest-randomly_4.0.1_all.deb
               python3-allure-python-commons_2.15.0_all.deb
               python3-allure-pytest_2.15.0_all.deb

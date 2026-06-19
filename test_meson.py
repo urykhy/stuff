@@ -91,10 +91,7 @@ def load_xml(filename):
                 line = ""
                 break
         for line in f:
-            if (
-                "----------------------------------- stderr" in line
-                or "===================================" in line
-            ):
+            if "----------------------------------- stderr" in line or "===================================" in line:
                 break
             rows += line
     return fromstring(rows)
@@ -160,11 +157,15 @@ def ids(tc):
     return tc[1].replace(" ", "_")
 
 
+def param(x):
+    if x[1].startswith("Bench"):
+        return pytest.param(x, marks=pytest.mark.slow)
+    return x
+
+
 # generate classes
 for dirname, cases in prepare_cases().items():
-    name = "Test" + dirname.replace("/", " ").replace("-", " ").title().replace(
-        " ", ""
-    ).replace("Build", "")
+    name = "Test" + dirname.replace("/", " ").replace("-", " ").title().replace(" ", "").replace("Build", "")
     if not name.endswith("Release"):
         name += "Debug"
 
@@ -181,7 +182,7 @@ for dirname, cases in prepare_cases().items():
 
         def impl(self, tc):
             __tracebackhide__ = True
-            (testname, bt) = tc
+            testname, bt = tc
             if testname == "fuzz":
                 run_with_args(self.dirname, True, ("test", bt))
             else:
@@ -199,7 +200,7 @@ for dirname, cases in prepare_cases().items():
                 xml = load_xml(logname)
                 assert_xml(self.dirname, xml)
 
-        f = pytest.mark.parametrize("tc", bt, ids=ids)(impl)
+        f = pytest.mark.parametrize("tc", [param(x) for x in bt], ids=ids)(impl)
         if testname.startswith("fuzz"):
             f = pytest.mark.slow(f)
         setattr(t, f"test_{methodname}", f)
