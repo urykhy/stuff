@@ -64,7 +64,8 @@ function docker-list-registry
 
 function meson-clang()
 {
-    CC="ccache clang" CXX="ccache clang++" meson setup build-clang -Dcpp_args="${CXXFLAGS} -ftime-trace"
+    CC="ccache clang" CXX="ccache clang++" meson setup build-clang \
+        -Dcpp_args="${CXXFLAGS} -ftime-trace"
 }
 
 function meson-sanitize()
@@ -74,12 +75,14 @@ function meson-sanitize()
         echo "  sanitizers: address, thread, undefined, memory"
         return
     fi
-    CC="ccache clang" CXX="ccache clang++" meson setup build-sanitize -Dcpp_args="${CXXFLAGS} -g -O2 -fno-omit-frame-pointer -fno-sanitize-recover=all -fsanitize-memory-track-origins" -Db_sanitize="$1" -Db_lundef=false
+    CC="ccache clang" CXX="ccache clang++" meson setup build-sanitize -Db_lundef=false -Db_sanitize="$1" \
+        -Dcpp_args="${CXXFLAGS} -g -fno-omit-frame-pointer -fno-sanitize-recover=all" \
+        -Dc_args="${CFLAGS} -g -fno-omit-frame-pointer -fno-sanitize-recover=all"
 }
 
 function meson-coverage
 {
-    CC="ccache clang" CXX="ccache clang++" meson setup build-coverage -Dcpp_args="${CXXFLAGS} -g" -Db_coverage=true
+    CC="ccache clang" CXX="ccache clang++" meson setup build-coverage -Db_coverage=true
     echo
     echo "build, run tests and then call show-coverage"
 }
@@ -87,26 +90,38 @@ function meson-coverage
 function show-coverage
 {
     ninja coverage
-    python3 -m http.server -d meson-logs/coveragereport/ & sleep 1
-    x-www-browser 127.0.0.1:8000
-    sleep 2
-    kill `jobs -p`
+    echo "* open http://127.0.0.1:8000 in browser to see a report."
+    echo "* press Ctrl+C to stop server."
+    echo
+    python3 -m http.server -d meson-logs/coveragereport/
 }
 
 function meson-release()
 {
-    meson setup build-release --buildtype=release -Dcpp_args="${CXXFLAGS}" -Dcpp_link_args="${LDFLAGS}" -Dc_args="${CFLAGS}" -Dc_link_args="${LDFLAGS}"
+    meson setup build-release --buildtype=release
 }
 
 function meson-debug-stl()
 {
-    meson setup build-debug-stl -Dcpp_args="${CXXFLAGS} -D_GLIBCXX_DEBUG -D_GLIBCXX_DEBUG_PEDANTIC" -Dcpp_link_args="${LDFLAGS}" -Dc_args="${CFLAGS}" -Dc_link_args="${LDFLAGS}"
+    meson setup build-debug-stl \
+          -Dcpp_args="${CXXFLAGS} -D_GLIBCXX_DEBUG -D_GLIBCXX_DEBUG_PEDANTIC"
 }
 
 function meson-gprof()
 {
     # not compatible with mold linker
-    meson setup build-gprof -Dcpp_args="${CXXFLAGS} -pg" -Dcpp_link_args="${LDFLAGS} -pg -fuse-ld=gold"
+    meson setup build-gprof --buildtype=release \
+          -Dcpp_args="${CXXFLAGS} -pg" -Dcpp_link_args="-pg -fuse-ld=lld" \
+          -Dc_args="${CXXFLAGS} -pg" -Dc_link_args="-pg -fuse-ld=lld"
+}
+
+function meson-pgo()
+{
+    meson setup build-pgo --buildtype=release -Db_pgo=generate
+    meson compile -C build-pgo
+    meson test -C build-pgo --benchmark
+    meson setup build-pgo --buildtype=release -Db_pgo=use
+    meson compile -C build-pgo
 }
 
 function zipfile()
