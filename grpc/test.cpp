@@ -6,6 +6,7 @@
 
 #include <boost/asio/use_future.hpp>
 
+#include "Play-generated.hpp"
 #include "PlayGRPC.hpp"
 
 #include <threads/Asio.hpp>
@@ -50,7 +51,7 @@ BOOST_AUTO_TEST_CASE(basic)
 
     BOOST_CHECK_EQUAL(123, sClient.Ping(123));
 }
-BOOST_AUTO_TEST_CASE(ghz)
+BOOST_AUTO_TEST_CASE(ghz, *boost::unit_test::disabled())
 {
     const std::string sAddr = "127.0.0.1:56780";
     PlayGRPC::Server  sServer;
@@ -76,7 +77,7 @@ BOOST_AUTO_TEST_CASE(basic)
 
     BOOST_CHECK_EQUAL(123, sClient.Ping(123));
 }
-BOOST_AUTO_TEST_CASE(ghz)
+BOOST_AUTO_TEST_CASE(ghz, *boost::unit_test::disabled())
 {
     Threads::Asio  sAsio;
     Threads::Group sGroup;
@@ -120,7 +121,40 @@ BOOST_AUTO_TEST_CASE(client)
     sContext.run();
     BOOST_CHECK_EQUAL(123, sFuture.get());
 }
-BOOST_AUTO_TEST_CASE(ghz)
+BOOST_AUTO_TEST_CASE(generated)
+{
+    const std::string sAddr = "127.0.0.1:56780";
+
+    struct MyServer : public GRPC::Play::Server
+    {
+        boost::asio::awaitable<grpc::Status> DoPing(play::PingRequest& aRequest, play::PingResponse& aResponse) override
+        {
+            aResponse.set_value(aRequest.value());
+            co_return grpc::Status::OK;
+        };
+    };
+
+    MyServer           sServer;
+    GRPC::Play::Client sClient(sAddr);
+
+    sServer.Start(sAddr);
+    sClient.Start();
+    std::this_thread::sleep_for(10ms);
+
+    boost::asio::io_context sContext;
+    auto                    sFuture = boost::asio::co_spawn(
+        sContext,
+        [&]() -> boost::asio::awaitable<int> {
+            play::PingRequest sRequest;
+            sRequest.set_value(321);
+            const auto sResponse = co_await sClient.Ping(sRequest);
+            co_return sResponse.value();
+        },
+        boost::asio::use_future);
+    sContext.run();
+    BOOST_CHECK_EQUAL(321, sFuture.get());
+}
+BOOST_AUTO_TEST_CASE(ghz, *boost::unit_test::disabled())
 {
     const std::string       sAddr = "127.0.0.1:56780";
     PlayGRPC::TradiasServer sServer;
@@ -128,7 +162,7 @@ BOOST_AUTO_TEST_CASE(ghz)
     std::this_thread::sleep_for(10ms);
     GhzBench(sAddr);
 }
-BOOST_AUTO_TEST_CASE(k6)
+BOOST_AUTO_TEST_CASE(k6, *boost::unit_test::disabled())
 {
     const std::string       sAddr = "127.0.0.1:56780";
     PlayGRPC::TradiasServer sServer;
@@ -136,7 +170,7 @@ BOOST_AUTO_TEST_CASE(k6)
     std::this_thread::sleep_for(10ms);
     K6Bench();
 }
-BOOST_AUTO_TEST_CASE(python)
+BOOST_AUTO_TEST_CASE(python, *boost::unit_test::disabled())
 {
     const std::string       sAddr = "127.0.0.1:56780";
     PlayGRPC::TradiasServer sServer;

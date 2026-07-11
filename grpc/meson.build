@@ -24,7 +24,19 @@ py_gen    = custom_target('grpc_python_stubs',
 )
 py_dep = declare_dependency(sources: py_gen)
 
-a = executable('a.out', 'test.cpp', dependencies : [boost, play_dep, protobuf, grpc, agrpc, py_dep], include_directories : includes)
+# generate server/client from protofile
+my_gen   = find_program('generator.py', required : true, dirs: meson.current_source_dir())
+gen_src = []
+foreach name : ['Play.proto']
+    hpp_name = name.replace('.proto','-generated.hpp')
+    gen_src += custom_target(hpp_name,
+               depend_files : files('generator.py', 'grpc.j2', name),
+               output       : hpp_name,
+               input        : name,
+               command      : [my_gen, '@INPUT@', '@OUTPUT@'])
+endforeach
+
+a = executable('a.out', 'test.cpp', gen_src, dependencies : [boost, play_dep, protobuf, grpc, agrpc, py_dep], include_directories : includes)
 test('basic', a, args : ['-l', 'all'])
 
 # meson test --benchmark -v
