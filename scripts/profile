@@ -969,8 +969,7 @@ function mermaid-render
 
 function alsa-virtual-surround
 {
-    pacmd load-module module-virtual-surround-sink sink_name=G930_Virtual_5_1 sink_properties=device.description=G930_Virtual_5_1 hrir=~/devel/dolbi/atmos.wav sink_master=alsa_output.usb-Logitech_Logitech_G930_Headset-00.analog-stereo
-    #pacmd load-module module-virtual-surround-sink sink_name=G930_Virtual_5_1 sink_properties=device.description=G930_Virtual_5_1 hrir=~/devel/dolbi/realtek.wav sink_master=alsa_output.usb-Logitech_Logitech_G930_Headset-00.analog-stereo
+    pactl load-module module-virtual-surround-sink sink_name=G930_Virtual_5_1 sink_properties=device.description=G930_Virtual_5_1 hrir=~/devel/dolbi/atmos.wav sink_master=alsa_output.usb-Logitech_Logitech_G930_Headset-00.analog-stereo
     pactl list sinks short
 }
 
