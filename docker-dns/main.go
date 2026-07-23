@@ -152,8 +152,15 @@ func handleDnsRequest(w dns.ResponseWriter, r *dns.Msg) {
 	l.Info("request ", name)
 	m := new(dns.Msg)
 
-	if r.Question[0].Qtype == dns.TypeA && strings.HasSuffix(name, DOCKER) {
-		addr := dnsMap.resolve(name[:len(name)-LEN_DOCKER])
+	if r.Question[0].Qtype == dns.TypeA {
+		var addr string
+		if strings.HasSuffix(name, DOCKER) {
+			l.Info("try resolve", name[:len(name)-LEN_DOCKER])
+			addr = dnsMap.resolve(name[:len(name)-LEN_DOCKER])
+		} else {
+			l.Info("try resolve", name)
+			addr = dnsMap.resolve(name[:len(name)-1])
+		}
 		if addr != "" {
 			l.Info("resolved ", name, " to ", addr)
 			m.SetRcode(r, dns.RcodeSuccess)
