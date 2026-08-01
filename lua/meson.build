@@ -8,6 +8,7 @@ sol2      = dependency('sol2')
 exprtk    = dependency('exprtk')
 benchmark = dependency('benchmark', required : true)
 tcc       = dependency('tcc')
+glaze     = dependency('glaze')
 
 exprtk_lib = static_library('exprtk', 'ExprTK.cpp', dependencies : [exprtk], include_directories : includes)
 exprtk_dep = declare_dependency(link_with : exprtk_lib, dependencies: [exprtk], include_directories: exprtk_lib.private_dir_include())
@@ -15,5 +16,5 @@ exprtk_dep = declare_dependency(link_with : exprtk_lib, dependencies: [exprtk], 
 a = executable('a.out', 'test.cpp', dependencies : [boost, threads, lua, sol2, tcc], include_directories : includes)
 test('basic', a, args : ['-l', 'all'])
 
-b  = executable('b.out',  'benchmark.cpp', dependencies : [lua, sol2, exprtk_dep, tcc, benchmark], include_directories : includes)
+b  = executable('b.out',  'benchmark.cpp', dependencies : [lua, sol2, exprtk_dep, tcc, glaze, benchmark], include_directories : includes)
 benchmark('basic', b)

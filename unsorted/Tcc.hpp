@@ -25,6 +25,12 @@ namespace Util {
             tcc_delete(m_State);
         }
 
+        template <class T>
+        void AddSymbol(const char* aName, T* aVal)
+        {
+            tcc_add_symbol(m_State, aName, reinterpret_cast<const void*>(aVal));
+        }
+
         void Compile(const std::string& aCode)
         {
             if (tcc_compile_string(m_State, aCode.c_str()) == -1) {
