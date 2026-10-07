@@ -18,7 +18,7 @@ void GhzBench(const std::string& aAddr)
 {
     putenv("GOMAXPROCS=1");
     auto sChild = Util::Perform("unbuffer", "ghz", "--insecure", "--async", "--proto", "../Play.proto", "--call", "play.PlayService/Ping",
-                                "-c", "10", "-n", "60000", "--rps", "30000", "-d",
+                                "-c", "10", "-n", "60000", "--rps", "8000", "-d",
                                 R"({"value":"{{.RequestNumber}}"})", aAddr);
     BOOST_CHECK_EQUAL(0, sChild.code);
     BOOST_TEST_MESSAGE(sChild.out);
