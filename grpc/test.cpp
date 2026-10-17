@@ -125,7 +125,7 @@ BOOST_AUTO_TEST_CASE(generated)
 {
     const std::string sAddr = "127.0.0.1:56780";
 
-    struct MyServer : public GRPC::Play::Server
+    struct MyServer : public GRPC::Play::PlayServer
     {
         boost::asio::awaitable<grpc::Status> DoPing(play::PingRequest& aRequest, play::PingResponse& aResponse) override
         {
@@ -134,11 +134,12 @@ BOOST_AUTO_TEST_CASE(generated)
         };
     };
 
-    MyServer           sServer;
-    GRPC::Play::Client sClient(sAddr);
+    MyServer               sServer;
+    GRPC::Play::PlayClient sClient;
 
-    sServer.Start(sAddr);
-    sClient.Start();
+    // start server and client
+    GRPC::Internal::Server sXServer(sAddr, 1 /* thread */, sServer);
+    GRPC::Internal::Client sXClient(sAddr, 1 /* thread */, sClient);
     std::this_thread::sleep_for(10ms);
 
     boost::asio::io_context sContext;
