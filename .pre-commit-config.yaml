@@ -43,26 +43,26 @@ repos:
             files: '\.(proto)$'
             args: ["lint"]
             require_serial: true
-          - id: black
-            name: black python formatter
-            entry: black
+          - id: ruff-format
+            name: ruff python formatter
+            entry: ruff format
             language: python
             types_or: [python]
-            args: ["--line-length=120"]
+            args: []
             require_serial: true
-          - id: isort
-            name: isort python formatter
-            entry: isort
+          - id: ruff-check
+            name: ruff python linter
+            entry: ruff check
             language: python
             types_or: [python]
-            args: ["--profile", "black", "--filter-files"]
+            args: []
             require_serial: true
-          - id: mypy
-            name: mypy python linter
-            entry: mypy
+          - id: ty-check
+            name: ty python type checker
+            entry: ty check
             language: python
             types_or: [python]
-            args: ["--ignore-missing-imports", "--explicit-package-bases"]
+            args: []
             require_serial: true
     - repo: https://github.com/pre-commit/pre-commit-hooks
       rev: v4.6.0
