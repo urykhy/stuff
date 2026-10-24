@@ -1,0 +1,12 @@
+version: '3'
+
+tasks:
+  deps:
+    desc: install deps
+    cmds:
+      - uv add testcontainers[postgres] psycopg[binary,pool] SQLAlchemy pytest pytest-slowest-first pytest-check
+
+  run:
+    desc: run test
+    cmds:
+      - uv run pytest -vs
