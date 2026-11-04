@@ -1089,19 +1089,24 @@ function benchmark-opengl
 function run-qemu
 {
     if [ $# -ne 1 ]; then
-        echo "usage: run-qemu <filename>|flash"
+        echo "usage: run-qemu <filename>|flash|</dev/sdX>"
         return
     fi
     if [ "$1" = "flash" ]; then
         echo "will use sandisk flash"
         NIC="-net nic,macaddr=52:62:33:44:55:12,model=virtio -net tap,ifname=vif-flash"
         DRV="-drive if=virtio,cache=unsafe,file=/dev/disk/by-id/usb-SanDisk_Ultra_4C530001111022115555-0:0,media=cdrom,format=raw"
+    elif [[ "$1" == "/dev/sd"* ]]; then
+        echo "will use device $1"
+        NIC="-net nic,macaddr=52:62:33:44:55:12,model=virtio -net tap,ifname=vif-flash"
+        DRV="-drive if=virtio,cache=unsafe,file=$1,media=cdrom,format=raw"
     else
         echo "will use file $1"
         NIC="-net nic,macaddr=52:62:33:44:55:10,model=virtio -net tap,ifname=vif-iso"
         DRV="-drive if=virtio,cache=unsafe,file=$1,media=cdrom,format=raw"
     fi
-    sudo kvm -m 6G -smp cpus=4 $DRV $NIC -vga virtio
+    DISP="-display gtk,gl=es -device virtio-gpu-gl-pci,hostmem=1G"
+    sudo kvm -m 6G -smp cpus=4 $DRV $NIC $DISP
 }
 
 function show-biorithms
