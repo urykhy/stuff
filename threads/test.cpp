@@ -602,6 +602,42 @@ BOOST_AUTO_TEST_CASE(MapReduce)
     sContext.run();
 }
 
+BOOST_AUTO_TEST_CASE(Hedging)
+{
+    namespace asio = boost::asio;
+
+    auto sSlow = []() -> boost::asio::awaitable<std::string> {
+        boost::asio::steady_timer sTimer(co_await boost::asio::this_coro::executor);
+        sTimer.expires_from_now(std::chrono::milliseconds(100));
+        co_await sTimer.async_wait(asio::use_awaitable);
+        co_return "slow";
+    };
+
+    auto sFast = []() -> boost::asio::awaitable<std::string> {
+        co_return "fast";
+    };
+
+    {
+        asio::io_context sContext(1);
+        asio::co_spawn(
+            sContext, [&]() -> boost::asio::awaitable<void> {
+                const std::string sResult = co_await Threads::Coro::Hedging<std::string>(sSlow, sFast, 150);
+                BOOST_CHECK_EQUAL(sResult, "slow"); },
+            asio::detached);
+        sContext.run();
+    }
+
+    {
+        asio::io_context sContext(1);
+        asio::co_spawn(
+            sContext, [&]() -> boost::asio::awaitable<void> {
+                const std::string sResult = co_await Threads::Coro::Hedging<std::string>(sSlow, sFast, 50);
+                BOOST_CHECK_EQUAL(sResult, "fast"); },
+            asio::detached);
+        sContext.run();
+    }
+}
+
 BOOST_AUTO_TEST_SUITE(cache)
 BOOST_AUTO_TEST_CASE(refresh)
 {

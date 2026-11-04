@@ -367,4 +367,20 @@ namespace Threads::Coro {
         }
     };
 
+    template <class T, class F1, class F2>
+    boost::asio::awaitable<T> Hedging(F1&& aFun1, F2&& aFun2, unsigned aLagMs)
+    {
+        using namespace asio::experimental::awaitable_operators;
+
+        auto sWrapper = [&]() -> boost::asio::awaitable<T> {
+            boost::asio::steady_timer sTimer(co_await boost::asio::this_coro::executor);
+            sTimer.expires_from_now(std::chrono::milliseconds(aLagMs));
+            co_await sTimer.async_wait(asio::use_awaitable);
+            co_return co_await aFun2();
+        };
+
+        auto sResult = co_await asio::co_spawn(co_await boost::asio::this_coro::executor, (aFun1() || sWrapper()), asio::use_awaitable);
+        co_return std::visit([](const T& aStr) -> T { return aStr; }, sResult);
+    }
+
 } // namespace Threads::Coro
