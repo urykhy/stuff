@@ -500,7 +500,13 @@ function show-mem
 
 function show-cache
 {
+    echo zram cache:
     du -shc /tmp/cache/* 2>/dev/null
+    echo
+    echo in-home cache:
+    LANG=C du -shc ~/.cache/huggingface | grep -iv total
+    LANG=C du -sh ~/.cache/kagglehub | grep -iv total
+    LANG=C du -sh ~/.cache/uv | grep -iv total
 }
 
 function show-skmem
